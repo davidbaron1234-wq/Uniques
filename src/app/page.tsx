@@ -15,18 +15,16 @@ export default function HomePage() {
       <Header />
 
       <main className="max-w-lg mx-auto">
-        {/* Page title */}
-        <div className="px-4 pt-5 pb-3">
-          <div className="flex items-center gap-2 mb-1">
-            <ArrowLeftRight className="w-5 h-5 text-lavender" />
+        <div className="px-5 pt-6 pb-4">
+          <div className="flex items-center gap-2.5 mb-1">
+            <ArrowLeftRight className="w-5 h-5 text-surface-light" />
             <h1 className="text-xl font-bold text-cream">Trade Offers</h1>
           </div>
-          <p className="text-sm text-cream/50">
+          <p className="text-sm text-cream/40 font-medium">
             {offers.filter((o) => o.status === "pending").length} pending offers
           </p>
         </div>
 
-        {/* Trade offer cards */}
         <div className="space-y-0">
           {offers.map((offer, i) => (
             <TradeOfferCard
@@ -35,33 +33,26 @@ export default function HomePage() {
               index={i}
               onAccept={(id) =>
                 setOffers((prev) =>
-                  prev.map((o) =>
-                    o.id === id ? { ...o, status: "accepted" as const } : o
-                  )
+                  prev.map((o) => (o.id === id ? { ...o, status: "accepted" as const } : o))
                 )
               }
               onDecline={(id) =>
                 setOffers((prev) =>
-                  prev.map((o) =>
-                    o.id === id ? { ...o, status: "declined" as const } : o
-                  )
+                  prev.map((o) => (o.id === id ? { ...o, status: "declined" as const } : o))
                 )
               }
-              onCounter={() => {
-                // In a real app this would open a counter-offer modal
-              }}
+              onCounter={() => {}}
             />
           ))}
         </div>
 
-        {/* Empty state */}
         {offers.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-            <div className="w-16 h-16 rounded-full bg-charcoal-light/30 flex items-center justify-center mb-4">
-              <ArrowLeftRight className="w-8 h-8 text-cream/30" />
+            <div className="w-16 h-16 rounded-full bg-background-light flex items-center justify-center mb-4 shadow-soft">
+              <ArrowLeftRight className="w-8 h-8 text-cream/20" />
             </div>
-            <p className="text-cream/50 font-medium">No trade offers yet</p>
-            <p className="text-cream/30 text-sm mt-1">
+            <p className="text-cream/40 font-medium">No trade offers yet</p>
+            <p className="text-cream/25 text-sm mt-1">
               Mark items as &quot;Up for Trade&quot; to start receiving offers
             </p>
           </div>
