@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
-import { X, Plus, ImagePlus, ChevronDown, Search, Sparkles } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { X, Plus, ImagePlus, ChevronDown, Search, Sparkles, Database, Loader2 } from "lucide-react";
 import { Category } from "@/lib/types";
 import { categories } from "@/lib/data";
-import { searchCollectibles, DatabaseCollectible } from "@/services/mockDatabase";
 import { formatValue } from "@/lib/format";
+import { MasterItem } from "@/lib/catalog/types";
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -16,6 +16,7 @@ interface AddItemModalProps {
     upForTrade: boolean;
     imagePreview: string | null;
     estimatedValue?: number;
+    masterId?: string;
   }) => void;
 }
 
@@ -25,11 +26,50 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   const [upForTrade, setUpForTrade] = useState<boolean | "">("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [estimatedValue, setEstimatedValue] = useState<number | undefined>();
+  const [masterId, setMasterId] = useState<string | undefined>();
   const [dragOver, setDragOver] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<MasterItem[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [catalogTotal, setCatalogTotal] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const suggestions = useMemo(() => searchCollectibles(name), [name]);
+  // Fetch catalog count on mount
+  useEffect(() => {
+    if (isOpen && catalogTotal === 0) {
+      fetch("/api/catalog/search?pageSize=1")
+        .then((r) => r.json())
+        .then((data) => setCatalogTotal(data.total || 0))
+        .catch(() => {});
+    }
+  }, [isOpen, catalogTotal]);
+
+  // Debounced search against the server-side catalog API
+  const searchCatalog = useCallback((query: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!query || query.length < 2) {
+      setSuggestions([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/catalog/search?q=${encodeURIComponent(query)}&pageSize=8`
+        );
+        const data = await res.json();
+        setSuggestions(data.items || []);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -53,12 +93,17 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     }
   };
 
-  const handleSelectSuggestion = (item: DatabaseCollectible) => {
+  const handleSelectSuggestion = (item: MasterItem) => {
     setName(item.name);
-    setCategory(item.category);
-    setEstimatedValue(item.estimatedValue);
-    setImagePreview(item.imageUrl);
+    setMasterId(item.id);
+    setEstimatedValue(item.marketPrice);
+    setImagePreview(item.imageLarge || item.imageSmall);
     setShowSuggestions(false);
+
+    // Map catalog categories to app categories
+    if (item.category === "Trading Cards") setCategory("Trading Cards");
+    else if (item.category === "Sneakers") setCategory("Shoes");
+    else if (item.category === "Coins") setCategory("Coins");
   };
 
   const handleSubmit = () => {
@@ -69,12 +114,15 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
       upForTrade: upForTrade === true,
       imagePreview,
       estimatedValue,
+      masterId,
     });
     setName("");
     setCategory("");
     setUpForTrade("");
     setImagePreview(null);
     setEstimatedValue(undefined);
+    setMasterId(undefined);
+    setSuggestions([]);
     onClose();
   };
 
@@ -87,7 +135,15 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
       <div className="relative w-full max-w-md mx-4 mb-0 sm:mb-0 bg-charcoal-dark rounded-t-3xl sm:rounded-3xl shadow-soft-xl animate-slide-up overflow-hidden max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-charcoal-light/20">
-          <h2 className="text-lg font-bold text-cream">Add New Item</h2>
+          <div>
+            <h2 className="text-lg font-bold text-cream">Add New Item</h2>
+            {catalogTotal > 0 && (
+              <p className="text-[10px] text-surface-light/50 flex items-center gap-1 mt-0.5">
+                <Database className="w-3 h-3" />
+                {catalogTotal.toLocaleString()} items in Master Catalog
+              </p>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-1.5 rounded-xl hover:bg-charcoal-light/50 transition-colors"
@@ -98,11 +154,11 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Smart Search */}
+          {/* Smart Search against Master Catalog */}
           <div className="relative">
             <label className="flex items-center gap-1.5 text-sm font-semibold text-cream/70 mb-2">
               <Sparkles className="w-3.5 h-3.5 text-surface-light" />
-              Smart Search
+              Search Master Catalog
             </label>
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/30" />
@@ -111,31 +167,54 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
+                  setMasterId(undefined);
                   setShowSuggestions(true);
+                  searchCatalog(e.target.value);
                 }}
                 onFocus={() => setShowSuggestions(true)}
-                placeholder="Type to search collectibles..."
-                className="w-full pl-10 pr-4 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
+                placeholder="Search cards, sneakers, coins..."
+                className="w-full pl-10 pr-10 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
               />
+              {isSearching && (
+                <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-light/50 animate-spin" />
+              )}
             </div>
+
+            {/* Linked badge */}
+            {masterId && (
+              <div className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 w-fit">
+                <Database className="w-3 h-3 text-primary" />
+                <span className="text-[10px] text-primary font-semibold">
+                  Linked to Master Catalog
+                </span>
+                <span className="text-[9px] text-primary/50 font-mono">{masterId}</span>
+              </div>
+            )}
 
             {/* Suggestions dropdown */}
             {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute z-20 w-full mt-1.5 rounded-2xl bg-charcoal-dark border border-charcoal-light/20 shadow-soft-xl overflow-hidden">
-                {suggestions.map((item, i) => (
+              <div className="absolute z-20 w-full mt-1.5 rounded-2xl bg-charcoal-dark border border-charcoal-light/20 shadow-soft-xl overflow-hidden max-h-72 overflow-y-auto">
+                {suggestions.map((item) => (
                   <button
-                    key={i}
+                    key={item.id}
                     onClick={() => handleSelectSuggestion(item)}
                     className="w-full flex items-center gap-3 px-4 py-3 hover:bg-background-light transition-colors text-left"
                   >
                     <div className="w-10 h-10 rounded-xl overflow-hidden bg-charcoal-light/30 flex-shrink-0">
-                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                      <img src={item.imageSmall} alt={item.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-cream/90 font-medium truncate">{item.name}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-surface-light/60">{item.category}</span>
-                        <span className="text-[10px] text-primary font-semibold">{formatValue(item.estimatedValue)}</span>
+                        {item.set && (
+                          <span className="text-[10px] text-cream/30">{item.set}</span>
+                        )}
+                        {item.rarity && (
+                          <span className="text-[10px] text-surface-light/60">{item.rarity}</span>
+                        )}
+                        <span className="text-[10px] text-primary font-semibold">
+                          {formatValue(item.marketPrice)}
+                        </span>
                       </div>
                     </div>
                   </button>
@@ -144,7 +223,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             )}
           </div>
 
-          {/* Image upload */}
+          {/* Image preview (auto-filled from catalog or manual upload) */}
           <div
             className={`relative w-full aspect-[4/3] rounded-2xl transition-colors flex flex-col items-center justify-center cursor-pointer overflow-hidden ${
               dragOver
@@ -160,7 +239,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
           >
             {imagePreview ? (
               <>
-                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                <img src={imagePreview} alt="Preview" className="w-full h-full object-contain bg-charcoal-dark" />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-2xl">
                   <p className="text-cream text-sm font-medium">Change image</p>
                 </div>
@@ -171,11 +250,21 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   <ImagePlus className="w-7 h-7 text-cream/30" />
                 </div>
                 <p className="text-sm text-cream/40 font-medium">Tap to add photo</p>
-                <p className="text-xs text-cream/20 mt-1">or drag and drop</p>
+                <p className="text-xs text-cream/20 mt-1">or select from catalog above</p>
               </>
             )}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
           </div>
+
+          {/* Market Price (auto-filled from catalog) */}
+          {estimatedValue !== undefined && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-primary/8">
+              <span className="text-sm text-cream/50 font-medium">Market Price</span>
+              <span className="text-sm text-primary font-bold ml-auto">
+                {formatValue(estimatedValue)}
+              </span>
+            </div>
+          )}
 
           {/* Category */}
           <div>
@@ -231,7 +320,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             }`}
           >
             <Plus className="w-4 h-4" />
-            Add
+            Add to Inventory
           </button>
         </div>
       </div>

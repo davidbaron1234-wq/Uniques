@@ -19,12 +19,25 @@ import { CSS } from "@dnd-kit/utilities";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import AddItemModal from "@/components/AddItemModal";
-import { inventoryItems } from "@/lib/data";
+import { inventoryItems, currentUser } from "@/lib/data";
 import { formatValue } from "@/lib/format";
 import { CollectibleItem, Category } from "@/lib/types";
-import { Plus, Package, ArrowLeftRight, Crown, GripVertical } from "lucide-react";
+import {
+  Plus,
+  ArrowLeftRight,
+  Crown,
+  GripVertical,
+  Star,
+  DollarSign,
+  TrendingUp,
+  Package,
+  Truck,
+  CreditCard,
+  Database,
+  Edit3,
+} from "lucide-react";
 
-type QuickFilter = "All" | "Shoes" | "Cards" | "Figures" | "Funko";
+type QuickFilter = "All" | "Shoes" | "Cards" | "Figures" | "Funko" | "Coins" | "Comics";
 
 function filterCategory(item: CollectibleItem, filter: QuickFilter): boolean {
   if (filter === "All") return true;
@@ -32,6 +45,8 @@ function filterCategory(item: CollectibleItem, filter: QuickFilter): boolean {
   if (filter === "Figures") return item.category === "Figures";
   if (filter === "Funko") return item.category === "Funko Pop";
   if (filter === "Shoes") return item.category === "Shoes";
+  if (filter === "Coins") return item.category === "Coins";
+  if (filter === "Comics") return item.category === "Comics";
   return true;
 }
 
@@ -75,6 +90,12 @@ function SortableItem({ item }: { item: CollectibleItem }) {
         </div>
       )}
 
+      {item.masterId && (
+        <div className="absolute bottom-[2.75rem] right-1.5 w-4 h-4 rounded-full bg-surface/80 flex items-center justify-center">
+          <Database className="w-2.5 h-2.5 text-white" />
+        </div>
+      )}
+
       <div className="px-2 py-1.5">
         <p className="text-[10px] text-cream/80 truncate leading-tight font-medium">
           {item.name}
@@ -89,13 +110,41 @@ function SortableItem({ item }: { item: CollectibleItem }) {
   );
 }
 
-export default function InventoryPage() {
+function TrustStars({ score }: { score: number }) {
+  const fullStars = Math.floor(score);
+  const hasHalf = score - fullStars >= 0.5;
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Star
+          key={i}
+          className={`w-3.5 h-3.5 ${
+            i < fullStars
+              ? "text-yellow-400 fill-yellow-400"
+              : i === fullStars && hasHalf
+              ? "text-yellow-400 fill-yellow-400/50"
+              : "text-cream/15"
+          }`}
+        />
+      ))}
+      <span className="text-xs text-cream/50 ml-1 font-semibold">{score.toFixed(1)}</span>
+    </div>
+  );
+}
+
+export default function ProfilePage() {
   const [items, setItems] = useState<CollectibleItem[]>(inventoryItems);
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<QuickFilter>("All");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  // ── Computed values ──────────────────────────────────────────
+  const totalValue = useMemo(
+    () => items.reduce((sum, item) => sum + (item.estimatedValue || 0), 0),
+    [items]
   );
 
   const grails = useMemo(
@@ -111,6 +160,12 @@ export default function InventoryPage() {
     [items, activeFilter]
   );
 
+  const linkedCount = useMemo(
+    () => items.filter((i) => i.masterId).length,
+    [items]
+  );
+
+  // ── Handlers ─────────────────────────────────────────────────
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -128,9 +183,11 @@ export default function InventoryPage() {
     upForTrade: boolean;
     imagePreview: string | null;
     estimatedValue?: number;
+    masterId?: string;
   }) => {
     const item: CollectibleItem = {
       id: `new-${Date.now()}`,
+      masterId: newItem.masterId,
       name: newItem.name,
       category: newItem.category,
       imageUrl:
@@ -142,25 +199,104 @@ export default function InventoryPage() {
     setItems((prev) => [item, ...prev]);
   };
 
-  const filters: QuickFilter[] = ["All", "Cards", "Funko", "Shoes", "Figures"];
+  const filters: QuickFilter[] = ["All", "Cards", "Funko", "Shoes", "Coins", "Comics", "Figures"];
+
+  const memberDate = currentUser.memberSince
+    ? new Date(currentUser.memberSince).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+    : null;
 
   return (
     <div className="min-h-screen pb-20">
       <Header />
 
       <main className="max-w-lg mx-auto">
-        {/* Title */}
-        <div className="px-5 pt-6 pb-3">
-          <div className="flex items-center gap-2.5 mb-1">
-            <Package className="w-5 h-5 text-primary" />
-            <h1 className="text-xl font-bold text-cream">Your Inventory!</h1>
+        {/* ── Profile Header ──────────────────────────────────── */}
+        <div className="px-5 pt-6 pb-5">
+          <div className="flex items-start gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-primary/20 border-2 border-primary/30 overflow-hidden flex-shrink-0">
+              <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h1 className="text-xl font-bold text-cream">My Profile</h1>
+                <button className="p-1 rounded-lg hover:bg-charcoal-light/50 transition-colors">
+                  <Edit3 className="w-3.5 h-3.5 text-cream/30" />
+                </button>
+              </div>
+              {currentUser.trustScore !== undefined && (
+                <TrustStars score={currentUser.trustScore} />
+              )}
+              {currentUser.bio && (
+                <p className="text-xs text-cream/40 mt-1.5 leading-relaxed">{currentUser.bio}</p>
+              )}
+            </div>
           </div>
-          <p className="text-sm text-cream/40 font-medium">
-            {items.length} items in your collection
-          </p>
+
+          {/* Stats row */}
+          <div className="flex gap-2 mt-4">
+            {currentUser.totalTrades !== undefined && (
+              <div className="flex-1 px-3 py-2.5 rounded-2xl bg-background-light">
+                <p className="text-[10px] text-cream/30 font-medium">Trades</p>
+                <p className="text-sm text-cream font-bold">{currentUser.totalTrades}</p>
+              </div>
+            )}
+            <div className="flex-1 px-3 py-2.5 rounded-2xl bg-background-light">
+              <p className="text-[10px] text-cream/30 font-medium">Items</p>
+              <p className="text-sm text-cream font-bold">{items.length}</p>
+            </div>
+            {memberDate && (
+              <div className="flex-1 px-3 py-2.5 rounded-2xl bg-background-light">
+                <p className="text-[10px] text-cream/30 font-medium">Member</p>
+                <p className="text-sm text-cream font-bold">{memberDate}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Preferences */}
+          {(currentUser.deliveryPreference || currentUser.paymentPreference) && (
+            <div className="mt-3 space-y-1.5">
+              {currentUser.deliveryPreference && (
+                <div className="flex items-center gap-2 text-cream/30">
+                  <Truck className="w-3 h-3 flex-shrink-0" />
+                  <span className="text-[10px] font-medium">{currentUser.deliveryPreference}</span>
+                </div>
+              )}
+              {currentUser.paymentPreference && (
+                <div className="flex items-center gap-2 text-cream/30">
+                  <CreditCard className="w-3 h-3 flex-shrink-0" />
+                  <span className="text-[10px] font-medium">{currentUser.paymentPreference}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Top 3 Grails */}
+        {/* ── Total Inventory Value ────────────────────────────── */}
+        <div className="mx-5 mb-5 rounded-2xl bg-gradient-to-r from-primary/15 via-surface/10 to-primary/15 p-4 shadow-soft">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                <p className="text-xs text-cream/50 font-semibold">Total Inventory Value</p>
+              </div>
+              <p className="text-2xl font-extrabold text-primary value-display">
+                {formatValue(totalValue)}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center gap-1 text-cream/30 mb-1">
+                <DollarSign className="w-3 h-3" />
+                <span className="text-[10px] font-medium">{items.length} items</span>
+              </div>
+              <div className="flex items-center gap-1 text-surface-light/50">
+                <Database className="w-3 h-3" />
+                <span className="text-[10px] font-medium">{linkedCount} catalog-linked</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Top 3 Grails ────────────────────────────────────── */}
         <div className="px-5 mb-5">
           <div className="flex items-center gap-2 mb-3">
             <Crown className="w-4 h-4 text-yellow-400" />
@@ -189,8 +325,12 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        {/* Quick Filter */}
+        {/* ── Quick Filter ────────────────────────────────────── */}
         <div className="px-5 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Package className="w-4 h-4 text-cream/50" />
+            <h2 className="text-sm font-bold text-cream/80">Collection</h2>
+          </div>
           <div className="flex gap-2 overflow-x-auto scrollbar-none">
             {filters.map((f) => (
               <button
@@ -208,7 +348,7 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        {/* Sortable Grid */}
+        {/* ── Sortable Grid ───────────────────────────────────── */}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={filteredItems.map((i) => i.id)} strategy={rectSortingStrategy}>
             <div className="px-5 grid grid-cols-3 gap-3 pb-6">

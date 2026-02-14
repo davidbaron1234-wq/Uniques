@@ -2,6 +2,7 @@ export type Category = "Comics" | "Funko Pop" | "Trading Cards" | "Shoes" | "Coi
 
 export interface CollectibleItem {
   id: string;
+  masterId?: string;         // Links to MasterItem.id in the global catalog
   name: string;
   category: Category;
   imageUrl: string;
@@ -13,6 +14,12 @@ export interface User {
   id: string;
   name: string;
   avatar: string;
+  bio?: string;
+  trustScore?: number;       // 0-5 stars
+  totalTrades?: number;
+  memberSince?: string;
+  deliveryPreference?: string;
+  paymentPreference?: string;
 }
 
 export interface TradeOffer {
