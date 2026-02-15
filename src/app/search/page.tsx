@@ -6,7 +6,8 @@ import BottomNav from "@/components/BottomNav";
 import CardDetailModal from "@/components/CardDetailModal";
 import { formatValue } from "@/lib/format";
 import { MasterItem } from "@/lib/catalog/types";
-import { Search, X, Loader2 } from "lucide-react";
+import { useInventory } from "@/lib/InventoryContext";
+import { Search, X, Loader2, Check } from "lucide-react";
 
 const PAGE_SIZE = 50;
 
@@ -26,6 +27,7 @@ export default function SearchPage() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [selectedItem, setSelectedItem] = useState<MasterItem | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toast, clearToast } = useInventory();
 
   // Fetch results from the catalog API
   const fetchResults = useCallback(
@@ -225,6 +227,19 @@ export default function SearchPage() {
         item={selectedItem}
         onClose={() => setSelectedItem(null)}
       />
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] animate-slide-up">
+          <div
+            className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-green-500/15 border border-green-500/25 backdrop-blur-md shadow-lg cursor-pointer"
+            onClick={clearToast}
+          >
+            <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+            <span className="text-sm text-green-300 font-semibold">{toast}</span>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>

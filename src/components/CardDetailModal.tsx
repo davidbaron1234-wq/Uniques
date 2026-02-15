@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { X, Plus, Sparkles, BookOpen, DollarSign, ArrowLeftRight } from "lucide-react";
+import { X, Plus, Sparkles, BookOpen, DollarSign, ArrowLeftRight, Check } from "lucide-react";
 import { MasterItem } from "@/lib/catalog/types";
 import { formatValue } from "@/lib/format";
+import { useInventory } from "@/lib/InventoryContext";
 
 interface CardDetailModalProps {
   item: MasterItem | null;
   onClose: () => void;
-  onAddToInventory?: (item: MasterItem) => void;
 }
 
 // ── Rarity tier mapping ──────────────────────────────────────────────────
@@ -84,13 +84,15 @@ const MOCK_COLLECTORS = [
   { name: "Riley", seed: "Riley" },
 ];
 
-export default function CardDetailModal({ item, onClose, onAddToInventory }: CardDetailModalProps) {
+export default function CardDetailModal({ item, onClose }: CardDetailModalProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const { addFromCatalog, hasItem } = useInventory();
 
   if (!item) return null;
 
   const tier = getRarityTier(item.rarity);
   const styles = RARITY_STYLES[tier];
+  const owned = hasItem(item.id);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -231,13 +233,20 @@ export default function CardDetailModal({ item, onClose, onAddToInventory }: Car
             <ArrowLeftRight className="w-4 h-4" />
             Trade
           </button>
-          <button
-            onClick={() => onAddToInventory?.(item)}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Add to Inventory
-          </button>
+          {owned ? (
+            <div className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-400 font-bold text-sm">
+              <Check className="w-4 h-4" />
+              In Inventory
+            </div>
+          ) : (
+            <button
+              onClick={() => addFromCatalog(item)}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Add to Inventory
+            </button>
+          )}
         </div>
       </div>
     </div>
