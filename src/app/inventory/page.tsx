@@ -166,7 +166,7 @@ function SortableItem({ item }: { item: CollectibleItem }) {
 }
 
 // ── Trust stars ──────────────────────────────────────────────────────────
-function TrustStars({ score, onClick }: { score: number; onClick?: () => void }) {
+function TrustStars({ score, reviewCount, onClick }: { score: number; reviewCount?: number; onClick?: () => void }) {
   const fullStars = Math.floor(score);
   const hasHalf = score - fullStars >= 0.5;
   return (
@@ -188,6 +188,9 @@ function TrustStars({ score, onClick }: { score: number; onClick?: () => void })
         />
       ))}
       <span className="text-xs text-cream/50 ml-1 font-semibold">{score.toFixed(1)}</span>
+      {reviewCount !== undefined && (
+        <span className="text-[10px] text-cream/30 ml-0.5">({reviewCount} reviews)</span>
+      )}
     </button>
   );
 }
@@ -340,7 +343,7 @@ export default function ProfilePage() {
                 </button>
               </div>
               {currentUser.trustScore !== undefined && (
-                <TrustStars score={currentUser.trustScore} onClick={() => setShowReviews(true)} />
+                <TrustStars score={currentUser.trustScore} reviewCount={6} onClick={() => setShowReviews(true)} />
               )}
               {profile.bio && (
                 <p className="text-xs text-cream/40 mt-1.5 leading-relaxed">{profile.bio}</p>

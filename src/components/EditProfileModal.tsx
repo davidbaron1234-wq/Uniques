@@ -243,24 +243,28 @@ export default function EditProfileModal({
           </div>
 
           {/* ── Payment Methods ─────────────────────────────────── */}
-          <ChipSelector
-            label="Payment Methods"
-            icon={<Wallet className="w-3.5 h-3.5 text-surface-light" />}
-            options={PAYMENT_OPTIONS}
-            selected={paymentMethods}
-            onChange={setPaymentMethods}
-            max={3}
-          />
+          <div className="rounded-2xl bg-white/5 border border-charcoal-light/20 p-4">
+            <ChipSelector
+              label="Payment Methods"
+              icon={<Wallet className="w-3.5 h-3.5 text-surface-light" />}
+              options={PAYMENT_OPTIONS}
+              selected={paymentMethods}
+              onChange={setPaymentMethods}
+              max={3}
+            />
+          </div>
 
           {/* ── Shipping / Meetup ───────────────────────────────── */}
-          <ChipSelector
-            label="Shipping & Meetup"
-            icon={<Truck className="w-3.5 h-3.5 text-surface-light" />}
-            options={SHIPPING_OPTIONS}
-            selected={shippingPreferences}
-            onChange={setShippingPreferences}
-            max={3}
-          />
+          <div className="rounded-2xl bg-white/5 border border-charcoal-light/20 p-4">
+            <ChipSelector
+              label="Shipping & Meetup"
+              icon={<Truck className="w-3.5 h-3.5 text-surface-light" />}
+              options={SHIPPING_OPTIONS}
+              selected={shippingPreferences}
+              onChange={setShippingPreferences}
+              max={3}
+            />
+          </div>
         </div>
 
         {/* Actions */}

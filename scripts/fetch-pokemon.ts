@@ -182,6 +182,7 @@ async function main() {
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "User-Agent": "Uniques Trading Platform",
   };
   if (apiKey) {
     headers["X-Api-Key"] = apiKey;
@@ -202,8 +203,8 @@ async function main() {
 
   // Fetch remaining pages
   for (let page = 2; page <= totalPages; page++) {
-    // Small delay to be respectful of rate limits
-    await sleep(apiKey ? 200 : 1200);
+    // 500ms delay between batch requests to avoid 504 Gateway Timeout
+    await sleep(apiKey ? 500 : 1200);
 
     console.log(`  📡 Fetching page ${page}/${totalPages}...`);
     const response = await fetchWithRetry(
