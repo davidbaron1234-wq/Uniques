@@ -15,7 +15,6 @@
  *
  * Usage:
  *   npx tsx scripts/fetch-pokemon.ts
- *   POKEMON_TCG_API_KEY=your-key npx tsx scripts/fetch-pokemon.ts
  */
 
 import * as fs from "fs";
@@ -166,7 +165,7 @@ async function fetchPage(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
-  const apiKey = process.env.POKEMON_TCG_API_KEY || "";
+  const apiKey = "d16b05e1-542c-4d3d-974b-c8cb407b3cc1";
 
   console.log("══════════════════════════════════════════════════════");
   console.log("  Pokemon TCG Master Catalog Fetcher");
