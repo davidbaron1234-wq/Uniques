@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Plus, ImagePlus, ChevronDown, Search, Sparkles, Database, Loader2 } from "lucide-react";
+import { X, Plus, ImagePlus, Camera, ChevronDown, Search, Sparkles, Database, Loader2, Trash2 } from "lucide-react";
 import { Category } from "@/lib/types";
 import { categories } from "@/lib/data";
 import { formatValue } from "@/lib/format";
@@ -15,6 +15,7 @@ interface AddItemModalProps {
     category: Category;
     upForTrade: boolean;
     imagePreview: string | null;
+    customImage?: string;
     estimatedValue?: number;
     masterId?: string;
   }) => void;
@@ -24,10 +25,10 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   const [name, setName] = useState("");
   const [category, setCategory] = useState<Category | "">("");
   const [upForTrade, setUpForTrade] = useState<boolean | "">("");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [catalogImage, setCatalogImage] = useState<string | null>(null);
+  const [customImage, setCustomImage] = useState<string | null>(null);
   const [estimatedValue, setEstimatedValue] = useState<number | undefined>();
   const [masterId, setMasterId] = useState<string | undefined>();
-  const [dragOver, setDragOver] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<MasterItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -73,31 +74,34 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
 
   if (!isOpen) return null;
 
+  const handleFileUpload = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    // Cap at 5 MB to keep localStorage viable
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image must be under 5 MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => setCustomImage(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreview(reader.result as string);
-      reader.readAsDataURL(file);
-    }
+    if (file) handleFileUpload(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreview(reader.result as string);
-      reader.readAsDataURL(file);
-    }
+    if (file) handleFileUpload(file);
   };
 
   const handleSelectSuggestion = (item: MasterItem) => {
     setName(item.name);
     setMasterId(item.id);
     setEstimatedValue(item.marketPrice);
-    setImagePreview(item.imageLarge || item.imageSmall);
+    setCatalogImage(item.imageLarge || item.imageSmall);
     setShowSuggestions(false);
 
     // Map catalog categories to app categories
@@ -112,14 +116,17 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
       name: name.trim(),
       category: category as Category,
       upForTrade: upForTrade === true,
-      imagePreview,
+      imagePreview: catalogImage,
+      customImage: customImage || undefined,
       estimatedValue,
       masterId,
     });
+    // Reset form
     setName("");
     setCategory("");
     setUpForTrade("");
-    setImagePreview(null);
+    setCatalogImage(null);
+    setCustomImage(null);
     setEstimatedValue(undefined);
     setMasterId(undefined);
     setSuggestions([]);
@@ -154,7 +161,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Smart Search against Master Catalog */}
+          {/* ── Smart Search against Master Catalog ─────────────── */}
           <div className="relative">
             <label className="flex items-center gap-1.5 text-sm font-semibold text-cream/70 mb-2">
               <Sparkles className="w-3.5 h-3.5 text-surface-light" />
@@ -223,38 +230,72 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             )}
           </div>
 
-          {/* Image preview (auto-filled from catalog or manual upload) */}
-          <div
-            className={`relative w-full aspect-[4/3] rounded-2xl transition-colors flex flex-col items-center justify-center cursor-pointer overflow-hidden ${
-              dragOver
-                ? "ring-2 ring-primary bg-primary/10"
-                : imagePreview
-                ? ""
-                : "bg-background-light hover:bg-charcoal-light/30"
-            }`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-          >
-            {imagePreview ? (
-              <>
-                <img src={imagePreview} alt="Preview" className="w-full h-full object-contain bg-charcoal-dark" />
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-2xl">
-                  <p className="text-cream text-sm font-medium">Change image</p>
+          {/* ── Custom Photo Upload ────────────────────────────── */}
+          <div>
+            <label className="flex items-center gap-1.5 text-sm font-semibold text-cream/70 mb-2">
+              <Camera className="w-3.5 h-3.5 text-surface-light" />
+              Upload Your Photo
+              <span className="text-[10px] text-cream/30 font-normal ml-1">optional</span>
+            </label>
+
+            {customImage ? (
+              <div className="relative w-full rounded-2xl overflow-hidden bg-background-light">
+                <div className="aspect-[4/3] overflow-hidden">
+                  <img src={customImage} alt="Custom upload" className="w-full h-full object-contain bg-charcoal-dark" />
                 </div>
-              </>
+                <div className="absolute top-2 right-2 flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-8 h-8 rounded-xl bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+                    aria-label="Replace photo"
+                  >
+                    <Camera className="w-4 h-4 text-white/80" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomImage(null)}
+                    className="w-8 h-8 rounded-xl bg-red-500/70 hover:bg-red-500/90 flex items-center justify-center transition-colors"
+                    aria-label="Remove photo"
+                  >
+                    <Trash2 className="w-4 h-4 text-white/80" />
+                  </button>
+                </div>
+                <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60">
+                  <span className="text-[10px] text-green-300 font-semibold">Custom photo attached</span>
+                </div>
+              </div>
             ) : (
-              <>
-                <div className="w-14 h-14 rounded-2xl bg-charcoal-light/30 flex items-center justify-center mb-3">
-                  <ImagePlus className="w-7 h-7 text-cream/30" />
+              <div
+                className="relative w-full rounded-2xl border-2 border-dashed border-charcoal-light/30 hover:border-surface/40 bg-background-light/50 hover:bg-background-light transition-all cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); }}
+                onDrop={handleDrop}
+              >
+                <div className="flex items-center gap-3 px-4 py-4">
+                  <div className="w-11 h-11 rounded-xl bg-charcoal-light/30 flex items-center justify-center flex-shrink-0">
+                    <ImagePlus className="w-5 h-5 text-cream/30" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-cream/50 font-medium">Tap to upload or drag & drop</p>
+                    <p className="text-[10px] text-cream/25 mt-0.5">PNG, JPG up to 5 MB — overrides catalog image</p>
+                  </div>
                 </div>
-                <p className="text-sm text-cream/40 font-medium">Tap to add photo</p>
-                <p className="text-xs text-cream/20 mt-1">or select from catalog above</p>
-              </>
+              </div>
             )}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
           </div>
+
+          {/* ── Image Preview (catalog fallback) ───────────────── */}
+          {catalogImage && !customImage && (
+            <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-charcoal-dark">
+              <img src={catalogImage} alt="Catalog preview" className="w-full h-full object-contain" />
+              <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 flex items-center gap-1.5">
+                <Database className="w-3 h-3 text-surface-light/70" />
+                <span className="text-[10px] text-cream/60 font-medium">Catalog image</span>
+              </div>
+            </div>
+          )}
 
           {/* Market Price (auto-filled from catalog) */}
           {estimatedValue !== undefined && (

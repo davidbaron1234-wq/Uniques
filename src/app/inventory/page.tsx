@@ -78,7 +78,7 @@ function SortableItem({ item }: { item: CollectibleItem }) {
 
       <div className="aspect-square bg-charcoal-light/20 overflow-hidden">
         <img
-          src={item.imageUrl}
+          src={item.customImage || item.imageUrl}
           alt={item.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
@@ -182,6 +182,7 @@ export default function ProfilePage() {
     category: Category;
     upForTrade: boolean;
     imagePreview: string | null;
+    customImage?: string;
     estimatedValue?: number;
     masterId?: string;
   }) => {
@@ -193,6 +194,7 @@ export default function ProfilePage() {
       imageUrl:
         newItem.imagePreview ||
         `https://images.unsplash.com/photo-1613771404784-3a5686aa2be3?w=400&h=400&fit=crop&auto=format&q=80`,
+      customImage: newItem.customImage,
       upForTrade: newItem.upForTrade,
       estimatedValue: newItem.estimatedValue,
     };
@@ -313,7 +315,7 @@ export default function ProfilePage() {
                   <span className="text-xs font-extrabold text-charcoal-dark">{i + 1}</span>
                 </div>
                 <div className="aspect-[4/3] overflow-hidden">
-                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                  <img src={item.customImage || item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="p-2.5">
                   <p className="text-xs text-cream/90 font-semibold truncate">{item.name}</p>

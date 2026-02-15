@@ -6,6 +6,7 @@ export interface CollectibleItem {
   name: string;
   category: Category;
   imageUrl: string;
+  customImage?: string;      // User-uploaded Base64 image — takes priority over imageUrl
   upForTrade: boolean;
   estimatedValue?: number;
 }
