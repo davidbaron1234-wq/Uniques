@@ -3,17 +3,20 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
-import { categories } from "@/lib/data";
+import CardDetailModal from "@/components/CardDetailModal";
 import { formatValue } from "@/lib/format";
-import { Category } from "@/lib/types";
 import { MasterItem } from "@/lib/catalog/types";
 import { Search, X, Loader2 } from "lucide-react";
 
 const PAGE_SIZE = 50;
 
+// Catalog-specific filter categories (matches CatalogCategory + "All")
+const CATALOG_FILTERS = ["All", "Pokémon TCG", "Sneakers", "Coins"] as const;
+type CatalogFilter = (typeof CATALOG_FILTERS)[number];
+
 export default function SearchPage() {
   const [query, setQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<Category | "All">("All");
+  const [selectedCategory, setSelectedCategory] = useState<CatalogFilter>("All");
   const [results, setResults] = useState<MasterItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -21,6 +24,7 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [selectedItem, setSelectedItem] = useState<MasterItem | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch results from the catalog API
@@ -96,7 +100,7 @@ export default function SearchPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search 500+ collectibles..."
+              placeholder="Search 5,000+ collectibles..."
               className="w-full pl-12 pr-10 py-3.5 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
             />
             {query && (
@@ -112,10 +116,10 @@ export default function SearchPage() {
 
         <div className="px-5 pb-3">
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {["All", ...categories].map((cat) => (
+            {CATALOG_FILTERS.map((cat) => (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat as Category | "All")}
+                onClick={() => setSelectedCategory(cat)}
                 className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                   selectedCategory === cat
                     ? "bg-surface/25 text-surface-light shadow-glow-surface"
@@ -149,9 +153,10 @@ export default function SearchPage() {
             <>
               <div className="grid grid-cols-3 gap-3">
                 {results.map((item, i) => (
-                  <div
+                  <button
                     key={item.id}
-                    className="rounded-2xl overflow-hidden bg-background-light shadow-soft card-hover group animate-scale-in"
+                    onClick={() => setSelectedItem(item)}
+                    className="rounded-2xl overflow-hidden bg-background-light shadow-soft card-hover group animate-scale-in text-left"
                     style={{ animationDelay: `${Math.min(i, 20) * 0.03}s`, animationFillMode: "both" }}
                   >
                     <div className="relative aspect-square overflow-hidden">
@@ -176,7 +181,7 @@ export default function SearchPage() {
                         </p>
                       )}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
 
@@ -214,6 +219,12 @@ export default function SearchPage() {
           )}
         </div>
       </main>
+
+      {/* Card Detail Modal */}
+      <CardDetailModal
+        item={selectedItem}
+        onClose={() => setSelectedItem(null)}
+      />
 
       <BottomNav />
     </div>

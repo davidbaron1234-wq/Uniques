@@ -2,7 +2,7 @@
 // Every collectible in the platform is backed by a MasterItem from the global catalog.
 // User inventory items link to this via `masterId`.
 
-export type CatalogCategory = "Trading Cards" | "Sneakers" | "Coins";
+export type CatalogCategory = "Pokémon TCG" | "Trading Cards" | "Sneakers" | "Coins";
 
 export interface MasterItem {
   id: string;                // Namespaced: "ptcg-base1-4", "snkr-aj1-chicago", "coin-1909svdb"

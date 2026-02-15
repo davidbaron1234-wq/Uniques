@@ -8,7 +8,7 @@ function ptcg(setId: string, setName: string, series: string, cards: C[]): Maste
   return cards.map(([num, name, rarity, price]) => ({
     id: `ptcg-${setId}-${num}`,
     name,
-    category: "Trading Cards" as const,
+    category: "Pokémon TCG" as const,
     subCategory: "Pokémon TCG",
     set: setName,
     series,

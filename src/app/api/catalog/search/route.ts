@@ -8,11 +8,11 @@ import { CatalogCategory } from "@/lib/catalog/types";
 //
 // Query params:
 //   q         - search query (min 2 chars for fuzzy, empty = browse all)
-//   category  - "Trading Cards" | "Sneakers" | "Coins"
+//   category  - "Pokémon TCG" | "Trading Cards" | "Sneakers" | "Coins"
 //   page      - page number (default 1)
 //   pageSize  - items per page (default 20, max 100)
 
-const VALID_CATEGORIES: CatalogCategory[] = ["Trading Cards", "Sneakers", "Coins"];
+const VALID_CATEGORIES: CatalogCategory[] = ["Pokémon TCG", "Trading Cards", "Sneakers", "Coins"];
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

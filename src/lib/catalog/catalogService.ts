@@ -1,12 +1,35 @@
+import * as fs from "fs";
+import * as path from "path";
 import Fuse from "fuse.js";
 import { MasterItem, CatalogCategory, CatalogSearchResult } from "./types";
 import { pokemonSeedData } from "./pokemonSeed";
 import { sneakerSeedData } from "./sneakerSeed";
 import { coinSeedData } from "./coinSeed";
 
+// ── Load Pokémon data ─────────────────────────────────────────────────────
+// Try to read the full master JSON (5,000+ cards from the TCG API).
+// Falls back to the embedded seed data (~500 cards) if the file doesn't exist.
+
+function loadPokemonData(): MasterItem[] {
+  try {
+    const masterPath = path.join(process.cwd(), "src/lib/data/pokemon_master.json");
+    if (fs.existsSync(masterPath)) {
+      const raw = fs.readFileSync(masterPath, "utf-8");
+      const parsed = JSON.parse(raw) as MasterItem[];
+      console.log(`[Catalog] Loaded ${parsed.length.toLocaleString()} cards from pokemon_master.json`);
+      return parsed;
+    }
+  } catch {
+    // Fall through to seed data
+  }
+  console.log(`[Catalog] pokemon_master.json not found, using ${pokemonSeedData.length} seed cards`);
+  return pokemonSeedData;
+}
+
 // ── Master Catalog ─────────────────────────────────────────────────────────
-// Aggregates all seed data (and later, fetched API data) into a single
-// searchable catalog. Fuse.js handles fuzzy matching so typos still work.
+// Aggregates Pokémon data (master JSON or seed fallback), plus sneaker and
+// coin seed data, into a single searchable catalog.
+// Fuse.js handles fuzzy matching so typos still work.
 
 let _catalog: MasterItem[] | null = null;
 let _fuse: Fuse<MasterItem> | null = null;
@@ -14,7 +37,7 @@ let _index: Map<string, MasterItem> | null = null;
 
 function getCatalog(): MasterItem[] {
   if (!_catalog) {
-    _catalog = [...pokemonSeedData, ...sneakerSeedData, ...coinSeedData];
+    _catalog = [...loadPokemonData(), ...sneakerSeedData, ...coinSeedData];
   }
   return _catalog;
 }

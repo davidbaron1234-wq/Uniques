@@ -33,7 +33,7 @@ const OUTPUT_PATH = path.join(process.cwd(), "src/lib/data/pokemon_master.json")
 interface MasterItem {
   id: string;
   name: string;
-  category: "Trading Cards";
+  category: "Pokémon TCG";
   subCategory: "Pokémon TCG";
   set?: string;
   series?: string;
@@ -98,7 +98,7 @@ function toMasterItem(card: PokemonTCGResponse["data"][0]): MasterItem {
   return {
     id: `ptcg-${card.id}`,
     name: card.name,
-    category: "Trading Cards",
+    category: "Pokémon TCG",
     subCategory: "Pokémon TCG",
     set: card.set.name,
     series: card.set.series,
