@@ -1,20 +1,83 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, Camera, Trash2, ImagePlus, Save } from "lucide-react";
+import { X, Camera, Trash2, ImagePlus, Save, Wallet, Truck } from "lucide-react";
 
 export interface UserProfile {
   name: string;
   bio: string;
   avatar: string;
   joinDate: string;
+  paymentMethods?: string[];
+  shippingPreferences?: string[];
 }
+
+const PAYMENT_OPTIONS = ["PayPal", "Venmo", "Cash", "Bank Transfer", "Crypto", "Trade Only"];
+const SHIPPING_OPTIONS = ["Worldwide Shipping", "Local Pickup", "Convention Meetup", "Insured Shipping", "Middleman Service"];
 
 interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: UserProfile;
   onSave: (profile: UserProfile) => void;
+}
+
+function ChipSelector({
+  label,
+  icon,
+  options,
+  selected,
+  onChange,
+  max,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  max: number;
+}) {
+  const toggle = (option: string) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter((s) => s !== option));
+    } else if (selected.length < max) {
+      onChange([...selected, option]);
+    }
+  };
+
+  return (
+    <div>
+      <label className="flex items-center gap-1.5 text-sm font-semibold text-cream/70 mb-2">
+        {icon}
+        {label}
+        <span className="text-[10px] text-cream/30 font-normal ml-1">
+          {selected.length}/{max} max
+        </span>
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const isSelected = selected.includes(option);
+          const isDisabled = !isSelected && selected.length >= max;
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => !isDisabled && toggle(option)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                isSelected
+                  ? "bg-surface/25 text-surface-light ring-1 ring-surface/40"
+                  : isDisabled
+                  ? "bg-background-light/50 text-cream/15 cursor-not-allowed"
+                  : "bg-background-light text-cream/40 hover:text-cream/60 hover:bg-charcoal-light/40"
+              }`}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function EditProfileModal({
@@ -26,6 +89,8 @@ export default function EditProfileModal({
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio);
   const [avatar, setAvatar] = useState(profile.avatar);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(profile.paymentMethods || []);
+  const [shippingPreferences, setShippingPreferences] = useState<string[]>(profile.shippingPreferences || []);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync form when profile prop changes (e.g. modal re-opens)
@@ -34,6 +99,8 @@ export default function EditProfileModal({
       setName(profile.name);
       setBio(profile.bio);
       setAvatar(profile.avatar);
+      setPaymentMethods(profile.paymentMethods || []);
+      setShippingPreferences(profile.shippingPreferences || []);
     }
   }, [isOpen, profile]);
 
@@ -63,7 +130,14 @@ export default function EditProfileModal({
 
   const handleSave = () => {
     if (!name.trim()) return;
-    onSave({ name: name.trim(), bio: bio.trim(), avatar, joinDate: profile.joinDate });
+    onSave({
+      name: name.trim(),
+      bio: bio.trim(),
+      avatar,
+      joinDate: profile.joinDate,
+      paymentMethods,
+      shippingPreferences,
+    });
     onClose();
   };
 
@@ -167,6 +241,26 @@ export default function EditProfileModal({
               {bio.length}/200
             </p>
           </div>
+
+          {/* ── Payment Methods ─────────────────────────────────── */}
+          <ChipSelector
+            label="Payment Methods"
+            icon={<Wallet className="w-3.5 h-3.5 text-surface-light" />}
+            options={PAYMENT_OPTIONS}
+            selected={paymentMethods}
+            onChange={setPaymentMethods}
+            max={3}
+          />
+
+          {/* ── Shipping / Meetup ───────────────────────────────── */}
+          <ChipSelector
+            label="Shipping & Meetup"
+            icon={<Truck className="w-3.5 h-3.5 text-surface-light" />}
+            options={SHIPPING_OPTIONS}
+            selected={shippingPreferences}
+            onChange={setShippingPreferences}
+            max={3}
+          />
         </div>
 
         {/* Actions */}

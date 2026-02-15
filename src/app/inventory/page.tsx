@@ -21,6 +21,7 @@ import BottomNav from "@/components/BottomNav";
 import AddItemModal from "@/components/AddItemModal";
 import EditProfileModal, { UserProfile } from "@/components/EditProfileModal";
 import GrailsPickerModal from "@/components/GrailsPickerModal";
+import ReviewsListModal from "@/components/ReviewsListModal";
 import { inventoryItems, currentUser } from "@/lib/data";
 import { formatValue } from "@/lib/format";
 import { CollectibleItem, Category } from "@/lib/types";
@@ -34,9 +35,9 @@ import {
   TrendingUp,
   Package,
   Truck,
-  CreditCard,
   Database,
   Edit3,
+  Wallet,
 } from "lucide-react";
 
 // ── localStorage keys ────────────────────────────────────────────────────
@@ -165,11 +166,15 @@ function SortableItem({ item }: { item: CollectibleItem }) {
 }
 
 // ── Trust stars ──────────────────────────────────────────────────────────
-function TrustStars({ score }: { score: number }) {
+function TrustStars({ score, onClick }: { score: number; onClick?: () => void }) {
   const fullStars = Math.floor(score);
   const hasHalf = score - fullStars >= 0.5;
   return (
-    <div className="flex items-center gap-0.5">
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-0.5 hover:opacity-80 transition-opacity"
+    >
       {Array.from({ length: 5 }).map((_, i) => (
         <Star
           key={i}
@@ -183,7 +188,7 @@ function TrustStars({ score }: { score: number }) {
         />
       ))}
       <span className="text-xs text-cream/50 ml-1 font-semibold">{score.toFixed(1)}</span>
-    </div>
+    </button>
   );
 }
 
@@ -202,6 +207,7 @@ export default function ProfilePage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showGrailsPicker, setShowGrailsPicker] = useState(false);
+  const [showReviews, setShowReviews] = useState(false);
   const [activeFilter, setActiveFilter] = useState<QuickFilter>("All");
 
   const sensors = useSensors(
@@ -334,7 +340,7 @@ export default function ProfilePage() {
                 </button>
               </div>
               {currentUser.trustScore !== undefined && (
-                <TrustStars score={currentUser.trustScore} />
+                <TrustStars score={currentUser.trustScore} onClick={() => setShowReviews(true)} />
               )}
               {profile.bio && (
                 <p className="text-xs text-cream/40 mt-1.5 leading-relaxed">{profile.bio}</p>
@@ -362,19 +368,32 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {/* Preferences */}
-          {(currentUser.deliveryPreference || currentUser.paymentPreference) && (
-            <div className="mt-3 space-y-1.5">
-              {currentUser.deliveryPreference && (
-                <div className="flex items-center gap-2 text-cream/30">
-                  <Truck className="w-3 h-3 flex-shrink-0" />
-                  <span className="text-[10px] font-medium">{currentUser.deliveryPreference}</span>
+          {/* Preferences — dynamic from profile */}
+          {((profile.paymentMethods && profile.paymentMethods.length > 0) ||
+            (profile.shippingPreferences && profile.shippingPreferences.length > 0)) && (
+            <div className="mt-3 space-y-2">
+              {profile.paymentMethods && profile.paymentMethods.length > 0 && (
+                <div className="flex items-start gap-2">
+                  <Wallet className="w-3 h-3 text-cream/25 mt-0.5 flex-shrink-0" />
+                  <div className="flex flex-wrap gap-1.5">
+                    {profile.paymentMethods.map((m) => (
+                      <span key={m} className="px-2 py-0.5 rounded-lg bg-surface/15 text-surface-light text-[10px] font-semibold">
+                        {m}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
-              {currentUser.paymentPreference && (
-                <div className="flex items-center gap-2 text-cream/30">
-                  <CreditCard className="w-3 h-3 flex-shrink-0" />
-                  <span className="text-[10px] font-medium">{currentUser.paymentPreference}</span>
+              {profile.shippingPreferences && profile.shippingPreferences.length > 0 && (
+                <div className="flex items-start gap-2">
+                  <Truck className="w-3 h-3 text-cream/25 mt-0.5 flex-shrink-0" />
+                  <div className="flex flex-wrap gap-1.5">
+                    {profile.shippingPreferences.map((s) => (
+                      <span key={s} className="px-2 py-0.5 rounded-lg bg-primary/12 text-primary text-[10px] font-semibold">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -514,6 +533,12 @@ export default function ProfilePage() {
         items={items}
         pinnedIds={pinnedGrailIds}
         onSave={setPinnedGrailIds}
+      />
+      <ReviewsListModal
+        isOpen={showReviews}
+        onClose={() => setShowReviews(false)}
+        userName={profile.name}
+        trustScore={currentUser.trustScore || 4.8}
       />
       <BottomNav />
     </div>
