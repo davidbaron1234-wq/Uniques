@@ -3,21 +3,19 @@
  * ── Pokémon TCG Master Catalog Fetcher ─────────────────────────────────────
  *
  * Fetches ALL Pokémon cards from the official Pokémon TCG API and writes them
- * as MasterItem[] to a JSON file. Designed for 16,000+ cards with:
+ * as MasterItem[] to a JSON file.
  *
- *   - Paginated fetching (250 per page = ~65 pages)
- *   - Retry with exponential backoff on failures
- *   - Rate-limit awareness (1,000 requests/day free, 30,000 with API key)
- *   - Progress logging
- *   - Graceful resume if interrupted
+ * Features:
+ *   - While-loop pagination (250 per page)
+ *   - 500ms delay between pages to avoid 504 Gateway Timeout
+ *   - Retry up to 3 times per page with exponential backoff
+ *   - Graceful failure: saves all collected data if a page permanently fails
+ *   - Progress logging per page
+ *   - User-Agent header on every request
  *
  * Usage:
  *   npx tsx scripts/fetch-pokemon.ts
- *   npx tsx scripts/fetch-pokemon.ts --key YOUR_API_KEY
- *   npx tsx scripts/fetch-pokemon.ts --output ./custom-path.json
- *
- * Environment:
- *   POKEMON_TCG_API_KEY=your-key-here (alternative to --key flag)
+ *   POKEMON_TCG_API_KEY=your-key npx tsx scripts/fetch-pokemon.ts
  */
 
 import * as fs from "fs";
@@ -26,9 +24,12 @@ import * as path from "path";
 // ── Config ─────────────────────────────────────────────────────────────────
 
 const API_BASE = "https://api.pokemontcg.io/v2/cards";
-const PAGE_SIZE = 250; // Max allowed by the API
-const RETRY_ATTEMPTS = 4;
-const RETRY_BASE_DELAY_MS = 2000; // 2s, 4s, 8s, 16s
+const PAGE_SIZE = 250;
+const MAX_RETRIES = 3;
+const DELAY_BETWEEN_PAGES_MS = 500;
+const OUTPUT_PATH = path.join(process.cwd(), "src/lib/data/pokemon_master.json");
+
+// ── Types ──────────────────────────────────────────────────────────────────
 
 interface MasterItem {
   id: string;
@@ -66,65 +67,11 @@ interface PokemonTCGResponse {
   totalCount: number;
 }
 
-// ── Argument parsing ───────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  let apiKey = process.env.POKEMON_TCG_API_KEY || "";
-  let outputPath = path.join(process.cwd(), "src/lib/data/pokemon_master.json");
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--key" && args[i + 1]) {
-      apiKey = args[i + 1];
-      i++;
-    } else if (args[i] === "--output" && args[i + 1]) {
-      outputPath = args[i + 1];
-      i++;
-    }
-  }
-
-  return { apiKey, outputPath };
-}
-
-// ── Fetch with retry ───────────────────────────────────────────────────────
-
-async function fetchWithRetry(
-  url: string,
-  headers: Record<string, string>,
-  attempt = 1
-): Promise<PokemonTCGResponse> {
-  try {
-    const response = await fetch(url, { headers });
-
-    if (response.status === 429) {
-      // Rate limited
-      const retryAfter = parseInt(response.headers.get("Retry-After") || "60", 10);
-      console.log(`  ⏳ Rate limited. Waiting ${retryAfter}s...`);
-      await sleep(retryAfter * 1000);
-      return fetchWithRetry(url, headers, attempt);
-    }
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return (await response.json()) as PokemonTCGResponse;
-  } catch (error) {
-    if (attempt >= RETRY_ATTEMPTS) {
-      throw error;
-    }
-    const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
-    console.log(`  ⚠ Attempt ${attempt} failed. Retrying in ${delay / 1000}s...`);
-    await sleep(delay);
-    return fetchWithRetry(url, headers, attempt + 1);
-  }
-}
-
-function sleep(ms: number) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-// ── Price extraction ───────────────────────────────────────────────────────
 
 function extractPrice(card: PokemonTCGResponse["data"][0]): number {
   // Try TCGPlayer prices first (preferred for US market)
@@ -148,8 +95,6 @@ function extractPrice(card: PokemonTCGResponse["data"][0]): number {
   return 0;
 }
 
-// ── Transform to MasterItem ────────────────────────────────────────────────
-
 function toMasterItem(card: PokemonTCGResponse["data"][0]): MasterItem {
   return {
     id: `ptcg-${card.id}`,
@@ -166,18 +111,71 @@ function toMasterItem(card: PokemonTCGResponse["data"][0]): MasterItem {
   };
 }
 
+function saveResults(cards: MasterItem[], outputPath: string) {
+  const outputDir = path.dirname(outputPath);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+  fs.writeFileSync(outputPath, JSON.stringify(cards, null, 2), "utf-8");
+  const fileSizeMB = (fs.statSync(outputPath).size / 1024 / 1024).toFixed(1);
+  console.log(`\n  Saved ${cards.length.toLocaleString()} cards to ${outputPath} (${fileSizeMB} MB)`);
+}
+
+// ── Fetch a single page with up to MAX_RETRIES attempts ───────────────────
+
+async function fetchPage(
+  page: number,
+  headers: Record<string, string>
+): Promise<PokemonTCGResponse> {
+  const url = `${API_BASE}?page=${page}&pageSize=${PAGE_SIZE}`;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, { headers });
+
+      // Handle rate limiting — wait and retry (doesn't count as a failure)
+      if (response.status === 429) {
+        const retryAfter = parseInt(response.headers.get("Retry-After") || "60", 10);
+        console.log(`  Rate limited. Waiting ${retryAfter}s...`);
+        await sleep(retryAfter * 1000);
+        attempt--; // Don't count rate limits against retry budget
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return (await response.json()) as PokemonTCGResponse;
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (attempt < MAX_RETRIES) {
+        const delay = 1000 * Math.pow(2, attempt); // 2s, 4s, 8s
+        console.log(`  Attempt ${attempt}/${MAX_RETRIES} failed: ${msg}. Retrying in ${delay / 1000}s...`);
+        await sleep(delay);
+      } else {
+        throw new Error(`Page ${page} failed after ${MAX_RETRIES} attempts: ${msg}`);
+      }
+    }
+  }
+
+  // Unreachable, but TypeScript needs it
+  throw new Error(`Page ${page} failed unexpectedly`);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
-  const { apiKey, outputPath } = parseArgs();
+  const apiKey = process.env.POKEMON_TCG_API_KEY || "";
 
-  console.log("╔══════════════════════════════════════════════════════╗");
-  console.log("║     Pokémon TCG Master Catalog Fetcher              ║");
-  console.log("║     Uniques Trading Platform                        ║");
-  console.log("╚══════════════════════════════════════════════════════╝");
-  console.log();
+  console.log("══════════════════════════════════════════════════════");
+  console.log("  Pokemon TCG Master Catalog Fetcher");
+  console.log("  Uniques Trading Platform");
+  console.log("══════════════════════════════════════════════════════");
   console.log(`  API Key: ${apiKey ? `${apiKey.slice(0, 8)}...` : "none (rate-limited)"}`);
-  console.log(`  Output:  ${outputPath}`);
+  console.log(`  Output:  ${OUTPUT_PATH}`);
+  console.log(`  Batch size: ${PAGE_SIZE} cards/page`);
+  console.log(`  Delay: ${DELAY_BETWEEN_PAGES_MS}ms between pages`);
   console.log();
 
   const headers: Record<string, string> = {
@@ -188,57 +186,64 @@ async function main() {
     headers["X-Api-Key"] = apiKey;
   }
 
-  // Fetch first page to get totalCount
-  console.log("  📡 Fetching page 1...");
-  const firstPage = await fetchWithRetry(`${API_BASE}?page=1&pageSize=${PAGE_SIZE}`, headers);
-  const totalCount = firstPage.totalCount;
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const allCards: MasterItem[] = [];
+  let page = 1;
+  let totalCount = 0;
+  let hasMore = true;
 
-  console.log(`  📊 Total cards: ${totalCount.toLocaleString()}`);
-  console.log(`  📄 Total pages: ${totalPages} (${PAGE_SIZE}/page)`);
-  console.log();
+  // While-loop pagination: keep fetching until we have all cards
+  while (hasMore) {
+    console.log(`  Fetching page ${page}...`);
 
-  const allCards: MasterItem[] = firstPage.data.map(toMasterItem);
-  console.log(`  ✅ Page 1/${totalPages} — ${allCards.length} cards`);
+    try {
+      const response = await fetchPage(page, headers);
 
-  // Fetch remaining pages
-  for (let page = 2; page <= totalPages; page++) {
-    // 500ms delay between batch requests to avoid 504 Gateway Timeout
-    await sleep(apiKey ? 500 : 1200);
+      // On the first page, log the total
+      if (page === 1) {
+        totalCount = response.totalCount;
+        const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+        console.log(`  Total cards available: ${totalCount.toLocaleString()} (~${totalPages} pages)`);
+      }
 
-    console.log(`  📡 Fetching page ${page}/${totalPages}...`);
-    const response = await fetchWithRetry(
-      `${API_BASE}?page=${page}&pageSize=${PAGE_SIZE}`,
-      headers
-    );
+      const items = response.data.map(toMasterItem);
+      allCards.push(...items);
 
-    const items = response.data.map(toMasterItem);
-    allCards.push(...items);
-    console.log(`  ✅ Page ${page}/${totalPages} — ${allCards.length} total cards`);
+      console.log(`  Page ${page} done. Saved ${items.length} cards. Total so far: ${allCards.length.toLocaleString()}`);
+
+      // Check if there are more pages
+      if (allCards.length >= totalCount || response.data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+        // Rate-limit delay between pages
+        await sleep(DELAY_BETWEEN_PAGES_MS);
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`\n  ERROR: ${msg}`);
+      console.log(`  Stopping early. Saving ${allCards.length.toLocaleString()} cards collected so far...`);
+
+      // Save whatever we have so we don't lose everything
+      if (allCards.length > 0) {
+        saveResults(allCards, OUTPUT_PATH);
+      }
+
+      console.log("  Partial save complete. Re-run the script to try again.");
+      process.exit(1);
+    }
   }
 
-  // Ensure output directory exists
-  const outputDir = path.dirname(outputPath);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
+  // Final save
+  saveResults(allCards, OUTPUT_PATH);
 
-  // Write to file
-  fs.writeFileSync(outputPath, JSON.stringify(allCards, null, 2), "utf-8");
-
-  const fileSizeMB = (fs.statSync(outputPath).size / 1024 / 1024).toFixed(1);
-
-  console.log();
-  console.log("  ══════════════════════════════════════════════════");
-  console.log(`  ✅ Done! Wrote ${allCards.length.toLocaleString()} cards to:`);
-  console.log(`     ${outputPath} (${fileSizeMB} MB)`);
-  console.log();
-  console.log(`  📊 Cards with prices: ${allCards.filter((c) => c.marketPrice > 0).length.toLocaleString()}`);
-  console.log(`  📊 Cards without prices: ${allCards.filter((c) => c.marketPrice === 0).length.toLocaleString()}`);
-  console.log("  ══════════════════════════════════════════════════");
+  const withPrices = allCards.filter((c) => c.marketPrice > 0).length;
+  console.log(`  Cards with prices: ${withPrices.toLocaleString()}`);
+  console.log(`  Cards without prices: ${(allCards.length - withPrices).toLocaleString()}`);
+  console.log("══════════════════════════════════════════════════════");
+  console.log("  Done!");
 }
 
 main().catch((error) => {
-  console.error("\n  ❌ Fatal error:", error.message);
+  console.error("\n  Fatal error:", error.message);
   process.exit(1);
 });
