@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Plus, ImagePlus, Camera, ChevronDown, Search, Sparkles, Database, Loader2, Trash2 } from "lucide-react";
+import { X, Plus, ImagePlus, Camera, ChevronDown, Search, Sparkles, Database, Loader2, Trash2, DollarSign } from "lucide-react";
 import { Category } from "@/lib/types";
 import { categories } from "@/lib/data";
 import { formatValue } from "@/lib/format";
@@ -297,15 +297,30 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             </div>
           )}
 
-          {/* Market Price (auto-filled from catalog) */}
-          {estimatedValue !== undefined && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-primary/8">
-              <span className="text-sm text-cream/50 font-medium">Market Price</span>
-              <span className="text-sm text-primary font-bold ml-auto">
-                {formatValue(estimatedValue)}
-              </span>
+          {/* Asking Price (pre-filled from catalog, user-editable) */}
+          <div>
+            <label className="flex items-center gap-1.5 text-sm font-semibold text-cream/70 mb-2">
+              <DollarSign className="w-3.5 h-3.5 text-surface-light" />
+              Asking Price
+              {masterId && (
+                <span className="text-[10px] text-cream/30 font-normal ml-1">
+                  pre-filled from catalog
+                </span>
+              )}
+            </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-cream/30 text-sm font-semibold">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={estimatedValue ?? ""}
+                onChange={(e) => setEstimatedValue(e.target.value ? parseFloat(e.target.value) : undefined)}
+                placeholder="0.00"
+                className="w-full pl-8 pr-4 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
             </div>
-          )}
+          </div>
 
           {/* Category */}
           <div>

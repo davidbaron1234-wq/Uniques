@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   DndContext,
   closestCenter,
@@ -132,10 +132,39 @@ function TrustStars({ score }: { score: number }) {
   );
 }
 
+const STORAGE_KEY = "uniques_inventory";
+
+function loadInventory(): CollectibleItem[] {
+  if (typeof window === "undefined") return inventoryItems;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* corrupt data — fall back to defaults */ }
+  return inventoryItems;
+}
+
 export default function ProfilePage() {
   const [items, setItems] = useState<CollectibleItem[]>(inventoryItems);
+  const [hydrated, setHydrated] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<QuickFilter>("All");
+
+  // Hydrate from localStorage on mount (client-only)
+  useEffect(() => {
+    setItems(loadInventory());
+    setHydrated(true);
+  }, []);
+
+  // Persist to localStorage whenever items change (skip the initial SSR value)
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    } catch { /* quota exceeded — silently fail */ }
+  }, [items, hydrated]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
