@@ -1,5 +1,8 @@
 export type Category = "Comics" | "Funko Pop" | "Trading Cards" | "Shoes" | "Coins" | "Figures";
 
+export type ItemCondition = "Mint" | "Near Mint" | "Excellent" | "Played" | "Damaged";
+export type ItemStatus = "For Trade" | "For Sale" | "Showcase";
+
 export interface CollectibleItem {
   id: string;
   masterId?: string;         // Links to MasterItem.id in the global catalog
@@ -9,6 +12,9 @@ export interface CollectibleItem {
   customImage?: string;      // User-uploaded Base64 image — takes priority over imageUrl
   upForTrade: boolean;
   estimatedValue?: number;
+  condition?: ItemCondition;
+  status?: ItemStatus;
+  notes?: string;
 }
 
 export interface User {

@@ -22,9 +22,10 @@ import AddItemModal from "@/components/AddItemModal";
 import EditProfileModal, { UserProfile } from "@/components/EditProfileModal";
 import GrailsPickerModal from "@/components/GrailsPickerModal";
 import ReviewsListModal from "@/components/ReviewsListModal";
+import ItemConfigForm, { ItemConfig } from "@/components/ItemConfigForm";
 import { inventoryItems, currentUser } from "@/lib/data";
 import { formatValue } from "@/lib/format";
-import { CollectibleItem, Category } from "@/lib/types";
+import { CollectibleItem, Category, ItemCondition, ItemStatus } from "@/lib/types";
 import {
   Plus,
   ArrowLeftRight,
@@ -38,6 +39,9 @@ import {
   Database,
   Edit3,
   Wallet,
+  X,
+  Save,
+  Trash2,
 } from "lucide-react";
 
 // ── localStorage keys ────────────────────────────────────────────────────
@@ -105,7 +109,7 @@ function filterCategory(item: CollectibleItem, filter: QuickFilter): boolean {
 }
 
 // ── Sortable grid item ──────────────────────────────────────────────────
-function SortableItem({ item }: { item: CollectibleItem }) {
+function SortableItem({ item, onTap }: { item: CollectibleItem; onTap: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
 
@@ -120,11 +124,13 @@ function SortableItem({ item }: { item: CollectibleItem }) {
     <div
       ref={setNodeRef}
       style={style}
-      className="relative rounded-2xl overflow-hidden bg-background-light shadow-soft group"
+      className="relative rounded-2xl overflow-hidden bg-background-light shadow-soft group cursor-pointer"
+      onClick={onTap}
     >
       <button
         {...attributes}
         {...listeners}
+        onClick={(e) => e.stopPropagation()}
         className="absolute top-1.5 left-1.5 z-10 w-6 h-6 rounded-lg bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
         aria-label="Drag to reorder"
       >
@@ -212,6 +218,13 @@ export default function ProfilePage() {
   const [showGrailsPicker, setShowGrailsPicker] = useState(false);
   const [showReviews, setShowReviews] = useState(false);
   const [activeFilter, setActiveFilter] = useState<QuickFilter>("All");
+  const [editingItem, setEditingItem] = useState<CollectibleItem | null>(null);
+  const [editConfig, setEditConfig] = useState<ItemConfig>({
+    askingPrice: undefined,
+    condition: "Near Mint",
+    status: "For Trade",
+    notes: "",
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -296,6 +309,9 @@ export default function ProfilePage() {
     customImage?: string;
     estimatedValue?: number;
     masterId?: string;
+    condition?: string;
+    status?: string;
+    notes?: string;
   }) => {
     const item: CollectibleItem = {
       id: `new-${Date.now()}`,
@@ -308,8 +324,46 @@ export default function ProfilePage() {
       customImage: newItem.customImage,
       upForTrade: newItem.upForTrade,
       estimatedValue: newItem.estimatedValue,
+      condition: (newItem.condition as ItemCondition) || undefined,
+      status: (newItem.status as ItemStatus) || undefined,
+      notes: newItem.notes,
     };
     setItems((prev) => [item, ...prev]);
+  };
+
+  const handleEditItem = (item: CollectibleItem) => {
+    setEditingItem(item);
+    setEditConfig({
+      askingPrice: item.estimatedValue,
+      condition: item.condition || "Near Mint",
+      status: item.status || "For Trade",
+      notes: item.notes || "",
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingItem) return;
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === editingItem.id
+          ? {
+              ...i,
+              estimatedValue: editConfig.askingPrice,
+              condition: editConfig.condition,
+              status: editConfig.status,
+              upForTrade: editConfig.status === "For Trade",
+              notes: editConfig.notes || undefined,
+            }
+          : i
+      )
+    );
+    setEditingItem(null);
+  };
+
+  const handleDeleteItem = () => {
+    if (!editingItem) return;
+    setItems((prev) => prev.filter((i) => i.id !== editingItem.id));
+    setEditingItem(null);
   };
 
   const filters: QuickFilter[] = ["All", "Cards", "Funko", "Shoes", "Coins", "Comics", "Figures"];
@@ -500,7 +554,7 @@ export default function ProfilePage() {
           <SortableContext items={filteredItems.map((i) => i.id)} strategy={rectSortingStrategy}>
             <div className="px-5 grid grid-cols-3 gap-3 pb-6">
               {filteredItems.map((item) => (
-                <SortableItem key={item.id} item={item} />
+                <SortableItem key={item.id} item={item} onTap={() => handleEditItem(item)} />
               ))}
             </div>
           </SortableContext>
@@ -543,6 +597,62 @@ export default function ProfilePage() {
         userName={profile.name}
         trustScore={currentUser.trustScore || 4.8}
       />
+
+      {/* ── Edit Item Modal ──────────────────────────────────── */}
+      {editingItem && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
+            onClick={() => setEditingItem(null)}
+          />
+          <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl overflow-hidden max-h-[90vh] flex flex-col animate-slide-up">
+            {/* Close button */}
+            <button
+              onClick={() => setEditingItem(null)}
+              className="absolute top-3 right-3 z-30 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4.5 h-4.5 text-white/80" />
+            </button>
+
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
+              <img
+                src={editingItem.customImage || editingItem.imageUrl}
+                alt=""
+                className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-cream truncate">Edit Item</p>
+                <p className="text-xs text-cream/35 truncate">{editingItem.name}</p>
+              </div>
+            </div>
+
+            {/* Config form */}
+            <div className="flex-1 overflow-y-auto overscroll-contain p-5">
+              <ItemConfigForm config={editConfig} onChange={setEditConfig} />
+            </div>
+
+            {/* Bottom actions */}
+            <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
+              <button
+                onClick={handleDeleteItem}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
+              >
+                <Save className="w-4 h-4" />
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <BottomNav />
     </div>
   );

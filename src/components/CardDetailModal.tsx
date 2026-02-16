@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { X, Plus, Sparkles, BookOpen, DollarSign, ArrowLeftRight, Check } from "lucide-react";
+import { X, Plus, Sparkles, BookOpen, DollarSign, ArrowLeftRight, Check, ChevronLeft, Save } from "lucide-react";
 import { MasterItem } from "@/lib/catalog/types";
 import { formatValue } from "@/lib/format";
 import { useInventory } from "@/lib/InventoryContext";
+import ItemConfigForm, { ItemConfig } from "./ItemConfigForm";
 
 interface CardDetailModalProps {
   item: MasterItem | null;
@@ -86,6 +87,13 @@ const MOCK_COLLECTORS = [
 
 export default function CardDetailModal({ item, onClose }: CardDetailModalProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [step, setStep] = useState<"detail" | "configure">("detail");
+  const [config, setConfig] = useState<ItemConfig>({
+    askingPrice: undefined,
+    condition: "Near Mint",
+    status: "Showcase",
+    notes: "",
+  });
   const { addFromCatalog, hasItem } = useInventory();
 
   if (!item) return null;
@@ -94,160 +102,219 @@ export default function CardDetailModal({ item, onClose }: CardDetailModalProps)
   const styles = RARITY_STYLES[tier];
   const owned = hasItem(item.id);
 
+  const handleStartConfigure = () => {
+    setConfig((prev) => ({ ...prev, askingPrice: item.marketPrice || undefined }));
+    setStep("configure");
+  };
+
+  const handleSave = () => {
+    addFromCatalog(item, {
+      askingPrice: config.askingPrice,
+      condition: config.condition,
+      status: config.status,
+      notes: config.notes || undefined,
+    });
+    setStep("detail");
+  };
+
+  const handleClose = () => {
+    setStep("detail");
+    setImageLoaded(false);
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop with blur */}
       <div
         className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
-        onClick={onClose}
+        onClick={handleClose}
       />
 
-      {/* Modal container — always centered dialog */}
+      {/* Modal container */}
       <div
         className={`relative w-full max-w-md bg-charcoal-dark rounded-3xl overflow-hidden max-h-[90vh] flex flex-col animate-slide-up ${styles.glow}`}
       >
-        {/* Close button — high z-index, always visible */}
+        {/* Close button */}
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute top-3 right-3 z-30 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
           aria-label="Close"
         >
           <X className="w-4.5 h-4.5 text-white/80" />
         </button>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
-          {/* Image section */}
-          <div className="relative flex items-center justify-center px-6 pt-6 pb-3">
-            {/* Rarity-colored ambient glow behind card */}
-            {tier !== "common" && (
-              <div
-                className={`absolute inset-0 opacity-30 blur-3xl ${
-                  tier === "secret"
-                    ? "bg-gradient-to-br from-yellow-400/40 to-amber-500/20"
-                    : tier === "ultra"
-                    ? "bg-gradient-to-br from-purple-500/40 to-pink-500/20"
-                    : tier === "rare"
-                    ? "bg-gradient-to-br from-blue-500/40 to-cyan-500/20"
-                    : "bg-gradient-to-br from-emerald-500/30 to-teal-500/10"
-                }`}
-              />
-            )}
-
-            {/* Blur placeholder from imageSmall */}
-            {!imageLoaded && (
-              <img
-                src={item.imageSmall}
-                alt=""
-                className="absolute inset-0 w-full h-full object-contain blur-lg scale-110 opacity-40"
-                aria-hidden="true"
-              />
-            )}
-            <img
-              src={item.imageLarge}
-              alt={item.name}
-              className={`relative max-h-[42vh] w-auto max-w-full object-contain drop-shadow-2xl transition-opacity duration-300 ${
-                imageLoaded ? "opacity-100" : "opacity-0"
-              }`}
-              onLoad={() => setImageLoaded(true)}
-            />
-          </div>
-
-          {/* Details section */}
-          <div className="px-5 pb-5 pt-2 space-y-3.5">
-            {/* Name & Set */}
-            <div>
-              <h2 className="text-lg font-bold text-cream leading-snug">{item.name}</h2>
-              {item.set && (
-                <p className="text-sm text-cream/40 mt-0.5">{item.set}</p>
-              )}
-            </div>
-
-            {/* Rarity & metadata chips */}
-            <div className="flex flex-wrap gap-2">
-              {item.rarity && (
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${styles.chip}`}>
-                  <Sparkles className={`w-3.5 h-3.5 ${styles.icon}`} />
-                  <span className={`text-xs font-bold ${RARITY_TEXT[tier]}`}>
-                    {item.rarity}
-                  </span>
-                </div>
-              )}
-              {item.series && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
-                  <BookOpen className="w-3.5 h-3.5 text-cream/35" />
-                  <span className="text-xs text-cream/45 font-semibold">{item.series}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Market Price — large and green */}
-            {item.marketPrice > 0 && (
-              <div className="rounded-2xl bg-green-500/8 border border-green-500/20 p-4">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <DollarSign className="w-4 h-4 text-green-400" />
-                  <span className="text-[11px] text-cream/35 font-semibold uppercase tracking-wider">Market Price</span>
-                </div>
-                <p className="text-3xl font-bold text-green-400">
-                  {formatValue(item.marketPrice)}
-                </p>
-                {item.lastUpdated && (
-                  <p className="text-[10px] text-cream/20 mt-1.5">
-                    Updated {new Date(item.lastUpdated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                  </p>
+        {/* ── STEP 1: Card Detail View ─────────────────────────────── */}
+        {step === "detail" && (
+          <>
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              {/* Image section */}
+              <div className="relative flex items-center justify-center px-6 pt-6 pb-3">
+                {tier !== "common" && (
+                  <div
+                    className={`absolute inset-0 opacity-30 blur-3xl ${
+                      tier === "secret"
+                        ? "bg-gradient-to-br from-yellow-400/40 to-amber-500/20"
+                        : tier === "ultra"
+                        ? "bg-gradient-to-br from-purple-500/40 to-pink-500/20"
+                        : tier === "rare"
+                        ? "bg-gradient-to-br from-blue-500/40 to-cyan-500/20"
+                        : "bg-gradient-to-br from-emerald-500/30 to-teal-500/10"
+                    }`}
+                  />
                 )}
+                {!imageLoaded && (
+                  <img
+                    src={item.imageSmall}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-contain blur-lg scale-110 opacity-40"
+                    aria-hidden="true"
+                  />
+                )}
+                <img
+                  src={item.imageLarge}
+                  alt={item.name}
+                  className={`relative max-h-[42vh] w-auto max-w-full object-contain drop-shadow-2xl transition-opacity duration-300 ${
+                    imageLoaded ? "opacity-100" : "opacity-0"
+                  }`}
+                  onLoad={() => setImageLoaded(true)}
+                />
               </div>
-            )}
 
-            {/* Social proof — Collectors */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
-              <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider mb-3">
-                Collectors who want this
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="flex -space-x-2.5">
-                  {MOCK_COLLECTORS.map((c) => (
-                    <img
-                      key={c.seed}
-                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${c.seed}&backgroundColor=b6e3f4,c0aede,ffd5dc`}
-                      alt={c.name}
-                      className="w-9 h-9 rounded-full border-2 border-charcoal-dark bg-charcoal-light/30"
-                    />
-                  ))}
-                  <div className="w-9 h-9 rounded-full border-2 border-charcoal-dark bg-charcoal-light/40 flex items-center justify-center">
-                    <span className="text-[10px] text-cream/40 font-bold">+12</span>
+              {/* Details section */}
+              <div className="px-5 pb-5 pt-2 space-y-3.5">
+                <div>
+                  <h2 className="text-lg font-bold text-cream leading-snug">{item.name}</h2>
+                  {item.set && <p className="text-sm text-cream/40 mt-0.5">{item.set}</p>}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {item.rarity && (
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${styles.chip}`}>
+                      <Sparkles className={`w-3.5 h-3.5 ${styles.icon}`} />
+                      <span className={`text-xs font-bold ${RARITY_TEXT[tier]}`}>{item.rarity}</span>
+                    </div>
+                  )}
+                  {item.series && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+                      <BookOpen className="w-3.5 h-3.5 text-cream/35" />
+                      <span className="text-xs text-cream/45 font-semibold">{item.series}</span>
+                    </div>
+                  )}
+                </div>
+
+                {item.marketPrice > 0 && (
+                  <div className="rounded-2xl bg-green-500/8 border border-green-500/20 p-4">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <DollarSign className="w-4 h-4 text-green-400" />
+                      <span className="text-[11px] text-cream/35 font-semibold uppercase tracking-wider">Market Price</span>
+                    </div>
+                    <p className="text-3xl font-bold text-green-400">{formatValue(item.marketPrice)}</p>
+                    {item.lastUpdated && (
+                      <p className="text-[10px] text-cream/20 mt-1.5">
+                        Updated {new Date(item.lastUpdated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Social proof */}
+                <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                  <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider mb-3">Collectors who want this</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex -space-x-2.5">
+                      {MOCK_COLLECTORS.map((c) => (
+                        <img
+                          key={c.seed}
+                          src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${c.seed}&backgroundColor=b6e3f4,c0aede,ffd5dc`}
+                          alt={c.name}
+                          className="w-9 h-9 rounded-full border-2 border-charcoal-dark bg-charcoal-light/30"
+                        />
+                      ))}
+                      <div className="w-9 h-9 rounded-full border-2 border-charcoal-dark bg-charcoal-light/40 flex items-center justify-center">
+                        <span className="text-[10px] text-cream/40 font-bold">+12</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-cream/25">16 collectors interested</p>
                   </div>
                 </div>
-                <p className="text-xs text-cream/25">16 collectors interested</p>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Bottom action bar */}
-        <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-surface/10 text-surface-light/60 font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all"
-          >
-            <ArrowLeftRight className="w-4 h-4" />
-            Trade
-          </button>
-          {owned ? (
-            <div className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-400 font-bold text-sm">
-              <Check className="w-4 h-4" />
-              In Inventory
+            {/* Bottom action bar — detail step */}
+            <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
+              <button
+                onClick={handleClose}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-surface/10 text-surface-light/60 font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                Trade
+              </button>
+              {owned ? (
+                <div className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-400 font-bold text-sm">
+                  <Check className="w-4 h-4" />
+                  In Inventory
+                </div>
+              ) : (
+                <button
+                  onClick={handleStartConfigure}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add to Inventory
+                </button>
+              )}
             </div>
-          ) : (
-            <button
-              onClick={() => addFromCatalog(item)}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              Add to Inventory
-            </button>
-          )}
-        </div>
+          </>
+        )}
+
+        {/* ── STEP 2: Configure View ───────────────────────────────── */}
+        {step === "configure" && (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
+              <button
+                onClick={() => setStep("detail")}
+                className="p-1.5 rounded-xl hover:bg-charcoal-light/50 transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5 text-cream/50" />
+              </button>
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <img
+                  src={item.imageSmall}
+                  alt=""
+                  className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-cream truncate">Configure</p>
+                  <p className="text-xs text-cream/35 truncate">{item.name}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Config form */}
+            <div className="flex-1 overflow-y-auto overscroll-contain p-5">
+              <ItemConfigForm config={config} onChange={setConfig} />
+            </div>
+
+            {/* Bottom action bar — configure step */}
+            <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
+              <button
+                onClick={() => setStep("detail")}
+                className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
+              >
+                <Save className="w-4 h-4" />
+                Save to Collection
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

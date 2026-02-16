@@ -2,17 +2,24 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { MasterItem } from "@/lib/catalog/types";
-import { CollectibleItem } from "@/lib/types";
+import { CollectibleItem, ItemCondition, ItemStatus } from "@/lib/types";
 
 const STORAGE_KEY = "uniques_inventory";
+
+export interface AddItemOptions {
+  askingPrice?: number;
+  condition?: ItemCondition;
+  status?: ItemStatus;
+  notes?: string;
+}
 
 interface InventoryContextValue {
   items: CollectibleItem[];
   totalValue: number;
-  addFromCatalog: (item: MasterItem) => void;
+  addFromCatalog: (item: MasterItem, options?: AddItemOptions) => void;
+  updateItem: (id: string, updates: Partial<CollectibleItem>) => void;
   removeItem: (id: string) => void;
   hasItem: (masterId: string) => boolean;
-  /** Toast state — set externally by the context, read by consumers */
   toast: string | null;
   clearToast: () => void;
 }
@@ -75,22 +82,32 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   );
 
   const addFromCatalog = useCallback(
-    (master: MasterItem) => {
+    (master: MasterItem, options?: AddItemOptions) => {
       if (hasItem(master.id)) return;
       const newItem: CollectibleItem = {
         id: `catalog-${Date.now()}`,
         masterId: master.id,
         name: master.name,
-        category: "Trading Cards", // maps catalog category to inventory category
+        category: "Trading Cards",
         imageUrl: master.imageSmall,
-        upForTrade: false,
-        estimatedValue: master.marketPrice,
+        upForTrade: options?.status === "For Trade",
+        estimatedValue: options?.askingPrice ?? master.marketPrice,
+        condition: options?.condition,
+        status: options?.status,
+        notes: options?.notes,
       };
       setItems((prev) => [newItem, ...prev]);
       setToast(`Added ${master.name} to your collection!`);
     },
     [hasItem]
   );
+
+  const updateItem = useCallback((id: string, updates: Partial<CollectibleItem>) => {
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
+    setToast("Item updated!");
+  }, []);
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -100,7 +117,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   return (
     <InventoryContext.Provider
-      value={{ items, totalValue, addFromCatalog, removeItem, hasItem, toast, clearToast }}
+      value={{ items, totalValue, addFromCatalog, updateItem, removeItem, hasItem, toast, clearToast }}
     >
       {children}
     </InventoryContext.Provider>
