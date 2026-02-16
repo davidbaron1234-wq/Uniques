@@ -26,6 +26,7 @@ import ItemConfigForm, { ItemConfig } from "@/components/ItemConfigForm";
 import { inventoryItems, currentUser } from "@/lib/data";
 import { formatValue } from "@/lib/format";
 import { CollectibleItem, Category, ItemCondition, ItemStatus } from "@/lib/types";
+import { CATEGORIES } from "@/lib/constants";
 import {
   Plus,
   ArrowLeftRight,
@@ -42,6 +43,9 @@ import {
   X,
   Save,
   Trash2,
+  ChevronLeft,
+  Shield,
+  Tag,
 } from "lucide-react";
 
 // ── localStorage keys ────────────────────────────────────────────────────
@@ -95,18 +99,8 @@ function loadPinnedGrails(): string[] {
 }
 
 // ── Filter helper ────────────────────────────────────────────────────────
-type QuickFilter = "All" | "Shoes" | "Cards" | "Figures" | "Funko" | "Coins" | "Comics";
-
-function filterCategory(item: CollectibleItem, filter: QuickFilter): boolean {
-  if (filter === "All") return true;
-  if (filter === "Cards") return item.category === "Trading Cards";
-  if (filter === "Figures") return item.category === "Figures";
-  if (filter === "Funko") return item.category === "Funko Pop";
-  if (filter === "Shoes") return item.category === "Shoes";
-  if (filter === "Coins") return item.category === "Coins";
-  if (filter === "Comics") return item.category === "Comics";
-  return true;
-}
+const PROFILE_FILTERS = ["All", ...CATEGORIES] as const;
+type ProfileFilter = (typeof PROFILE_FILTERS)[number];
 
 // ── Sortable grid item ──────────────────────────────────────────────────
 function SortableItem({ item, onTap }: { item: CollectibleItem; onTap: () => void }) {
@@ -217,8 +211,9 @@ export default function ProfilePage() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showGrailsPicker, setShowGrailsPicker] = useState(false);
   const [showReviews, setShowReviews] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<QuickFilter>("All");
+  const [activeFilter, setActiveFilter] = useState<ProfileFilter>("All");
   const [editingItem, setEditingItem] = useState<CollectibleItem | null>(null);
+  const [viewMode, setViewMode] = useState(true);
   const [editConfig, setEditConfig] = useState<ItemConfig>({
     askingPrice: undefined,
     condition: "Near Mint",
@@ -280,7 +275,7 @@ export default function ProfilePage() {
   }, [items, pinnedGrailIds]);
 
   const filteredItems = useMemo(
-    () => items.filter((item) => filterCategory(item, activeFilter)),
+    () => activeFilter === "All" ? items : items.filter((item) => item.category === activeFilter),
     [items, activeFilter]
   );
 
@@ -331,14 +326,20 @@ export default function ProfilePage() {
     setItems((prev) => [item, ...prev]);
   };
 
-  const handleEditItem = (item: CollectibleItem) => {
+  const handleViewItem = (item: CollectibleItem) => {
     setEditingItem(item);
+    setViewMode(true);
     setEditConfig({
       askingPrice: item.estimatedValue,
       condition: item.condition || "Near Mint",
       status: item.status || "For Trade",
       notes: item.notes || "",
+      customImage: item.customImage,
     });
+  };
+
+  const handleStartEdit = () => {
+    setViewMode(false);
   };
 
   const handleSaveEdit = () => {
@@ -353,6 +354,7 @@ export default function ProfilePage() {
               status: editConfig.status,
               upForTrade: editConfig.status === "For Trade",
               notes: editConfig.notes || undefined,
+              customImage: editConfig.customImage,
             }
           : i
       )
@@ -366,7 +368,7 @@ export default function ProfilePage() {
     setEditingItem(null);
   };
 
-  const filters: QuickFilter[] = ["All", "Cards", "Funko", "Shoes", "Coins", "Comics", "Figures"];
+  const filters = PROFILE_FILTERS;
 
   const memberDate = profile.joinDate
     ? new Date(profile.joinDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })
@@ -554,7 +556,7 @@ export default function ProfilePage() {
           <SortableContext items={filteredItems.map((i) => i.id)} strategy={rectSortingStrategy}>
             <div className="px-5 grid grid-cols-3 gap-3 pb-6">
               {filteredItems.map((item) => (
-                <SortableItem key={item.id} item={item} onTap={() => handleEditItem(item)} />
+                <SortableItem key={item.id} item={item} onTap={() => handleViewItem(item)} />
               ))}
             </div>
           </SortableContext>
@@ -598,7 +600,7 @@ export default function ProfilePage() {
         trustScore={currentUser.trustScore || 4.8}
       />
 
-      {/* ── Edit Item Modal ──────────────────────────────────── */}
+      {/* ── Item Detail / Edit Modal ─────────────────────────── */}
       {editingItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
@@ -615,40 +617,151 @@ export default function ProfilePage() {
               <X className="w-4.5 h-4.5 text-white/80" />
             </button>
 
-            {/* Header */}
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
-              <img
-                src={editingItem.customImage || editingItem.imageUrl}
-                alt=""
-                className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
-              />
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-cream truncate">Edit Item</p>
-                <p className="text-xs text-cream/35 truncate">{editingItem.name}</p>
-              </div>
-            </div>
+            {/* ── VIEW MODE ────────────────────────────────────── */}
+            {viewMode ? (
+              <>
+                <div className="flex-1 overflow-y-auto overscroll-contain">
+                  {/* Large image */}
+                  <div className="relative flex items-center justify-center px-6 pt-6 pb-3">
+                    <img
+                      src={editingItem.customImage || editingItem.imageUrl}
+                      alt={editingItem.name}
+                      className="relative max-h-[42vh] w-auto max-w-full object-contain drop-shadow-2xl"
+                    />
+                  </div>
 
-            {/* Config form */}
-            <div className="flex-1 overflow-y-auto overscroll-contain p-5">
-              <ItemConfigForm config={editConfig} onChange={setEditConfig} />
-            </div>
+                  {/* Details */}
+                  <div className="px-5 pb-5 pt-2 space-y-3.5">
+                    <div>
+                      <h2 className="text-lg font-bold text-cream leading-snug">{editingItem.name}</h2>
+                      <p className="text-sm text-cream/40 mt-0.5">{editingItem.category}</p>
+                    </div>
 
-            {/* Bottom actions */}
-            <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
-              <button
-                onClick={handleDeleteItem}
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
-              >
-                <Save className="w-4 h-4" />
-                Save Changes
-              </button>
-            </div>
+                    {/* Badges */}
+                    <div className="flex flex-wrap gap-2">
+                      {editingItem.condition && (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                          <Shield className="w-3.5 h-3.5 text-blue-400" />
+                          <span className="text-xs font-bold text-blue-400">{editingItem.condition}</span>
+                        </div>
+                      )}
+                      {editingItem.status && (
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${
+                          editingItem.status === "For Trade"
+                            ? "bg-primary/10 border-primary/25"
+                            : editingItem.status === "For Sale"
+                            ? "bg-green-500/10 border-green-500/20"
+                            : "bg-white/5 border-white/10"
+                        }`}>
+                          <Tag className={`w-3.5 h-3.5 ${
+                            editingItem.status === "For Trade"
+                              ? "text-primary"
+                              : editingItem.status === "For Sale"
+                              ? "text-green-400"
+                              : "text-cream/35"
+                          }`} />
+                          <span className={`text-xs font-bold ${
+                            editingItem.status === "For Trade"
+                              ? "text-primary"
+                              : editingItem.status === "For Sale"
+                              ? "text-green-400"
+                              : "text-cream/45"
+                          }`}>{editingItem.status}</span>
+                        </div>
+                      )}
+                      {editingItem.masterId && (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface/10 border border-surface/20">
+                          <Database className="w-3.5 h-3.5 text-surface-light/60" />
+                          <span className="text-xs font-semibold text-surface-light/50">Catalog-linked</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Asking Price */}
+                    {editingItem.estimatedValue && editingItem.estimatedValue > 0 && (
+                      <div className="rounded-2xl bg-green-500/8 border border-green-500/20 p-4">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <DollarSign className="w-4 h-4 text-green-400" />
+                          <span className="text-[11px] text-cream/35 font-semibold uppercase tracking-wider">Asking Price</span>
+                        </div>
+                        <p className="text-3xl font-bold text-green-400">{formatValue(editingItem.estimatedValue)}</p>
+                      </div>
+                    )}
+
+                    {/* Notes */}
+                    {editingItem.notes && (
+                      <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                        <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider mb-2">Notes</p>
+                        <p className="text-sm text-cream/60 leading-relaxed">{editingItem.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom action bar — view mode */}
+                <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
+                  <button
+                    onClick={handleDeleteItem}
+                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleStartEdit}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Edit Item
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* ── EDIT MODE ────────────────────────────────────── */
+              <>
+                {/* Header */}
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
+                  <button
+                    onClick={() => setViewMode(true)}
+                    className="p-1.5 rounded-xl hover:bg-charcoal-light/50 transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-cream/50" />
+                  </button>
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <img
+                      src={editingItem.customImage || editingItem.imageUrl}
+                      alt=""
+                      className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-cream truncate">Edit Item</p>
+                      <p className="text-xs text-cream/35 truncate">{editingItem.name}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Config form */}
+                <div className="flex-1 overflow-y-auto overscroll-contain p-5">
+                  <ItemConfigForm config={editConfig} onChange={setEditConfig} />
+                </div>
+
+                {/* Bottom actions — edit mode */}
+                <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
+                  <button
+                    onClick={() => setViewMode(true)}
+                    className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save Changes
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

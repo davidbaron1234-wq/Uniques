@@ -8,11 +8,9 @@ import { CatalogCategory } from "@/lib/catalog/types";
 //
 // Query params:
 //   q         - search query (min 2 chars for fuzzy, empty = browse all)
-//   category  - "Pokémon TCG" | "Trading Cards" | "Sneakers" | "Coins"
+//   category  - any category string (filters catalog items by category)
 //   page      - page number (default 1)
 //   pageSize  - items per page (default 20, max 100)
-
-const VALID_CATEGORIES: CatalogCategory[] = ["Pokémon TCG", "Trading Cards", "Sneakers", "Coins"];
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,10 +20,7 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20", 10)));
 
-  const category =
-    categoryParam && VALID_CATEGORIES.includes(categoryParam as CatalogCategory)
-      ? (categoryParam as CatalogCategory)
-      : undefined;
+  const category = categoryParam ? (categoryParam as CatalogCategory) : undefined;
 
   const result = searchCatalog(q, { category, page, pageSize });
 

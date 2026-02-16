@@ -1,4 +1,5 @@
-import { Category, CollectibleItem, TradeOffer, User } from "./types";
+import { CollectibleItem, TradeOffer, User } from "./types";
+import { CATEGORIES, Category } from "./constants";
 
 export const currentUser: User = {
   id: "user-1",
@@ -19,14 +20,7 @@ export const otherUsers: User[] = [
   { id: "user-5", name: "Riley", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Riley&backgroundColor=AA95C5", bio: "New collector, looking to trade!", trustScore: 4.2, totalTrades: 8, memberSince: "2025-08-05" },
 ];
 
-export const categories: Category[] = [
-  "Comics",
-  "Funko Pop",
-  "Trading Cards",
-  "Shoes",
-  "Coins",
-  "Figures",
-];
+export const categories: readonly Category[] = CATEGORIES;
 
 // Unsplash images by category for realistic look
 const cardImg = (seed: number) =>
@@ -43,22 +37,22 @@ const comicImg = (seed: number) =>
   `https://images.unsplash.com/photo-1612036782180-f82956ef2431?w=400&h=400&fit=crop&auto=format&q=80&seed=${seed}`;
 
 export const inventoryItems: CollectibleItem[] = [
-  // ── Trading Cards — linked to Master Catalog ─────────────────
-  { id: "tc-1",  masterId: "ptcg-base1-4",    name: "Charizard (Base Set)",                category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/base1/4.png",        upForTrade: false, estimatedValue: 350 },
-  { id: "tc-2",  masterId: "ptcg-base1-2",    name: "Blastoise (Base Set)",                category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/base1/2.png",        upForTrade: false, estimatedValue: 120 },
-  { id: "tc-3",  masterId: "ptcg-base1-15",   name: "Venusaur (Base Set)",                 category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/base1/15.png",       upForTrade: true,  estimatedValue: 100 },
-  { id: "tc-4",  masterId: "ptcg-base1-10",   name: "Mewtwo (Base Set)",                   category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/base1/10.png",       upForTrade: false, estimatedValue: 45 },
-  { id: "tc-5",  masterId: "ptcg-neo1-9",     name: "Lugia (Neo Genesis)",                 category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/neo1/9.png",         upForTrade: true,  estimatedValue: 200 },
-  { id: "tc-6",  masterId: "ptcg-swsh7-215",  name: "Umbreon VMAX Alt Art",                category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/swsh7/215.png",      upForTrade: true,  estimatedValue: 300 },
-  { id: "tc-7",  masterId: "ptcg-swsh7-218",  name: "Rayquaza VMAX Alt Art",               category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/swsh7/218.png",      upForTrade: false, estimatedValue: 250 },
-  { id: "tc-8",  masterId: "ptcg-swsh9-174",  name: "Charizard VSTAR",                     category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/swsh9/174.png",      upForTrade: true,  estimatedValue: 90 },
-  { id: "tc-9",  masterId: "ptcg-sv3pt5-183", name: "Charizard ex (151 SAR)",              category: "Trading Cards", imageUrl: cardImg(9),  upForTrade: true,  estimatedValue: 80 },
-  { id: "tc-10", masterId: "ptcg-sv8pt5-187", name: "Umbreon ex SIR (Prismatic Evo)",      category: "Trading Cards", imageUrl: cardImg(10), upForTrade: true,  estimatedValue: 300 },
-  { id: "tc-11", masterId: "ptcg-base5-4",    name: "Dark Charizard",                      category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/base5/4.png",        upForTrade: true,  estimatedValue: 120 },
-  { id: "tc-12", masterId: "ptcg-neo4-107",   name: "Shining Charizard (Neo Destiny)",     category: "Trading Cards", imageUrl: cardImg(12), upForTrade: false, estimatedValue: 500 },
-  { id: "tc-13", masterId: "ptcg-neo2-13",    name: "Umbreon (Neo Discovery)",             category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/neo2/13.png",        upForTrade: true,  estimatedValue: 120 },
-  { id: "tc-14", masterId: "ptcg-ecard3-146", name: "Charizard (Skyridge)",                category: "Trading Cards", imageUrl: cardImg(14), upForTrade: false, estimatedValue: 500 },
-  { id: "tc-15", masterId: "ptcg-sv8-248",    name: "Pikachu ex SAR (Surging Sparks)",     category: "Trading Cards", imageUrl: cardImg(15), upForTrade: true,  estimatedValue: 100 },
+  // ── Pokémon TCG — linked to Master Catalog ───────────────────
+  { id: "tc-1",  masterId: "ptcg-base1-4",    name: "Charizard (Base Set)",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/4.png",        upForTrade: false, estimatedValue: 350 },
+  { id: "tc-2",  masterId: "ptcg-base1-2",    name: "Blastoise (Base Set)",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/2.png",        upForTrade: false, estimatedValue: 120 },
+  { id: "tc-3",  masterId: "ptcg-base1-15",   name: "Venusaur (Base Set)",                 category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/15.png",       upForTrade: true,  estimatedValue: 100 },
+  { id: "tc-4",  masterId: "ptcg-base1-10",   name: "Mewtwo (Base Set)",                   category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/10.png",       upForTrade: false, estimatedValue: 45 },
+  { id: "tc-5",  masterId: "ptcg-neo1-9",     name: "Lugia (Neo Genesis)",                 category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/neo1/9.png",         upForTrade: true,  estimatedValue: 200 },
+  { id: "tc-6",  masterId: "ptcg-swsh7-215",  name: "Umbreon VMAX Alt Art",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/swsh7/215.png",      upForTrade: true,  estimatedValue: 300 },
+  { id: "tc-7",  masterId: "ptcg-swsh7-218",  name: "Rayquaza VMAX Alt Art",               category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/swsh7/218.png",      upForTrade: false, estimatedValue: 250 },
+  { id: "tc-8",  masterId: "ptcg-swsh9-174",  name: "Charizard VSTAR",                     category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/swsh9/174.png",      upForTrade: true,  estimatedValue: 90 },
+  { id: "tc-9",  masterId: "ptcg-sv3pt5-183", name: "Charizard ex (151 SAR)",              category: "Pokémon TCG", imageUrl: cardImg(9),  upForTrade: true,  estimatedValue: 80 },
+  { id: "tc-10", masterId: "ptcg-sv8pt5-187", name: "Umbreon ex SIR (Prismatic Evo)",      category: "Pokémon TCG", imageUrl: cardImg(10), upForTrade: true,  estimatedValue: 300 },
+  { id: "tc-11", masterId: "ptcg-base5-4",    name: "Dark Charizard",                      category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base5/4.png",        upForTrade: true,  estimatedValue: 120 },
+  { id: "tc-12", masterId: "ptcg-neo4-107",   name: "Shining Charizard (Neo Destiny)",     category: "Pokémon TCG", imageUrl: cardImg(12), upForTrade: false, estimatedValue: 500 },
+  { id: "tc-13", masterId: "ptcg-neo2-13",    name: "Umbreon (Neo Discovery)",             category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/neo2/13.png",        upForTrade: true,  estimatedValue: 120 },
+  { id: "tc-14", masterId: "ptcg-ecard3-146", name: "Charizard (Skyridge)",                category: "Pokémon TCG", imageUrl: cardImg(14), upForTrade: false, estimatedValue: 500 },
+  { id: "tc-15", masterId: "ptcg-sv8-248",    name: "Pikachu ex SAR (Surging Sparks)",     category: "Pokémon TCG", imageUrl: cardImg(15), upForTrade: true,  estimatedValue: 100 },
 
   // ── Funko Pop ────────────────────────────────────────────────
   { id: "fp-1",  name: "Willy Wonka & Oompa Loompa (Golden Ticket 2-Pack)", category: "Funko Pop", imageUrl: funkoImg(1),  upForTrade: false, estimatedValue: 210000 },
@@ -67,11 +61,11 @@ export const inventoryItems: CollectibleItem[] = [
   { id: "fp-4",  name: "Alex DeLarge (Standard)",                             category: "Funko Pop", imageUrl: funkoImg(4),  upForTrade: true,  estimatedValue: 35000 },
   { id: "fp-5",  name: "Freddy Funko as Ghost Rider (Metallic) SDCC 2013",   category: "Funko Pop", imageUrl: funkoImg(5),  upForTrade: true,  estimatedValue: 33500 },
 
-  // ── Shoes — linked to Master Catalog ─────────────────────────
-  { id: "s1", masterId: "snkr-aj1-chicago-2015",   name: "Jordan 1 Retro High OG Chicago",  category: "Shoes", imageUrl: shoeImg(1), upForTrade: true,  estimatedValue: 2200 },
-  { id: "s2", masterId: "snkr-yeezy350-zebra",     name: "Yeezy Boost 350 V2 Zebra",        category: "Shoes", imageUrl: shoeImg(2), upForTrade: true,  estimatedValue: 280 },
-  { id: "s3", masterId: "snkr-dunk-panda",         name: "Nike Dunk Low Panda",              category: "Shoes", imageUrl: shoeImg(3), upForTrade: false, estimatedValue: 120 },
-  { id: "s4", masterId: "snkr-am90-infrared",      name: "Air Max 90 Infrared",              category: "Shoes", imageUrl: shoeImg(4), upForTrade: true,  estimatedValue: 200 },
+  // ── Sneakers — linked to Master Catalog ──────────────────────
+  { id: "s1", masterId: "snkr-aj1-chicago-2015",   name: "Jordan 1 Retro High OG Chicago",  category: "Sneakers", imageUrl: shoeImg(1), upForTrade: true,  estimatedValue: 2200 },
+  { id: "s2", masterId: "snkr-yeezy350-zebra",     name: "Yeezy Boost 350 V2 Zebra",        category: "Sneakers", imageUrl: shoeImg(2), upForTrade: true,  estimatedValue: 280 },
+  { id: "s3", masterId: "snkr-dunk-panda",         name: "Nike Dunk Low Panda",              category: "Sneakers", imageUrl: shoeImg(3), upForTrade: false, estimatedValue: 120 },
+  { id: "s4", masterId: "snkr-am90-infrared",      name: "Air Max 90 Infrared",              category: "Sneakers", imageUrl: shoeImg(4), upForTrade: true,  estimatedValue: 200 },
 
   // ── Coins — linked to Master Catalog ─────────────────────────
   { id: "co1", masterId: "coin-1909svdb-penny",    name: "1909-S VDB Lincoln Penny",    category: "Coins", imageUrl: coinImg(1), upForTrade: true,  estimatedValue: 1200 },
@@ -83,9 +77,9 @@ export const inventoryItems: CollectibleItem[] = [
   { id: "c2", name: "Batman #404 (Year One)",           category: "Comics", imageUrl: comicImg(2), upForTrade: true,  estimatedValue: 180 },
   { id: "c3", name: "X-Men #141 (Days of Future Past)", category: "Comics", imageUrl: comicImg(3), upForTrade: false, estimatedValue: 320 },
 
-  // ── Figures ──────────────────────────────────────────────────
-  { id: "fi1", name: "Monkey D. Luffy (Gear 5) S.H.Figuarts", category: "Figures", imageUrl: figureImg(1), upForTrade: true,  estimatedValue: 120 },
-  { id: "fi2", name: "Optimus Prime (MPX-1 Masterpiece)",      category: "Figures", imageUrl: figureImg(2), upForTrade: true,  estimatedValue: 200 },
+  // ── Other ───────────────────────────────────────────────────
+  { id: "fi1", name: "Monkey D. Luffy (Gear 5) S.H.Figuarts", category: "Other", imageUrl: figureImg(1), upForTrade: true,  estimatedValue: 120 },
+  { id: "fi2", name: "Optimus Prime (MPX-1 Masterpiece)",      category: "Other", imageUrl: figureImg(2), upForTrade: true,  estimatedValue: 200 },
 ];
 
 function inv(id: string) {
@@ -96,7 +90,7 @@ export const tradeOffers: TradeOffer[] = [
   {
     id: "trade-1",
     from: otherUsers[0], to: currentUser,
-    fromItems: [{ id: "ext-1", name: "Espeon ex SIR (Prismatic Evolutions)", category: "Trading Cards", imageUrl: cardImg(21), upForTrade: true, estimatedValue: 250 }],
+    fromItems: [{ id: "ext-1", name: "Espeon ex SIR (Prismatic Evolutions)", category: "Pokémon TCG", imageUrl: cardImg(21), upForTrade: true, estimatedValue: 250 }],
     toItems: [inv("tc-10")],
     fromCash: 50, toCash: 0, status: "pending", createdAt: "2026-02-12T10:30:00Z",
   },
@@ -110,7 +104,7 @@ export const tradeOffers: TradeOffer[] = [
   {
     id: "trade-3",
     from: otherUsers[2], to: currentUser,
-    fromItems: [{ id: "ext-3", masterId: "ptcg-swsh7-203", name: "Espeon VMAX Alt Art", category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/swsh7/203.png", upForTrade: true, estimatedValue: 80 }],
+    fromItems: [{ id: "ext-3", masterId: "ptcg-swsh7-203", name: "Espeon VMAX Alt Art", category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/swsh7/203.png", upForTrade: true, estimatedValue: 80 }],
     toItems: [inv("tc-8")],
     fromCash: 10, toCash: 0, status: "pending", createdAt: "2026-02-10T09:45:00Z",
   },
@@ -126,8 +120,8 @@ export const tradeOffers: TradeOffer[] = [
 export const tradeHistory: (TradeOffer & { completedAt: string })[] = [
   {
     id: "hist-1", from: otherUsers[0], to: currentUser,
-    fromItems: [{ id: "hist-ext-1", masterId: "ptcg-base3-5", name: "Gengar (Fossil)", category: "Trading Cards", imageUrl: "https://images.pokemontcg.io/base3/5.png", upForTrade: false, estimatedValue: 50 }],
-    toItems: [{ id: "hist-my-1", name: "Reshiram ex SIR (White Flare)", category: "Trading Cards", imageUrl: cardImg(24), upForTrade: false, estimatedValue: 195 }],
+    fromItems: [{ id: "hist-ext-1", masterId: "ptcg-base3-5", name: "Gengar (Fossil)", category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base3/5.png", upForTrade: false, estimatedValue: 50 }],
+    toItems: [{ id: "hist-my-1", name: "Reshiram ex SIR (White Flare)", category: "Pokémon TCG", imageUrl: cardImg(24), upForTrade: false, estimatedValue: 195 }],
     fromCash: 0, toCash: 145, status: "accepted", createdAt: "2026-01-15T10:30:00Z", completedAt: "2026-01-16T08:00:00Z",
   },
   {
@@ -138,8 +132,8 @@ export const tradeHistory: (TradeOffer & { completedAt: string })[] = [
   },
   {
     id: "hist-3", from: otherUsers[2], to: currentUser,
-    fromItems: [{ id: "hist-ext-3", name: "Pikachu with Grey Felt Hat (Van Gogh)", category: "Trading Cards", imageUrl: cardImg(25), upForTrade: false, estimatedValue: 400 }],
-    toItems: [{ id: "hist-my-3", name: "Jolteon ex SIR (Prismatic Evolutions)", category: "Trading Cards", imageUrl: cardImg(26), upForTrade: false, estimatedValue: 210 }],
+    fromItems: [{ id: "hist-ext-3", name: "Pikachu with Grey Felt Hat (Van Gogh)", category: "Pokémon TCG", imageUrl: cardImg(25), upForTrade: false, estimatedValue: 400 }],
+    toItems: [{ id: "hist-my-3", name: "Jolteon ex SIR (Prismatic Evolutions)", category: "Pokémon TCG", imageUrl: cardImg(26), upForTrade: false, estimatedValue: 210 }],
     fromCash: 0, toCash: 190, status: "declined", createdAt: "2026-01-05T09:00:00Z", completedAt: "2026-01-05T15:00:00Z",
   },
 ];

@@ -7,17 +7,17 @@ import CardDetailModal from "@/components/CardDetailModal";
 import { formatValue } from "@/lib/format";
 import { MasterItem } from "@/lib/catalog/types";
 import { useInventory } from "@/lib/InventoryContext";
+import { CATEGORIES } from "@/lib/constants";
 import { Search, X, Loader2, Check } from "lucide-react";
 
 const PAGE_SIZE = 50;
 
-// Catalog-specific filter categories (matches CatalogCategory + "All")
-const CATALOG_FILTERS = ["All", "Pokémon TCG", "Sneakers", "Coins"] as const;
-type CatalogFilter = (typeof CATALOG_FILTERS)[number];
+const SEARCH_FILTERS = ["All", ...CATEGORIES] as const;
+type SearchFilter = (typeof SEARCH_FILTERS)[number];
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<CatalogFilter>("All");
+  const [selectedCategory, setSelectedCategory] = useState<SearchFilter>("All");
   const [results, setResults] = useState<MasterItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -118,7 +118,7 @@ export default function SearchPage() {
 
         <div className="px-5 pb-3">
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {CATALOG_FILTERS.map((cat) => (
+            {SEARCH_FILTERS.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}

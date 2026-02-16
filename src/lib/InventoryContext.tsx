@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { MasterItem } from "@/lib/catalog/types";
 import { CollectibleItem, ItemCondition, ItemStatus } from "@/lib/types";
+import { mapCatalogCategory } from "@/lib/constants";
 
 const STORAGE_KEY = "uniques_inventory";
 
@@ -11,6 +12,7 @@ export interface AddItemOptions {
   condition?: ItemCondition;
   status?: ItemStatus;
   notes?: string;
+  customImage?: string;
 }
 
 interface InventoryContextValue {
@@ -88,8 +90,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         id: `catalog-${Date.now()}`,
         masterId: master.id,
         name: master.name,
-        category: "Trading Cards",
-        imageUrl: master.imageSmall,
+        category: mapCatalogCategory(master.category),
+        imageUrl: master.imageLarge || master.imageSmall,
+        customImage: options?.customImage,
         upForTrade: options?.status === "For Trade",
         estimatedValue: options?.askingPrice ?? master.marketPrice,
         condition: options?.condition,

@@ -1,4 +1,5 @@
-export type Category = "Comics" | "Funko Pop" | "Trading Cards" | "Shoes" | "Coins" | "Figures";
+import type { Category } from "./constants";
+export type { Category };
 
 export type ItemCondition = "Mint" | "Near Mint" | "Excellent" | "Played" | "Damaged";
 export type ItemStatus = "For Trade" | "For Sale" | "Showcase";

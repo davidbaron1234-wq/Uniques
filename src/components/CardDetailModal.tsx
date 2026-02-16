@@ -113,6 +113,7 @@ export default function CardDetailModal({ item, onClose }: CardDetailModalProps)
       condition: config.condition,
       status: config.status,
       notes: config.notes || undefined,
+      customImage: config.customImage,
     });
     setStep("detail");
   };
