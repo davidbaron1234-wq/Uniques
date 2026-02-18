@@ -37,49 +37,65 @@ const comicImg = (seed: number) =>
   `https://images.unsplash.com/photo-1612036782180-f82956ef2431?w=400&h=400&fit=crop&auto=format&q=80&seed=${seed}`;
 
 export const inventoryItems: CollectibleItem[] = [
-  // ── Pokémon TCG — linked to Master Catalog ───────────────────
-  { id: "tc-1",  masterId: "ptcg-base1-4",    name: "Charizard (Base Set)",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/4.png",        upForTrade: false, estimatedValue: 350 },
-  { id: "tc-2",  masterId: "ptcg-base1-2",    name: "Blastoise (Base Set)",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/2.png",        upForTrade: false, estimatedValue: 120 },
-  { id: "tc-3",  masterId: "ptcg-base1-15",   name: "Venusaur (Base Set)",                 category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/15.png",       upForTrade: true,  estimatedValue: 100 },
-  { id: "tc-4",  masterId: "ptcg-base1-10",   name: "Mewtwo (Base Set)",                   category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/10.png",       upForTrade: false, estimatedValue: 45 },
-  { id: "tc-5",  masterId: "ptcg-neo1-9",     name: "Lugia (Neo Genesis)",                 category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/neo1/9.png",         upForTrade: true,  estimatedValue: 200 },
-  { id: "tc-6",  masterId: "ptcg-swsh7-215",  name: "Umbreon VMAX Alt Art",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/swsh7/215.png",      upForTrade: true,  estimatedValue: 300 },
+  // ── Pokémon TCG ────────────────────────────────────────────────
+  // 🔥 הוספתי כאן graded: true כדי שתראה את התג החדש עובד
+  { id: "tc-1",  masterId: "ptcg-base1-4",    name: "Charizard (Base Set)",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/4.png",        upForTrade: false, estimatedValue: 350, graded: true, grader: "PSA", gradeNum: "9", condition: "Mint" },
+  { id: "tc-2",  masterId: "ptcg-base1-2",    name: "Blastoise (Base Set)",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/2.png",        upForTrade: false, estimatedValue: 120, condition: "Near Mint" },
+  { id: "tc-3",  masterId: "ptcg-base1-15",   name: "Venusaur (Base Set)",                 category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/15.png",       upForTrade: true,  estimatedValue: 100, condition: "Lightly Played" },
+  { id: "tc-4",  masterId: "ptcg-base1-10",   name: "Mewtwo (Base Set)",                   category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base1/10.png",       upForTrade: false, estimatedValue: 45, condition: "Near Mint" },
+  { id: "tc-5",  masterId: "ptcg-neo1-9",     name: "Lugia (Neo Genesis)",                 category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/neo1/9.png",         upForTrade: true,  estimatedValue: 200, graded: true, grader: "CGC", gradeNum: "8.5" },
+  { id: "tc-6",  masterId: "ptcg-swsh7-215",  name: "Umbreon VMAX Alt Art",                category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/swsh7/215.png",      upForTrade: true,  estimatedValue: 300, condition: "Mint" },
   { id: "tc-7",  masterId: "ptcg-swsh7-218",  name: "Rayquaza VMAX Alt Art",               category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/swsh7/218.png",      upForTrade: false, estimatedValue: 250 },
   { id: "tc-8",  masterId: "ptcg-swsh9-174",  name: "Charizard VSTAR",                     category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/swsh9/174.png",      upForTrade: true,  estimatedValue: 90 },
   { id: "tc-9",  masterId: "ptcg-sv3pt5-183", name: "Charizard ex (151 SAR)",              category: "Pokémon TCG", imageUrl: cardImg(9),  upForTrade: true,  estimatedValue: 80 },
   { id: "tc-10", masterId: "ptcg-sv8pt5-187", name: "Umbreon ex SIR (Prismatic Evo)",      category: "Pokémon TCG", imageUrl: cardImg(10), upForTrade: true,  estimatedValue: 300 },
   { id: "tc-11", masterId: "ptcg-base5-4",    name: "Dark Charizard",                      category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/base5/4.png",        upForTrade: true,  estimatedValue: 120 },
-  { id: "tc-12", masterId: "ptcg-neo4-107",   name: "Shining Charizard (Neo Destiny)",     category: "Pokémon TCG", imageUrl: cardImg(12), upForTrade: false, estimatedValue: 500 },
+  { id: "tc-12", masterId: "ptcg-neo4-107",   name: "Shining Charizard (Neo Destiny)",     category: "Pokémon TCG", imageUrl: cardImg(12), upForTrade: false, estimatedValue: 500, graded: true, grader: "BGS", gradeNum: "9.5" },
   { id: "tc-13", masterId: "ptcg-neo2-13",    name: "Umbreon (Neo Discovery)",             category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/neo2/13.png",        upForTrade: true,  estimatedValue: 120 },
   { id: "tc-14", masterId: "ptcg-ecard3-146", name: "Charizard (Skyridge)",                category: "Pokémon TCG", imageUrl: cardImg(14), upForTrade: false, estimatedValue: 500 },
   { id: "tc-15", masterId: "ptcg-sv8-248",    name: "Pikachu ex SAR (Surging Sparks)",     category: "Pokémon TCG", imageUrl: cardImg(15), upForTrade: true,  estimatedValue: 100 },
 
   // ── Funko Pop ────────────────────────────────────────────────
-  { id: "fp-1",  name: "Willy Wonka & Oompa Loompa (Golden Ticket 2-Pack)", category: "Funko Pop", imageUrl: funkoImg(1),  upForTrade: false, estimatedValue: 210000 },
-  { id: "fp-2",  name: "Alex DeLarge (Glow-in-the-Dark Chase)",              category: "Funko Pop", imageUrl: funkoImg(2),  upForTrade: false, estimatedValue: 60000 },
-  { id: "fp-3",  name: "Freddy Funko as Iron Man (Metallic) SDCC 2012",      category: "Funko Pop", imageUrl: funkoImg(3),  upForTrade: true,  estimatedValue: 43000 },
-  { id: "fp-4",  name: "Alex DeLarge (Standard)",                             category: "Funko Pop", imageUrl: funkoImg(4),  upForTrade: true,  estimatedValue: 35000 },
-  { id: "fp-5",  name: "Freddy Funko as Ghost Rider (Metallic) SDCC 2013",   category: "Funko Pop", imageUrl: funkoImg(5),  upForTrade: true,  estimatedValue: 33500 },
+  { id: "fp-1",  name: "Willy Wonka & Oompa Loompa (Golden Ticket 2-Pack)", category: "Funko Pop", imageUrl: funkoImg(1),  upForTrade: false, estimatedValue: 210000, condition: "Mint Box" },
+  { id: "fp-2",  name: "Alex DeLarge (Glow-in-the-Dark Chase)",             category: "Funko Pop", imageUrl: funkoImg(2),  upForTrade: false, estimatedValue: 60000, condition: "Damaged Box" },
+  { id: "fp-3",  name: "Freddy Funko as Iron Man (Metallic) SDCC 2012",     category: "Funko Pop", imageUrl: funkoImg(3),  upForTrade: true,  estimatedValue: 43000 },
+  { id: "fp-4",  name: "Alex DeLarge (Standard)",                           category: "Funko Pop", imageUrl: funkoImg(4),  upForTrade: true,  estimatedValue: 35000 },
+  { id: "fp-5",  name: "Freddy Funko as Ghost Rider (Metallic) SDCC 2013",  category: "Funko Pop", imageUrl: funkoImg(5),  upForTrade: true,  estimatedValue: 33500 },
 
-  // ── Sneakers — linked to Master Catalog ──────────────────────
-  { id: "s1", masterId: "snkr-aj1-chicago-2015",   name: "Jordan 1 Retro High OG Chicago",  category: "Sneakers", imageUrl: shoeImg(1), upForTrade: true,  estimatedValue: 2200 },
-  { id: "s2", masterId: "snkr-yeezy350-zebra",     name: "Yeezy Boost 350 V2 Zebra",        category: "Sneakers", imageUrl: shoeImg(2), upForTrade: true,  estimatedValue: 280 },
-  { id: "s3", masterId: "snkr-dunk-panda",         name: "Nike Dunk Low Panda",              category: "Sneakers", imageUrl: shoeImg(3), upForTrade: false, estimatedValue: 120 },
-  { id: "s4", masterId: "snkr-am90-infrared",      name: "Air Max 90 Infrared",              category: "Sneakers", imageUrl: shoeImg(4), upForTrade: true,  estimatedValue: 200 },
+  // ── Sneakers ──────────────────────────────────────────────────
+  { id: "s1", masterId: "snkr-aj1-chicago-2015",   name: "Jordan 1 Retro High OG Chicago",  category: "Sneakers", imageUrl: shoeImg(1), upForTrade: true,  estimatedValue: 2200, condition: "Deadstock", year: "2015" },
+  { id: "s2", masterId: "snkr-yeezy350-zebra",     name: "Yeezy Boost 350 V2 Zebra",        category: "Sneakers", imageUrl: shoeImg(2), upForTrade: true,  estimatedValue: 280, condition: "Used" },
+  { id: "s3", masterId: "snkr-dunk-panda",         name: "Nike Dunk Low Panda",             category: "Sneakers", imageUrl: shoeImg(3), upForTrade: false, estimatedValue: 120 },
+  { id: "s4", masterId: "snkr-am90-infrared",      name: "Air Max 90 Infrared",             category: "Sneakers", imageUrl: shoeImg(4), upForTrade: true,  estimatedValue: 200, year: "2020" },
 
-  // ── Coins — linked to Master Catalog ─────────────────────────
-  { id: "co1", masterId: "coin-1909svdb-penny",    name: "1909-S VDB Lincoln Penny",    category: "Coins", imageUrl: coinImg(1), upForTrade: true,  estimatedValue: 1200 },
+  // ── Coins ─────────────────────────────────────────────────────
+  { id: "co1", masterId: "coin-1909svdb-penny",    name: "1909-S VDB Lincoln Penny",    category: "Coins", imageUrl: coinImg(1), upForTrade: true,  estimatedValue: 1200, graded: true, grader: "PCGS", gradeNum: "MS64" },
   { id: "co2", masterId: "coin-1881s-morgan",      name: "1881-S Morgan Silver Dollar", category: "Coins", imageUrl: coinImg(2), upForTrade: true,  estimatedValue: 400 },
-  { id: "co3", masterId: "coin-gold-eagle-1oz",    name: "American Gold Eagle 1oz",     category: "Coins", imageUrl: coinImg(3), upForTrade: false, estimatedValue: 2100 },
+  { id: "co3", masterId: "coin-gold-eagle-1oz",    name: "American Gold Eagle 1oz",     category: "Coins", imageUrl: coinImg(3), upForTrade: false, estimatedValue: 2100, condition: "Bullion" },
 
   // ── Comics ───────────────────────────────────────────────────
-  { id: "c1", name: "Spider-Man #1 (1990, McFarlane)",  category: "Comics", imageUrl: comicImg(1), upForTrade: true,  estimatedValue: 250 },
+  { id: "c1", name: "Spider-Man #1 (1990, McFarlane)",  category: "Comics", imageUrl: comicImg(1), upForTrade: true,  estimatedValue: 250, condition: "Near Mint" },
   { id: "c2", name: "Batman #404 (Year One)",           category: "Comics", imageUrl: comicImg(2), upForTrade: true,  estimatedValue: 180 },
   { id: "c3", name: "X-Men #141 (Days of Future Past)", category: "Comics", imageUrl: comicImg(3), upForTrade: false, estimatedValue: 320 },
 
   // ── Other ───────────────────────────────────────────────────
   { id: "fi1", name: "Monkey D. Luffy (Gear 5) S.H.Figuarts", category: "Other", imageUrl: figureImg(1), upForTrade: true,  estimatedValue: 120 },
-  { id: "fi2", name: "Optimus Prime (MPX-1 Masterpiece)",      category: "Other", imageUrl: figureImg(2), upForTrade: true,  estimatedValue: 200 },
+  { id: "fi2", name: "Optimus Prime (MPX-1 Masterpiece)",     category: "Other", imageUrl: figureImg(2), upForTrade: true,  estimatedValue: 200 },
+
+  // ── Lego (Added for testing new fields!) ──────────────────────
+  { 
+    id: "lg-1", 
+    masterId: "lego-75192",
+    name: "LEGO Star Wars Millennium Falcon", 
+    category: "Lego", 
+    imageUrl: "https://images.unsplash.com/photo-1585366119957-e9730b6d0f60?w=800&q=80",
+    estimatedValue: 850,
+    condition: "Sealed",
+    status: "Showcase",
+    upForTrade: false,
+    year: "2017",
+    pieces: "7541"
+  }
 ];
 
 function inv(id: string) {

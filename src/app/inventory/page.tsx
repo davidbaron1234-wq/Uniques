@@ -46,6 +46,7 @@ import {
   ChevronLeft,
   Shield,
   Tag,
+  Award // הוספתי את האייקון הזה לתצוגה
 } from "lucide-react";
 
 // ── localStorage keys ────────────────────────────────────────────────────
@@ -200,13 +201,11 @@ function TrustStars({ score, reviewCount, onClick }: { score: number; reviewCoun
 // ═════════════════════════════════════════════════════════════════════════
 
 export default function ProfilePage() {
-  // ── Core state ─────────────────────────────────────────────────────────
   const [items, setItems] = useState<CollectibleItem[]>(inventoryItems);
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
   const [pinnedGrailIds, setPinnedGrailIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
-  // ── UI state ──────────────────────────────────────────────────────────
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showGrailsPicker, setShowGrailsPicker] = useState(false);
@@ -214,6 +213,7 @@ export default function ProfilePage() {
   const [activeFilter, setActiveFilter] = useState<ProfileFilter>("All");
   const [editingItem, setEditingItem] = useState<CollectibleItem | null>(null);
   const [viewMode, setViewMode] = useState(true);
+  
   const [editConfig, setEditConfig] = useState<ItemConfig>({
     askingPrice: undefined,
     condition: "Near Mint",
@@ -225,7 +225,6 @@ export default function ProfilePage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // ── Hydrate from localStorage on mount ─────────────────────────────────
   useEffect(() => {
     setItems(loadInventory());
     setProfile(loadProfile());
@@ -233,7 +232,6 @@ export default function ProfilePage() {
     setHydrated(true);
   }, []);
 
-  // ── Persist on change ──────────────────────────────────────────────────
   useEffect(() => {
     if (!hydrated) return;
     try { localStorage.setItem(STORAGE_INVENTORY, JSON.stringify(items)); } catch { /* quota */ }
@@ -249,19 +247,16 @@ export default function ProfilePage() {
     try { localStorage.setItem(STORAGE_GRAILS, JSON.stringify(pinnedGrailIds)); } catch { /* quota */ }
   }, [pinnedGrailIds, hydrated]);
 
-  // ── Computed values ────────────────────────────────────────────────────
   const totalValue = useMemo(
     () => items.reduce((sum, item) => sum + (item.estimatedValue || 0), 0),
     [items]
   );
 
   const grails = useMemo(() => {
-    // Start with pinned items (in order), filtering out any that were deleted
     const pinned = pinnedGrailIds
       .map((id) => items.find((i) => i.id === id))
       .filter((i): i is CollectibleItem => !!i);
 
-    // Fill remaining slots (up to 3) with most expensive non-pinned items
     if (pinned.length < 3) {
       const pinnedSet = new Set(pinnedGrailIds);
       const byValue = [...items]
@@ -270,7 +265,6 @@ export default function ProfilePage() {
       const remaining = byValue.slice(0, 3 - pinned.length);
       return [...pinned, ...remaining];
     }
-
     return pinned.slice(0, 3);
   }, [items, pinnedGrailIds]);
 
@@ -284,7 +278,6 @@ export default function ProfilePage() {
     [items]
   );
 
-  // ── Handlers ──────────────────────────────────────────────────────────
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -307,6 +300,11 @@ export default function ProfilePage() {
     condition?: string;
     status?: string;
     notes?: string;
+    year?: string;
+    pieces?: string;
+    graded?: boolean;
+    grader?: string;
+    gradeNum?: string;
   }) => {
     const item: CollectibleItem = {
       id: `new-${Date.now()}`,
@@ -322,6 +320,11 @@ export default function ProfilePage() {
       condition: (newItem.condition as ItemCondition) || undefined,
       status: (newItem.status as ItemStatus) || undefined,
       notes: newItem.notes,
+      graded: newItem.graded,
+      grader: newItem.grader,
+      gradeNum: newItem.gradeNum,
+      year: newItem.year,
+      pieces: newItem.pieces
     };
     setItems((prev) => [item, ...prev]);
   };
@@ -335,6 +338,11 @@ export default function ProfilePage() {
       status: item.status || "For Trade",
       notes: item.notes || "",
       customImage: item.customImage,
+      graded: item.graded,
+      grader: item.grader,
+      gradeNum: item.gradeNum,
+      year: item.year,
+      pieces: item.pieces
     });
   };
 
@@ -342,6 +350,7 @@ export default function ProfilePage() {
     setViewMode(false);
   };
 
+  // 🔥 כאן היה חלק מהאדום - הוספתי "as ItemCondition" כדי לסדר את זה
   const handleSaveEdit = () => {
     if (!editingItem) return;
     setItems((prev) =>
@@ -350,11 +359,16 @@ export default function ProfilePage() {
           ? {
               ...i,
               estimatedValue: editConfig.askingPrice,
-              condition: editConfig.condition,
-              status: editConfig.status,
+              condition: editConfig.condition as ItemCondition,
+              status: editConfig.status as ItemStatus,
               upForTrade: editConfig.status === "For Trade",
               notes: editConfig.notes || undefined,
               customImage: editConfig.customImage,
+              graded: editConfig.graded,
+              grader: editConfig.grader,
+              gradeNum: editConfig.gradeNum,
+              year: editConfig.year,
+              pieces: editConfig.pieces
             }
           : i
       )
@@ -390,24 +404,17 @@ export default function ProfilePage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-xl font-bold text-cream truncate">{profile.name === "You" ? "My Profile" : profile.name}</h1>
-                <button
-                  onClick={() => setShowEditProfile(true)}
-                  className="p-1 rounded-lg hover:bg-charcoal-light/50 transition-colors"
-                  aria-label="Edit profile"
-                >
+                <button onClick={() => setShowEditProfile(true)} className="p-1 rounded-lg hover:bg-charcoal-light/50 transition-colors">
                   <Edit3 className="w-3.5 h-3.5 text-cream/30" />
                 </button>
               </div>
               {currentUser.trustScore !== undefined && (
                 <TrustStars score={currentUser.trustScore} reviewCount={6} onClick={() => setShowReviews(true)} />
               )}
-              {profile.bio && (
-                <p className="text-xs text-cream/40 mt-1.5 leading-relaxed">{profile.bio}</p>
-              )}
+              {profile.bio && <p className="text-xs text-cream/40 mt-1.5 leading-relaxed">{profile.bio}</p>}
             </div>
           </div>
 
-          {/* Stats row */}
           <div className="flex gap-2 mt-4">
             {currentUser.totalTrades !== undefined && (
               <div className="flex-1 px-3 py-2.5 rounded-2xl bg-background-light">
@@ -426,40 +433,9 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
-
-          {/* Preferences — dynamic from profile */}
-          {((profile.paymentMethods && profile.paymentMethods.length > 0) ||
-            (profile.shippingPreferences && profile.shippingPreferences.length > 0)) && (
-            <div className="mt-3 space-y-2">
-              {profile.paymentMethods && profile.paymentMethods.length > 0 && (
-                <div className="flex items-start gap-2">
-                  <Wallet className="w-3 h-3 text-cream/25 mt-0.5 flex-shrink-0" />
-                  <div className="flex flex-wrap gap-1.5">
-                    {profile.paymentMethods.map((m) => (
-                      <span key={m} className="px-2 py-0.5 rounded-lg bg-surface/15 text-surface-light text-[10px] font-semibold">
-                        {m}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {profile.shippingPreferences && profile.shippingPreferences.length > 0 && (
-                <div className="flex items-start gap-2">
-                  <Truck className="w-3 h-3 text-emerald-400/50 mt-0.5 flex-shrink-0" />
-                  <div className="flex flex-wrap gap-1.5">
-                    {profile.shippingPreferences.map((s) => (
-                      <span key={s} className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* ── Total Inventory Value ────────────────────────────── */}
+        {/* ── Total Value ─────────────────────────────────────── */}
         <div className="mx-5 mb-5 rounded-2xl bg-gradient-to-r from-primary/15 via-surface/10 to-primary/15 p-4 shadow-soft">
           <div className="flex items-center justify-between">
             <div>
@@ -467,9 +443,7 @@ export default function ProfilePage() {
                 <TrendingUp className="w-4 h-4 text-primary" />
                 <p className="text-xs text-cream/50 font-semibold">Total Inventory Value</p>
               </div>
-              <p className="text-2xl font-extrabold text-primary value-display">
-                {formatValue(totalValue)}
-              </p>
+              <p className="text-2xl font-extrabold text-primary value-display">{formatValue(totalValue)}</p>
             </div>
             <div className="text-right">
               <div className="flex items-center gap-1 text-cream/30 mb-1">
@@ -489,24 +463,14 @@ export default function ProfilePage() {
           <div className="flex items-center gap-2 mb-3">
             <Crown className="w-4 h-4 text-yellow-400" />
             <h2 className="text-sm font-bold text-cream/80">Top 3 Grails</h2>
-            {hasPinnedGrails && (
-              <span className="text-[9px] text-yellow-400/50 font-medium ml-0.5">curated</span>
-            )}
-            <button
-              onClick={() => setShowGrailsPicker(true)}
-              className="ml-auto p-1.5 rounded-lg hover:bg-charcoal-light/50 transition-colors"
-              aria-label="Manage grails"
-            >
+            {hasPinnedGrails && <span className="text-[9px] text-yellow-400/50 font-medium ml-0.5">curated</span>}
+            <button onClick={() => setShowGrailsPicker(true)} className="ml-auto p-1.5 rounded-lg hover:bg-charcoal-light/50 transition-colors">
               <Edit3 className="w-3.5 h-3.5 text-cream/30" />
             </button>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
             {grails.map((item, i) => (
-              <div
-                key={item.id}
-                className="flex-shrink-0 w-40 rounded-2xl overflow-hidden bg-background-light shadow-soft-lg animate-scale-in relative"
-                style={{ animationDelay: `${i * 0.1}s`, animationFillMode: "both" }}
-              >
+              <div key={item.id} className="flex-shrink-0 w-40 rounded-2xl overflow-hidden bg-background-light shadow-soft-lg animate-scale-in relative" style={{ animationDelay: `${i * 0.1}s`, animationFillMode: "both" }}>
                 <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-yellow-400/90 flex items-center justify-center shadow-soft">
                   <span className="text-xs font-extrabold text-charcoal-dark">{i + 1}</span>
                 </div>
@@ -528,21 +492,19 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ── Quick Filter ────────────────────────────────────── */}
+        {/* ── Filters ────────────────────────────────────────── */}
         <div className="px-5 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Package className="w-4 h-4 text-cream/50" />
             <h2 className="text-sm font-bold text-cream/80">Collection</h2>
           </div>
-          <div className="flex gap-2 overflow-x-auto scrollbar-none">
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-5 px-5 scrollbar-none">
             {filters.map((f) => (
               <button
                 key={f}
                 onClick={() => setActiveFilter(f)}
                 className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                  activeFilter === f
-                    ? "bg-surface/25 text-surface-light shadow-glow-surface"
-                    : "bg-background-light text-cream/40 hover:text-cream/60"
+                  activeFilter === f ? "bg-surface/25 text-surface-light shadow-glow-surface" : "bg-background-light text-cream/40 hover:text-cream/60"
                 }`}
               >
                 {f}
@@ -551,7 +513,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ── Sortable Grid ───────────────────────────────────── */}
+        {/* ── Grid ───────────────────────────────────────────── */}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={filteredItems.map((i) => i.id)} strategy={rectSortingStrategy}>
             <div className="px-5 grid grid-cols-3 gap-3 pb-6">
@@ -570,114 +532,55 @@ export default function ProfilePage() {
         )}
       </main>
 
-      <button
-        onClick={() => setShowAddModal(true)}
-        className="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-primary shadow-soft-lg shadow-primary/20 flex items-center justify-center hover:bg-primary-dark active:scale-90 transition-all z-40 animate-bounce-soft"
-        aria-label="Add new item"
-      >
+      <button onClick={() => setShowAddModal(true)} className="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-primary shadow-soft-lg shadow-primary/20 flex items-center justify-center hover:bg-primary-dark active:scale-90 transition-all z-40 animate-bounce-soft">
         <Plus className="w-7 h-7 text-charcoal-dark" strokeWidth={2.5} />
       </button>
 
       {/* ── Modals ──────────────────────────────────────────── */}
       <AddItemModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAdd={handleAddItem} />
-      <EditProfileModal
-        isOpen={showEditProfile}
-        onClose={() => setShowEditProfile(false)}
-        profile={profile}
-        onSave={setProfile}
-      />
-      <GrailsPickerModal
-        isOpen={showGrailsPicker}
-        onClose={() => setShowGrailsPicker(false)}
-        items={items}
-        pinnedIds={pinnedGrailIds}
-        onSave={setPinnedGrailIds}
-      />
-      <ReviewsListModal
-        isOpen={showReviews}
-        onClose={() => setShowReviews(false)}
-        userName={profile.name}
-        trustScore={currentUser.trustScore || 4.8}
-      />
+      <EditProfileModal isOpen={showEditProfile} onClose={() => setShowEditProfile(false)} profile={profile} onSave={setProfile} />
+      <GrailsPickerModal isOpen={showGrailsPicker} onClose={() => setShowGrailsPicker(false)} items={items} pinnedIds={pinnedGrailIds} onSave={setPinnedGrailIds} />
+      <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={currentUser.trustScore || 4.8} />
 
-      {/* ── Item Detail / Edit Modal ─────────────────────────── */}
+      {/* ── Item Detail Modal ───────────────────────────────── */}
       {editingItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
-            onClick={() => setEditingItem(null)}
-          />
+          <div className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in" onClick={() => setEditingItem(null)} />
           <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl overflow-hidden max-h-[90vh] flex flex-col animate-slide-up">
-            {/* Close button */}
-            <button
-              onClick={() => setEditingItem(null)}
-              className="absolute top-3 right-3 z-30 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
-              aria-label="Close"
-            >
+            <button onClick={() => setEditingItem(null)} className="absolute top-3 right-3 z-30 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors">
               <X className="w-4.5 h-4.5 text-white/80" />
             </button>
 
-            {/* ── VIEW MODE ────────────────────────────────────── */}
             {viewMode ? (
               <>
                 <div className="flex-1 overflow-y-auto overscroll-contain">
-                  {/* Large image */}
                   <div className="relative flex items-center justify-center px-6 pt-6 pb-3">
-                    <img
-                      src={editingItem.customImage || editingItem.imageUrl}
-                      alt={editingItem.name}
-                      className="relative max-h-[42vh] w-auto max-w-full object-contain drop-shadow-2xl"
-                    />
+                    <img src={editingItem.customImage || editingItem.imageUrl} alt={editingItem.name} className="relative max-h-[42vh] w-auto max-w-full object-contain drop-shadow-2xl" />
                   </div>
-
-                  {/* Details */}
                   <div className="px-5 pb-5 pt-2 space-y-3.5">
                     <div>
                       <h2 className="text-lg font-bold text-cream leading-snug">{editingItem.name}</h2>
                       <p className="text-sm text-cream/40 mt-0.5">{editingItem.category}</p>
                     </div>
-
-                    {/* Badges */}
                     <div className="flex flex-wrap gap-2">
-                      {editingItem.condition && (
+                      {editingItem.graded && editingItem.gradeNum ? (
+                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                           <Award className="w-3.5 h-3.5 text-purple-400" />
+                           <span className="text-xs font-bold text-purple-400">{editingItem.grader} {editingItem.gradeNum}</span>
+                         </div>
+                      ) : editingItem.condition && (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
                           <Shield className="w-3.5 h-3.5 text-blue-400" />
                           <span className="text-xs font-bold text-blue-400">{editingItem.condition}</span>
                         </div>
                       )}
                       {editingItem.status && (
-                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${
-                          editingItem.status === "For Trade"
-                            ? "bg-primary/10 border-primary/25"
-                            : editingItem.status === "For Sale"
-                            ? "bg-green-500/10 border-green-500/20"
-                            : "bg-white/5 border-white/10"
-                        }`}>
-                          <Tag className={`w-3.5 h-3.5 ${
-                            editingItem.status === "For Trade"
-                              ? "text-primary"
-                              : editingItem.status === "For Sale"
-                              ? "text-green-400"
-                              : "text-cream/35"
-                          }`} />
-                          <span className={`text-xs font-bold ${
-                            editingItem.status === "For Trade"
-                              ? "text-primary"
-                              : editingItem.status === "For Sale"
-                              ? "text-green-400"
-                              : "text-cream/45"
-                          }`}>{editingItem.status}</span>
-                        </div>
-                      )}
-                      {editingItem.masterId && (
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface/10 border border-surface/20">
-                          <Database className="w-3.5 h-3.5 text-surface-light/60" />
-                          <span className="text-xs font-semibold text-surface-light/50">Catalog-linked</span>
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${editingItem.status === "For Trade" ? "bg-primary/10 border-primary/25" : "bg-white/5 border-white/10"}`}>
+                          <Tag className={`w-3.5 h-3.5 ${editingItem.status === "For Trade" ? "text-primary" : "text-cream/35"}`} />
+                          <span className={`text-xs font-bold ${editingItem.status === "For Trade" ? "text-primary" : "text-cream/45"}`}>{editingItem.status}</span>
                         </div>
                       )}
                     </div>
-
-                    {/* Asking Price */}
                     {editingItem.estimatedValue && editingItem.estimatedValue > 0 && (
                       <div className="rounded-2xl bg-green-500/8 border border-green-500/20 p-4">
                         <div className="flex items-center gap-2 mb-1.5">
@@ -687,8 +590,6 @@ export default function ProfilePage() {
                         <p className="text-3xl font-bold text-green-400">{formatValue(editingItem.estimatedValue)}</p>
                       </div>
                     )}
-
-                    {/* Notes */}
                     {editingItem.notes && (
                       <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
                         <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider mb-2">Notes</p>
@@ -697,65 +598,36 @@ export default function ProfilePage() {
                     )}
                   </div>
                 </div>
-
-                {/* Bottom action bar — view mode */}
                 <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
-                  <button
-                    onClick={handleDeleteItem}
-                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all"
-                  >
+                  <button onClick={handleDeleteItem} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all">
                     <Trash2 className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={handleStartEdit}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
-                  >
+                  <button onClick={handleStartEdit} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all">
                     <Edit3 className="w-4 h-4" />
                     Edit Item
                   </button>
                 </div>
               </>
             ) : (
-              /* ── EDIT MODE ────────────────────────────────────── */
               <>
-                {/* Header */}
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
-                  <button
-                    onClick={() => setViewMode(true)}
-                    className="p-1.5 rounded-xl hover:bg-charcoal-light/50 transition-colors"
-                  >
+                  <button onClick={() => setViewMode(true)} className="p-1.5 rounded-xl hover:bg-charcoal-light/50 transition-colors">
                     <ChevronLeft className="w-5 h-5 text-cream/50" />
                   </button>
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <img
-                      src={editingItem.customImage || editingItem.imageUrl}
-                      alt=""
-                      className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
-                    />
+                    <img src={editingItem.customImage || editingItem.imageUrl} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-cream truncate">Edit Item</p>
                       <p className="text-xs text-cream/35 truncate">{editingItem.name}</p>
                     </div>
                   </div>
                 </div>
-
-                {/* Config form */}
                 <div className="flex-1 overflow-y-auto overscroll-contain p-5">
-                  <ItemConfigForm config={editConfig} onChange={setEditConfig} />
+                  <ItemConfigForm config={editConfig} onChange={setEditConfig} category={editingItem.category} />
                 </div>
-
-                {/* Bottom actions — edit mode */}
                 <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
-                  <button
-                    onClick={() => setViewMode(true)}
-                    className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={handleSaveEdit}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
-                  >
+                  <button onClick={() => setViewMode(true)} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Back</button>
+                  <button onClick={handleSaveEdit} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all">
                     <Save className="w-4 h-4" />
                     Save Changes
                   </button>

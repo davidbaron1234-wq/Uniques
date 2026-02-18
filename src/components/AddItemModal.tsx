@@ -2,11 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  X, ChevronDown, Search, Sparkles, Database, Loader2,
-  ChevronLeft, Save, Camera, ScanLine, AlertCircle, DollarSign, CheckCircle2, Box
+  X, Search, Loader2, ChevronLeft, Save, ScanLine, AlertCircle, DollarSign, CheckCircle2, Barcode, Tag
 } from "lucide-react";
 import { CATEGORIES, Category, mapCatalogCategory } from "@/lib/constants";
-import { formatValue } from "@/lib/format";
 import { MasterItem } from "@/lib/catalog/types";
 import { identifyCard } from "@/lib/ximilarService";
 import { identifyItemWithGemini } from "@/lib/gemini"; 
@@ -26,6 +24,11 @@ interface AddItemModalProps {
     condition?: string;
     status?: string;
     notes?: string;
+    year?: string;
+    pieces?: string;
+    graded?: boolean;
+    grader?: string;
+    gradeNum?: string;
   }) => void;
 }
 
@@ -43,101 +46,174 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   
-  const [priceStatus, setPriceStatus] = useState<{ msg: string; type: 'success' | 'loading' | 'error' | 'warning' } | null>(null);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
+
+  // 🔥 הוספתי את המצב 'manual' לטיפוסים כאן
+  const [priceStatus, setPriceStatus] = useState<{ msg: string; type: 'success' | 'loading' | 'error' | 'warning' | 'manual' } | null>(null);
 
   const [config, setConfig] = useState<ItemConfig>({
     askingPrice: undefined,
     condition: "Near Mint",
     status: "For Trade",
     notes: "",
+    year: "",
+    pieces: "",
+    graded: false,
+    grader: "PSA",
+    gradeNum: "10"
   });
+  
   const scanInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // ── מנוע מחירים חכם (Sniper Mode + 1stEdition Fix) ──────────────────
-  // פונקציה זו קריטית למציאת מחירים מדויקים של קלפים
-  const fetchLivePrice = async (cardName: string, setCode?: string, cardNumber?: string) => {
-    try {
+  // ── מנוע מחירים (Sniper) ──
+  const fetchMarketPrice = async (query: string, cat: Category, setCode?: string, cardNum?: string) => {
       setPriceStatus({ msg: "Checking market data...", type: 'loading' });
-      let targetId = null;
+      
+      const lowerQuery = query.toLowerCase();
+      // המגן לקופסאות סגורות (שלא נשלח בטעות למנוע של קלפים בודדים)
+      const isSealedProduct = lowerQuery.includes("box") || lowerQuery.includes("etb") || lowerQuery.includes("booster") || lowerQuery.includes("pack") || lowerQuery.includes("tin");
 
-      // 1. נסיון ישיר לפי ID (הכי מדויק)
-      if (setCode && cardNumber) {
-        const exactId = `${setCode.toLowerCase()}-${cardNumber}`;
-        const res = await fetch(`https://api.tcgdex.net/v2/en/cards/${exactId}`);
-        if (res.ok) {
-           const data = await res.json();
-           if (data.id === exactId || data.name) targetId = exactId;
-        }
+      // 1. פוקימון: עדיפות ל-TCGDex (רק קלפים בודדים)
+      if (cat === "Pokémon TCG" && !isSealedProduct) {
+          try {
+            let targetId = null;
+            if (setCode && cardNum) {
+                const exactId = `${setCode.toLowerCase()}-${cardNum}`;
+                const res = await fetch(`https://api.tcgdex.net/v2/en/cards/${exactId}`);
+                if (res.ok) {
+                   const data = await res.json();
+                   if (data.id === exactId || data.name) targetId = exactId;
+                }
+            }
+            if (!targetId) {
+                const cleanName = query.replace(/\s(Star|Lv\.X|V|VMAX|GX|EX|Gold Star)$/i, "").trim();
+                const searchRes = await fetch(`https://api.tcgdex.net/v2/en/cards?name=${encodeURIComponent(cleanName)}`);
+                const searchResults = await searchRes.json();
+                if (searchResults && searchResults.length > 0) targetId = searchResults[0].id;
+            }
+
+            if (targetId) {
+                const details = await (await fetch(`https://api.tcgdex.net/v2/en/cards/${targetId}`)).json();
+                const tcg = details.pricing?.tcgplayer;
+                if (tcg) {
+                  const price = tcg.normal?.marketPrice || tcg.unlimited?.marketPrice || tcg.holo?.marketPrice;
+                  if (price) {
+                    setPriceStatus({ msg: `TCG Market Price: $${price}`, type: 'success' });
+                    setConfig(prev => ({ ...prev, askingPrice: price }));
+                    return;
+                  }
+                }
+            }
+          } catch (e) { console.error("TCG Error", e); }
       }
 
-      // 2. חיפוש חכם (התעלמות מתוספות כמו Star/Lv.X כדי למצוא התאמה רחבה יותר אם צריך)
-      if (!targetId) {
-        const cleanName = cardName.replace(/\s(Star|Lv\.X|V|VMAX|GX|EX|Gold Star)$/i, "").trim();
-        const searchRes = await fetch(`https://api.tcgdex.net/v2/en/cards?name=${encodeURIComponent(cleanName)}`);
-        const searchResults = await searchRes.json();
-        
-        if (searchResults && searchResults.length > 0) {
-          if (cardNumber) {
-             const exactMatch = searchResults.find((c: any) => {
-                return c.localId === cardNumber || c.id.endsWith(`-${cardNumber}`);
-             });
-             if (exactMatch) targetId = exactMatch.id;
-             else targetId = searchResults[0].id;
+      // 2. איביי (ברירת מחדל לכל השאר)
+      try {
+          let cleanQuery = query;
+          if (cat === "Lego") {
+             const legoNum = query.match(/\d{4,7}/)?.[0] || "";
+             if (legoNum) cleanQuery = `Lego ${legoNum} set`;
+             else cleanQuery = `Lego ${query}`;
           } else {
-             targetId = searchResults[0].id;
+             cleanQuery = query.replace("Funko Pop", "").trim() + ` ${cat === 'Funko Pop' ? 'Funko Pop' : ''}`;
           }
-        }
-      }
-
-      // 3. שליפת המחיר הסופי מה-API
-      if (targetId) {
-        const detailsRes = await fetch(`https://api.tcgdex.net/v2/en/cards/${targetId}`);
-        const details = await detailsRes.json();
-        const tcg = details.pricing?.tcgplayer;
-        
-        // בדיקת כל סוגי המחירים האפשריים (כולל מהדורה ראשונה)
-        if (tcg) {
-          const price = tcg.normal?.marketPrice || 
-                        tcg["1stEdition"]?.marketPrice || 
-                        tcg.unlimited?.marketPrice ||
-                        tcg.holo?.marketPrice || 
-                        tcg.reverse?.marketPrice || 
-                        tcg.normal?.midPrice ||      
-                        tcg.holo?.midPrice;
-
-          if (price) {
-            setPriceStatus({ msg: `Market Price Found: $${price}`, type: 'success' });
-            return price;
+          
+          const res = await fetch(`/api/ebay/pricing?q=${encodeURIComponent(cleanQuery)}`);
+          const data = await res.json();
+          
+          if (data.price) {
+              setPriceStatus({ msg: `eBay Avg Price: $${data.price}`, type: 'success' });
+              setConfig(prev => ({ ...prev, askingPrice: data.price }));
+          } else {
+              // 🔥 התיקון: הודעה ידידותית במקום שגיאה
+              setPriceStatus({ msg: "Market data unavailable. Set your price!", type: 'manual' });
           }
-        }
-        
-        // גיבוי: מחירים מאירופה (Cardmarket)
-        const cm = details.pricing?.cardmarket;
-        const euPrice = cm?.trendPrice || cm?.avg30 || cm?.avg1;
-        if (euPrice) {
-           const finalPrice = Number((euPrice * 1.1).toFixed(2)); // המרה משוערת ליורו->דולר
-           setPriceStatus({ msg: `Est. Value (Trend): ~$${finalPrice}`, type: 'success' });
-           return finalPrice;
-        }
+      } catch (e) {
+          // גם בקריסה - אנחנו נחמדים
+          setPriceStatus({ msg: "Market data unavailable. Set your price!", type: 'manual' });
       }
+  };
 
-      setPriceStatus({ msg: "⚠️ Rare / Out of Stock - Enter Price", type: 'warning' });
-      return null;
-    } catch (err) {
-      console.error(err);
-      setPriceStatus({ msg: "Connection error", type: 'error' });
-      return null;
+  // ── מנוע לגו ──
+  const fetchLegoDetails = async (text: string) => {
+      const match = text.match(/\b\d{4,7}\b/);
+      if (match) {
+          const setNum = match[0];
+          try {
+              setPriceStatus({ msg: `Fetching Lego Data (${setNum})...`, type: 'loading' });
+              const res = await fetch(`/api/lego?set=${setNum}`);
+              const data = await res.json();
+              
+              if (data.found) {
+                  setName(data.name);
+                  if (data.image) setConfig(prev => ({ ...prev, customImage: data.image }));
+                  
+                  setConfig(prev => ({ 
+                      ...prev, 
+                      year: data.year?.toString(), 
+                      pieces: data.num_parts?.toString(),
+                      notes: ""
+                  }));
+                  
+                  fetchMarketPrice(data.name, "Lego");
+                  return true;
+              }
+          } catch (e) { console.error("Lego Fetch Error", e); }
+      }
+      return false;
+  };
+
+  // ── מנוע ברקוד ──
+  const runBarcodeLogic = async (code: string): Promise<boolean> => {
+    setIsBarcodeLoading(true);
+    setPriceStatus({ msg: "Found Barcode! Searching DB...", type: 'loading' });
+    setScanError(null);
+
+    try {
+        const res = await fetch(`/api/barcode?code=${code}`);
+        const data = await res.json();
+
+        if (data.found) {
+            let finalName = data.title;
+            let detectedCategory: Category = "Other"; 
+            const rawText = (data.title + " " + data.category).toLowerCase();
+
+            if (rawText.includes("funko")) detectedCategory = "Funko Pop";
+            else if (rawText.includes("lego")) detectedCategory = "Lego";
+            else if (rawText.includes("pokemon") || rawText.includes("pkmn")) detectedCategory = "Pokémon TCG";
+            else if (rawText.includes("magic") || rawText.includes("mtg")) detectedCategory = "Other TCG";
+            else if (rawText.includes("sneaker")) detectedCategory = "Sneakers";
+            
+            setCategory(detectedCategory);
+            
+            if (detectedCategory === "Lego") {
+                await fetchLegoDetails(finalName); 
+            } else {
+                setName(finalName);
+                if (data.image) setConfig(prev => ({ ...prev, customImage: data.image }));
+                fetchMarketPrice(finalName, detectedCategory);
+            }
+            
+            setIsBarcodeLoading(false);
+            return true;
+        } 
+        setIsBarcodeLoading(false);
+        return false;
+    } catch {
+        setIsBarcodeLoading(false);
+        return false;
     }
   };
 
-  // ── טעינת הקטלוג וההצעות (Suggestions Logic) ────────────────────────
+  const handleBarcodeSearch = () => {
+      if (barcodeInput.length >= 3) runBarcodeLogic(barcodeInput);
+  };
+
   useEffect(() => {
     if (isOpen && catalogTotal === 0) {
-      fetch("/api/catalog/search?pageSize=1")
-        .then((r) => r.json())
-        .then((data) => setCatalogTotal(data.total || 0))
-        .catch(() => {});
+      fetch("/api/catalog/search?pageSize=1").then((r) => r.json()).then((data) => setCatalogTotal(data.total || 0)).catch(() => {});
     }
   }, [isOpen, catalogTotal]);
 
@@ -154,11 +230,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         const res = await fetch(`/api/catalog/search?q=${encodeURIComponent(query)}&pageSize=8`);
         const data = await res.json();
         setSuggestions(data.items || []);
-      } catch {
-        setSuggestions([]);
-      } finally {
-        setIsSearching(false);
-      }
+      } catch { setSuggestions([]); } finally { setIsSearching(false); }
     }, 250);
   }, []);
 
@@ -171,105 +243,99 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     setCategory(mapCatalogCategory(item.category));
   };
 
-  // ── מנגנון הסריקה המתוקן (Gemini 2.0 Logic) ─────────────────────────
+  // ── מנוע סריקה ראשי ──
   const handleScanUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
+    setName(""); setCategory(""); setScanError(null); setPriceStatus(null);
+    setBarcodeInput("");
+    setConfig(prev => ({ 
+        ...prev, 
+        customImage: undefined, askingPrice: undefined, notes: "", 
+        year: "", pieces: "", graded: false, gradeNum: "10" 
+    }));
+
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64 = reader.result as string;
       setScannedImage(base64);
       setIsScanning(true);
-      setScanError(null);
       setPriceStatus({ msg: "AI Analyzing...", type: 'loading' });
+      setConfig(prev => ({ ...prev, customImage: base64 }));
 
       try {
-        console.log("🚀 Starting Gemini Analysis...");
-        // 1. שולחים לג'מיני (דרך השרת המתוקן שלנו)
         const geminiResult = await identifyItemWithGemini(base64);
-        console.log("🤖 Gemini Raw Result:", geminiResult);
+        
+        if (!geminiResult) {
+            setScanError("AI limit reached. Try again.");
+            setPriceStatus(null);
+            setIsScanning(false);
+            return;
+        }
 
-        // לוגיקה קשיחה: אם ג'מיני אומר שזה לא קלף, זה לא קלף!
-        let isCard = true; // ברירת מחדל ליתר ביטחון
-
-        if (geminiResult) {
-            if (geminiResult.isCard === false) {
-                isCard = false;
-            }
-            // הגנה כפולה: אם השם מכיל "Funko" או "Lego", זה בטוח לא קלף
-            else if (geminiResult.name && (
-                geminiResult.name.toLowerCase().includes("funko") ||
-                geminiResult.name.toLowerCase().includes("lego") ||
-                geminiResult.name.toLowerCase().includes("figure")
-            )) {
-                isCard = false;
+        if (geminiResult.barcode) {
+            setBarcodeInput(geminiResult.barcode);
+            const success = await runBarcodeLogic(geminiResult.barcode);
+            if (success) {
+                setIsScanning(false);
+                return;
             }
         }
 
-        if (isCard) {
-            console.log("🃏 Identified as CARD -> Switching to Ximilar");
-            setPriceStatus({ msg: "Card detected! Pricing...", type: 'loading' });
-            
-            const cardResult = await identifyCard(base64);
-            
-            if (cardResult.success && cardResult.cardName && !cardResult.cardName.includes("thread")) {
-                setName(cardResult.cardName);
-                setCategory("Pokémon TCG");
-                
-                const match = (cardResult.raw as any)?.records?.[0]?._objects?.[0]?._identification?.best_match;
-                const livePrice = await fetchLivePrice(cardResult.cardName, match?.set_series_code, match?.card_number);
-                
-                setConfig((prev) => ({ ...prev, askingPrice: livePrice || undefined, customImage: base64 }));
-            } else {
-                // במקרה ש-Ximilar נכשל, נשתמש בתוצאה הכללית של ג'מיני אם יש
-                setName(geminiResult?.name || "Unknown Card");
-                setCategory("Pokémon TCG");
-                setPriceStatus({ msg: "Identified via Vision AI", type: 'success' });
-            }
-        } 
-        else if (geminiResult && geminiResult.name) {
-            console.log("🧸 Identified as COLLECTIBLE:", geminiResult.name);
-            // זה פאנקו! מציגים את השם מג'מיני
-            setName(geminiResult.name);
-            
-            // מנגנון זיהוי קטגוריות חכם
-            let detectedCategory: Category = "Other"; // ברירת מחדל
-            const lowerName = geminiResult.name.toLowerCase();
-            const lowerCat = (geminiResult.category || "").toLowerCase();
+        if (geminiResult.visual) {
+            const visual = geminiResult.visual;
+            const lowerName = visual.name.toLowerCase();
+            const lowerCat = (visual.category || "").toLowerCase();
 
-            // סינכרון מלא עם רשימת הקטגוריות בתמונה ששלחת
-            if (lowerName.includes("funko") || lowerCat.includes("funko")) {
-                detectedCategory = "Funko Pop";
-            } else if (lowerName.includes("lego") || lowerCat.includes("lego")) {
-                detectedCategory = "Lego";
-            } else if (lowerName.includes("sneaker") || lowerCat.includes("sneaker")) {
-                detectedCategory = "Sneakers";
-            } else if (lowerName.includes("comic") || lowerCat.includes("comic")) {
-                detectedCategory = "Comics";
-            } else if (lowerName.includes("coin") || lowerCat.includes("coin")) {
-                detectedCategory = "Coins";
-            } else if (lowerName.includes("watch") || lowerCat.includes("watch")) {
-                detectedCategory = "Watches";
-            } else if (lowerName.includes("game") || lowerCat.includes("video game")) {
-                detectedCategory = "Video Games";
-            } else if (lowerName.includes("sport") || lowerCat.includes("sport")) {
-                detectedCategory = "Sports Cards";
-            }
+            // לוגיקת קטגוריות
+            let detectedCategory: Category = "Other";
+            
+            const isYugioh = lowerName.includes("yu-gi-oh") || lowerName.includes("yugioh") || lowerName.includes("magic") || lowerName.includes("mtg") || lowerName.includes("digimon") || lowerName.includes("lorcana");
+            const isSports = lowerName.includes("baseball") || lowerName.includes("basketball") || lowerName.includes("football") || lowerName.includes("soccer") || lowerName.includes("nba") || lowerName.includes("nfl") || lowerName.includes("fleer") || lowerName.includes("upper deck") || lowerName.includes("jordan") || lowerName.includes("lebron");
+            const isPokemon = lowerName.includes("pokemon") || lowerName.includes("charizard") || lowerName.includes("pikachu");
+
+            if (isSports) detectedCategory = "Sports Cards";
+            else if (isYugioh) detectedCategory = "Other TCG";
+            else if (isPokemon) detectedCategory = "Pokémon TCG";
+            else if (lowerName.includes("funko")) detectedCategory = "Funko Pop";
+            else if (lowerName.includes("lego")) detectedCategory = "Lego";
+            else if (lowerName.includes("sneaker")) detectedCategory = "Sneakers";
+            else if (lowerName.includes("coin") || lowerName.includes("dollar") || lowerName.includes("cent")) detectedCategory = "Coins";
+            else if (lowerName.includes("watch") || lowerName.includes("rolex")) detectedCategory = "Watches";
+            else if (visual.category === "Pokémon TCG") detectedCategory = "Pokémon TCG";
+            else detectedCategory = mapCatalogCategory(visual.category);
 
             setCategory(detectedCategory);
-            setPriceStatus({ msg: "Item Identified! (eBay price soon)", type: 'success' });
-            setConfig((prev) => ({ ...prev, customImage: base64 }));
-        } 
-        else {
-            setScanError("Could not identify item.");
-            setPriceStatus(null);
-        }
+            setName(visual.name);
 
+            // לוגיקת קופסאות
+            const isSealed = lowerName.includes("box") || lowerName.includes("etb") || lowerName.includes("booster") || lowerName.includes("pack") || lowerName.includes("tin") || lowerName.includes("collection");
+
+            if (detectedCategory === "Pokémon TCG" && visual.isCard && !isSealed) {
+                setPriceStatus({ msg: "Identifying Pokemon Card...", type: 'loading' });
+                const cardResult = await identifyCard(base64);
+                if (cardResult.success && cardResult.cardName) {
+                    setName(cardResult.cardName);
+                    const match = (cardResult.raw as any)?.records?.[0]?._objects?.[0]?._identification?.best_match;
+                    fetchMarketPrice(cardResult.cardName, "Pokémon TCG", match?.set_series_code, match?.card_number);
+                } else {
+                    fetchMarketPrice(visual.name, "Pokémon TCG");
+                }
+            } 
+            else if (detectedCategory === "Lego") {
+                const legoSuccess = await fetchLegoDetails(visual.name);
+                if (!legoSuccess) fetchMarketPrice(visual.name, "Lego");
+            }
+            else {
+                setPriceStatus({ msg: "Fetching eBay Price...", type: 'loading' });
+                fetchMarketPrice(visual.name, detectedCategory);
+            }
+        } else {
+             setScanError("Could not identify item.");
+        }
       } catch (err) {
-        console.error("Scan Error:", err);
         setScanError("Scan failed.");
-        setPriceStatus(null);
       } finally {
         setIsScanning(false);
       }
@@ -292,23 +358,21 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
       condition: config.condition,
       status: config.status,
       notes: config.notes || undefined,
+      year: config.year,
+      pieces: config.pieces,
+      graded: config.graded,
+      grader: config.graded ? config.grader : undefined,
+      gradeNum: config.graded ? config.gradeNum : undefined
     });
     resetForm();
     onClose();
   };
 
   const resetForm = () => {
-    setStep("search");
-    setName("");
-    setCategory("");
-    setCatalogImage(null);
-    setScannedImage(null);
-    setMasterId(undefined);
-    setSuggestions([]);
-    setIsScanning(false);
-    setScanError(null);
-    setPriceStatus(null);
-    setConfig({ askingPrice: undefined, condition: "Near Mint", status: "For Trade", notes: "" });
+    setStep("search"); setName(""); setCategory(""); setCatalogImage(null); setScannedImage(null);
+    setMasterId(undefined); setSuggestions([]); setIsScanning(false); setScanError(null); setPriceStatus(null);
+    setBarcodeInput("");
+    setConfig({ askingPrice: undefined, condition: "Near Mint", status: "For Trade", notes: "", year: "", pieces: "", graded: false, gradeNum: "10" });
   };
 
   const handleClose = () => { resetForm(); onClose(); };
@@ -330,7 +394,6 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             <div className="px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
               <h2 className="text-lg font-bold text-cream">Add New Item</h2>
             </div>
-
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div>
                 <button
@@ -345,69 +408,57 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   </div>
                   <div className="text-left">
                     <p className="text-sm text-cream font-bold">{isScanning ? "Scanning..." : "Scan with AI Vision"}</p>
-                    <p className="text-[10px] text-cream/30 mt-0.5">{isScanning ? "Identifying Item..." : "Cards, Funko Pops, Figures & More"}</p>
+                    <p className="text-[10px] text-cream/30 mt-0.5">Cards, Funko Pops, Figures & More</p>
                   </div>
                 </button>
                 <input ref={scanInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanUpload} className="hidden" />
-
-                {/* Status Message Area - כולל הצגת שגיאות ברורה */}
-                {(priceStatus || scanError) && (
-                  <div className={`mt-2 px-3 py-2.5 rounded-xl border flex items-center gap-2.5 ${
-                    scanError ? 'bg-red-500/10 border-red-500/20 text-red-300' :
-                    priceStatus?.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-300' :
-                    priceStatus?.type === 'error' ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' :
-                    'bg-blue-500/10 border-blue-500/20 text-blue-300'
-                  }`}>
-                    {scanError ? <AlertCircle className="w-4 h-4" /> :
-                     priceStatus?.type === 'success' ? <DollarSign className="w-4 h-4" /> :
-                     priceStatus?.type === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
-                     <AlertCircle className="w-4 h-4" />}
-                    <span className="text-xs font-semibold tracking-wide">{scanError || priceStatus?.msg}</span>
-                  </div>
-                )}
-
-                {scannedImage && !isScanning && !scanError && name && !priceStatus && (
-                  <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/20">
-                    <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
-                    <p className="text-xs text-green-300/80">
-                      Identified: <span className="font-bold">{name}</span>
-                    </p>
-                  </div>
-                )}
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-white/[0.06]" />
-                <span className="text-[10px] text-cream/20 font-semibold uppercase tracking-wider">or search manually</span>
-                <div className="flex-1 h-px bg-white/[0.06]" />
+              <div className="flex gap-2">
+                 <div className="relative flex-1">
+                    <input type="text" placeholder="Enter Barcode / UPC..." value={barcodeInput} onChange={(e) => setBarcodeInput(e.target.value)}
+                       className="w-full pl-10 pr-4 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all" />
+                    <Barcode className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/30" />
+                 </div>
+                 <button onClick={handleBarcodeSearch} disabled={isBarcodeLoading || !barcodeInput} className="px-4 rounded-2xl bg-charcoal-light border border-white/5 hover:bg-white/5 text-cream disabled:opacity-50">
+                    {isBarcodeLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                 </button>
               </div>
+
+              {(priceStatus || scanError) && (
+                <div className={`px-3 py-2.5 rounded-xl border flex items-center gap-2.5 ${
+                  scanError ? 'bg-red-500/10 border-red-500/20 text-red-300' :
+                  priceStatus?.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-300' :
+                  priceStatus?.type === 'error' ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' :
+                  priceStatus?.type === 'manual' ? 'bg-blue-500/10 border-blue-500/20 text-blue-300' : // 🔥 עיצוב כחול ונעים
+                  'bg-blue-500/10 border-blue-500/20 text-blue-300'
+                }`}>
+                  {scanError ? <AlertCircle className="w-4 h-4" /> : 
+                   priceStatus?.type === 'success' ? <DollarSign className="w-4 h-4" /> : 
+                   priceStatus?.type === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
+                   priceStatus?.type === 'manual' ? <Tag className="w-4 h-4" /> : // 🔥 אייקון תגית חדש
+                   <AlertCircle className="w-4 h-4" />}
+                  <span className="text-xs font-semibold tracking-wide">{scanError || priceStatus?.msg}</span>
+                </div>
+              )}
+
+              {scannedImage && !isScanning && !scanError && name && !priceStatus && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/20">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                  <p className="text-xs text-green-300/80">Identified: <span className="font-bold">{name}</span></p>
+                </div>
+              )}
 
               <div className="relative">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setMasterId(undefined);
-                    setShowSuggestions(true);
-                    searchCatalog(e.target.value);
-                  }}
-                  onFocus={() => setShowSuggestions(true)}
-                  placeholder="Search Master Catalog..."
-                  className="w-full pl-10 pr-10 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
-                />
+                <input type="text" value={name} onChange={(e) => { setName(e.target.value); searchCatalog(e.target.value); }} onFocus={() => setShowSuggestions(true)} placeholder="Search Master Catalog..."
+                  className="w-full pl-10 pr-10 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all" />
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/30" />
-                
-                {/* ── Suggestions Dropdown (הוחזר למקומו!) ──────────────── */}
                 {showSuggestions && suggestions.length > 0 && (
                   <div className="absolute z-50 w-full mt-2 bg-charcoal-light rounded-2xl border border-white/10 overflow-hidden shadow-2xl max-h-60 overflow-y-auto">
                     {suggestions.map((s) => (
                       <button key={s.id} onClick={() => handleSelectSuggestion(s)} className="w-full p-3 flex items-center gap-3 hover:bg-white/5 text-left border-b border-white/5 transition-colors">
                         <img src={s.imageSmall} className="w-10 h-10 rounded-lg object-cover" />
-                        <div>
-                          <p className="text-sm text-cream font-bold">{s.name}</p>
-                          <p className="text-[10px] text-cream/40">{s.category}</p>
-                        </div>
+                        <div><p className="text-sm text-cream font-bold">{s.name}</p><p className="text-[10px] text-cream/40">{s.category}</p></div>
                       </button>
                     ))}
                   </div>
@@ -424,13 +475,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
 
             <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
               <button onClick={handleClose} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Cancel</button>
-              <button
-                onClick={handleNextStep}
-                disabled={!isStepOneValid}
-                className={`flex-1 py-3 rounded-2xl font-bold text-sm active:scale-[0.97] transition-all ${isStepOneValid ? "bg-primary/20 text-primary hover:bg-primary/30" : "bg-background-light text-cream/20 cursor-not-allowed"}`}
-              >
-                Next
-              </button>
+              <button onClick={handleNextStep} disabled={!isStepOneValid} className={`flex-1 py-3 rounded-2xl font-bold text-sm active:scale-[0.97] transition-all ${isStepOneValid ? "bg-primary/20 text-primary hover:bg-primary/30" : "bg-background-light text-cream/20 cursor-not-allowed"}`}>Next</button>
             </div>
           </>
         )}
@@ -443,14 +488,11 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </button>
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <img src={config.customImage || scannedImage || catalogImage || ""} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-cream truncate">Configure</p>
-                  <p className="text-xs text-cream/35 truncate">{name}</p>
-                </div>
+                <div className="min-w-0"><p className="text-sm font-bold text-cream truncate">Configure</p><p className="text-xs text-cream/35 truncate">{name}</p></div>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-5">
-              <ItemConfigForm config={config} onChange={setConfig} />
+              <ItemConfigForm config={config} onChange={setConfig} category={category as string} />
             </div>
             <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
               <button onClick={() => setStep("search")} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Back</button>

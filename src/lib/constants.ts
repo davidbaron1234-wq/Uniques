@@ -1,26 +1,30 @@
-// ── Single Source of Truth for Categories ─────────────────────────────────
-// Every page (Search, Add Item, Profile) imports from here.
-
 export const CATEGORIES = [
   "Pokémon TCG",
   "Sports Cards",
-  "Sneakers",
+  "Other TCG", // הקטגוריה החדשה!
   "Funko Pop",
+  "Lego",
+  "Sneakers",
+  "Video Games",
   "Comics",
   "Watches",
   "Coins",
-  "Lego",
-  "Video Games",
   "Other",
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
 
-// Maps catalog categories (from MasterItem) to app categories
-export function mapCatalogCategory(cat: string): Category {
-  if (cat === "Pokémon TCG") return "Pokémon TCG";
-  if (cat === "Trading Cards") return "Pokémon TCG";
-  if (cat === "Sneakers") return "Sneakers";
-  if (cat === "Coins") return "Coins";
+export const mapCatalogCategory = (catalogCat: string): Category => {
+  const cat = catalogCat.toLowerCase();
+  if (cat.includes("pokemon") || cat.includes("pokémon")) return "Pokémon TCG";
+  if (cat.includes("sport") || cat.includes("baseball") || cat.includes("basketball") || cat.includes("football") || cat.includes("soccer")) return "Sports Cards";
+  if (cat.includes("magic") || cat.includes("mtg") || cat.includes("yugioh") || cat.includes("yu-gi-oh")) return "Other TCG";
+  if (cat.includes("funko") || cat.includes("pop!")) return "Funko Pop";
+  if (cat.includes("lego")) return "Lego";
+  if (cat.includes("video game") || cat.includes("console")) return "Video Games";
+  if (cat.includes("sneaker") || cat.includes("shoe")) return "Sneakers";
+  if (cat.includes("comic")) return "Comics";
+  if (cat.includes("watch")) return "Watches";
+  if (cat.includes("coin") || cat.includes("currency")) return "Coins";
   return "Other";
-}
+};

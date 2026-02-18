@@ -8,34 +8,33 @@ export async function POST(req: Request) {
     const { image } = await req.json();
     if (!image) return NextResponse.json({ error: "No image" }, { status: 400 });
     
-    // מודל 2.0 הוא היחיד שעובד אצלך (1.5 מחזיר 404). ה-429 יעלם עם הזמן.
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
     const base64Data = image.includes("base64,") ? image.split("base64,")[1] : image;
 
     const prompt = `
-      Analyze this image carefully.
-      
-      1. TRADING CARD (Pokemon, Magic, Sports):
-         - Return JSON: { "isCard": true }
+      Analyze this image deeply for a collector's app. Return a JSON with TWO parts.
 
-      2. FUNKO POP:
-         - Look for "Pop!" logo. Read Name and Number.
-         - Return JSON: 
-           { 
-             "name": "Funko Pop [Series]: [Name] #[Number]", 
-             "category": "Funko Pop", 
-             "isCard": false 
-           }
+      PART 1: "barcode"
+      - Look for a standard UPC/EAN barcode (12/13 digits).
+      - IGNORE codes starting with "X", "B0", "LPN" (Amazon stickers).
+      - Return null if no valid barcode found.
 
-      3. LEGO:
-         - Look for Lego logo and set number.
-         - Return JSON: { "name": "Lego [Name] #[Number]", "category": "Lego", "isCard": false }
+      PART 2: "visual" (The AI Identification)
+      - Identify the item visually.
+      - "name": Full precise name (e.g. "1986 Fleer Michael Jordan #57 Rookie", "Funko Pop One Piece Shanks #939").
+      - "category": MUST be one of: 
+         [Pokémon TCG, Sports Cards, Other TCG, Funko Pop, Lego, Video Games, Sneakers, Comics, Watches, Coins, Other]
+      - "isCard": true if it is a trading card (Pokemon, Sports, Magic, etc), false otherwise.
 
-      4. OTHER:
-         - Return JSON: { "name": "[Brand] [Item Name]", "category": "Other", "isCard": false }
-
-      Return ONLY raw JSON.
+      OUTPUT FORMAT (JSON Only):
+      {
+        "barcode": "...",
+        "visual": {
+          "name": "...",
+          "category": "...",
+          "isCard": true/false
+        }
+      }
     `;
 
     const result = await model.generateContent([
@@ -46,12 +45,11 @@ export async function POST(req: Request) {
     const text = result.response.text();
     const cleanText = text.replace(/```json|```/g, "").trim();
     
-    console.log("Gemini 2.0 Response:", cleanText); 
-    
+    console.log("Gemini Hybrid Response:", cleanText); 
     return NextResponse.json(JSON.parse(cleanText));
 
   } catch (error: any) {
-    console.error("Gemini Critical Error:", error.message);
-    return NextResponse.json({ error: "AI Error (429/500)" }, { status: 500 });
+    console.error("Gemini Error:", error.message);
+    return NextResponse.json({ error: "AI Error" }, { status: 500 });
   }
 }

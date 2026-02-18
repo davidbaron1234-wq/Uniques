@@ -1,21 +1,20 @@
-// ── Master Catalog Type System ─────────────────────────────────────────────
-// Every collectible in the platform is backed by a MasterItem from the global catalog.
-// User inventory items link to this via `masterId`.
+import { LucideIcon } from "lucide-react";
 
+// ── Master Catalog Type System (Global) ────────────────────────────────────
 export type CatalogCategory = "Pokémon TCG" | "Trading Cards" | "Sneakers" | "Coins";
 
 export interface MasterItem {
-  id: string;                // Namespaced: "ptcg-base1-4", "snkr-aj1-chicago", "coin-1909svdb"
-  name: string;              // "Charizard", "Air Jordan 1 Chicago"
+  id: string;
+  name: string;
   category: CatalogCategory;
-  subCategory: string;       // "Pokémon TCG", "Nike", "US Coins"
-  set?: string;              // "Base Set", "Air Jordan 1", "Lincoln Cents"
-  series?: string;           // "Base", "Retro High OG", "Wheat Penny"
-  rarity?: string;           // "Rare Holo", "Limited", "Key Date"
-  imageSmall: string;        // Thumbnail URL
-  imageLarge: string;        // High-res URL
-  marketPrice: number;       // Current market value in USD
-  lastUpdated?: string;      // ISO date of last price update
+  subCategory: string;
+  set?: string;
+  series?: string;
+  rarity?: string;
+  imageSmall: string;
+  imageLarge: string;
+  marketPrice: number;
+  lastUpdated?: string;
 }
 
 export interface CatalogSearchResult {
@@ -28,7 +27,6 @@ export interface CatalogSearchResult {
 }
 
 // ── Pokémon TCG API Response Types ─────────────────────────────────────────
-
 export interface PokemonTCGCard {
   id: string;
   name: string;
@@ -67,4 +65,60 @@ export interface PokemonTCGResponse {
   pageSize: number;
   count: number;
   totalCount: number;
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// ██  APP & INVENTORY TYPES (UPDATED)  ████████████████████████████████████
+// ═════════════════════════════════════════════════════════════════════════
+
+export type Category = 
+  | "Pokémon TCG"
+  | "Sports Cards"
+  | "Other TCG"
+  | "Funko Pop"
+  | "Lego"
+  | "Sneakers"
+  | "Video Games"
+  | "Comics"
+  | "Watches"
+  | "Coins"
+  | "Other";
+
+export type ItemCondition = 
+  | "Mint" | "Near Mint" | "Lightly Played" | "Played" | "Damaged"
+  | "Mint Box" | "Damaged Box" | "Out of Box"
+  | "Sealed" | "Complete" | "Incomplete"
+  | "Deadstock" | "VNDS" | "Used" | "Beaters"
+  | "New" | "Like New" | "Good" | "Fair" | "Poor"
+  | "Raw" | "Uncirculated" | "Proof" | "Bullion"
+  | string; 
+
+export type ItemStatus = "Showcase" | "For Trade" | "For Sale" | string;
+
+export interface CollectibleItem {
+  id: string;
+  masterId?: string;
+  name: string;
+  category: Category;
+  imageUrl: string;
+  customImage?: string;
+  estimatedValue?: number;
+  condition?: ItemCondition;
+  status?: ItemStatus;
+  upForTrade: boolean;
+  notes?: string;
+  
+  // 🔥 השדות החדשים - חובה שיהיו כאן כדי שהאדום יעלם!
+  graded?: boolean;
+  grader?: string;
+  gradeNum?: string;
+  year?: string;
+  pieces?: string;
+}
+
+export interface NavItem {
+  label: string;
+  icon: LucideIcon;
+  href: string;
+  active?: boolean;
 }
