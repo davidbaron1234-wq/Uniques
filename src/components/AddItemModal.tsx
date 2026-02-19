@@ -41,7 +41,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   const [masterId, setMasterId] = useState<string | undefined>();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<MasterItem[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [, setIsSearching] = useState(false);
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -130,7 +130,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               // 🔥 התיקון: הודעה ידידותית במקום שגיאה
               setPriceStatus({ msg: "Market data unavailable. Set your price!", type: 'manual' });
           }
-      } catch (e) {
+      } catch {
           // גם בקריסה - אנחנו נחמדים
           setPriceStatus({ msg: "Market data unavailable. Set your price!", type: 'manual' });
       }
@@ -176,7 +176,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         const data = await res.json();
 
         if (data.found) {
-            let finalName = data.title;
+            const finalName = data.title;
             let detectedCategory: Category = "Other"; 
             const rawText = (data.title + " " + data.category).toLowerCase();
 
@@ -286,7 +286,6 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         if (geminiResult.visual) {
             const visual = geminiResult.visual;
             const lowerName = visual.name.toLowerCase();
-            const lowerCat = (visual.category || "").toLowerCase();
 
             // לוגיקת קטגוריות
             let detectedCategory: Category = "Other";
@@ -317,8 +316,10 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                 const cardResult = await identifyCard(base64);
                 if (cardResult.success && cardResult.cardName) {
                     setName(cardResult.cardName);
-                    const match = (cardResult.raw as any)?.records?.[0]?._objects?.[0]?._identification?.best_match;
-                    fetchMarketPrice(cardResult.cardName, "Pokémon TCG", match?.set_series_code, match?.card_number);
+                    const rawRecord = (cardResult.raw as unknown as Record<string, unknown[]>)?.records?.[0] as Record<string, unknown[]> | undefined;
+                    const obj = (rawRecord?._objects?.[0] as Record<string, Record<string, unknown>> | undefined);
+                    const bestMatch = obj?._identification?.best_match as Record<string, string> | undefined;
+                    fetchMarketPrice(cardResult.cardName, "Pokémon TCG", bestMatch?.set_series_code, bestMatch?.card_number);
                 } else {
                     fetchMarketPrice(visual.name, "Pokémon TCG");
                 }
@@ -334,7 +335,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         } else {
              setScanError("Could not identify item.");
         }
-      } catch (err) {
+      } catch {
         setScanError("Scan failed.");
       } finally {
         setIsScanning(false);
@@ -457,7 +458,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   <div className="absolute z-50 w-full mt-2 bg-charcoal-light rounded-2xl border border-white/10 overflow-hidden shadow-2xl max-h-60 overflow-y-auto">
                     {suggestions.map((s) => (
                       <button key={s.id} onClick={() => handleSelectSuggestion(s)} className="w-full p-3 flex items-center gap-3 hover:bg-white/5 text-left border-b border-white/5 transition-colors">
-                        <img src={s.imageSmall} className="w-10 h-10 rounded-lg object-cover" />
+                        <img src={s.imageSmall} alt={s.name} className="w-10 h-10 rounded-lg object-cover" />
                         <div><p className="text-sm text-cream font-bold">{s.name}</p><p className="text-[10px] text-cream/40">{s.category}</p></div>
                       </button>
                     ))}

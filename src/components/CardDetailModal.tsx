@@ -4,11 +4,12 @@ import { useState } from "react";
 import { X, Plus, Sparkles, BookOpen, DollarSign, ArrowLeftRight } from "lucide-react";
 import { MasterItem } from "@/lib/catalog/types";
 import { formatValue } from "@/lib/format";
+import MarketplaceModal, { MarketplaceItem } from "./MarketplaceModal";
 
 interface CardDetailModalProps {
   item: MasterItem | null;
   onClose: () => void;
-  onAdd: () => void; // 🔥 הפונקציה שהייתה חסרה!
+  onAdd: () => void;
 }
 
 // ── Rarity tier mapping ──────────────────────────────────────────────────
@@ -86,18 +87,29 @@ const MOCK_COLLECTORS = [
 
 export default function CardDetailModal({ item, onClose, onAdd }: CardDetailModalProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [showMarketplace, setShowMarketplace] = useState(false);
 
   if (!item) return null;
 
   const tier = getRarityTier(item.rarity);
   const styles = RARITY_STYLES[tier];
 
+  const handleClose = () => {
+    setImageLoaded(false);
+    setShowMarketplace(false);
+    onClose();
+  };
+
+  const marketplaceItem: MarketplaceItem | null = item
+    ? { name: item.name, imageUrl: item.imageLarge || item.imageSmall, marketPrice: item.marketPrice }
+    : null;
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop with blur */}
       <div
         className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* Modal container */}
@@ -106,7 +118,7 @@ export default function CardDetailModal({ item, onClose, onAdd }: CardDetailModa
       >
         {/* Close button */}
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute top-3 right-3 z-30 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
           aria-label="Close"
         >
@@ -211,14 +223,12 @@ export default function CardDetailModal({ item, onClose, onAdd }: CardDetailModa
         {/* Bottom action bar */}
         <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
           <button
-            onClick={onClose}
+            onClick={() => setShowMarketplace(true)}
             className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-surface/10 text-surface-light/60 font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all"
           >
             <ArrowLeftRight className="w-4 h-4" />
             Trade
           </button>
-          
-          {/* 🔥 כפתור ההוספה החדש שמפעיל את onAdd מהאבא */}
           <button
             onClick={onAdd}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
@@ -228,6 +238,13 @@ export default function CardDetailModal({ item, onClose, onAdd }: CardDetailModa
           </button>
         </div>
       </div>
+
+      {/* Marketplace overlay */}
+      <MarketplaceModal
+        isOpen={showMarketplace}
+        onClose={() => setShowMarketplace(false)}
+        item={marketplaceItem}
+      />
     </div>
   );
 }

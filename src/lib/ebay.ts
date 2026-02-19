@@ -43,7 +43,7 @@ export async function getEbayMarketPrice(query: string) {
 
     // 🔥 תיקון 2: חישוב חכם יותר (סינון רעשים)
     const prices = items
-      .map((item: any) => parseFloat(item.price.value))
+      .map((item: unknown) => parseFloat((item as { price: { value: string } }).price.value))
       .filter((p: number) => p > 0)
       .sort((a: number, b: number) => a - b); // מסדרים מהנמוך לגבוה
 

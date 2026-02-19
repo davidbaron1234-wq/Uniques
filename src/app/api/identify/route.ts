@@ -1,44 +1,66 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(request: Request) {
+// ── POST /api/identify ─────────────────────────────────────────────────────
+// Server-side proxy for Ximilar visual AI card recognition.
+// Uses the TCG-specific endpoint for better card identification.
+
+const XIMILAR_API_KEY = "fd7cb18664eabef30a2de9ca37d8bcd4c15ef948";
+const XIMILAR_ENDPOINT = "https://api.ximilar.com/collectibles/v2/tcg_id";
+
+export async function POST(request: NextRequest) {
   try {
-    const { base64Image } = await request.json();
+    const body = await request.json();
+    const { base64Image } = body as { base64Image?: string };
 
-    if (!base64Image) {
+    if (!base64Image || typeof base64Image !== "string") {
       return NextResponse.json(
-        { error: "Image data is missing" },
+        { success: false, error: "Missing or invalid base64Image field" },
         { status: 400 }
       );
     }
 
-    const API_KEY = "fd7cb18664eabef30a2de9ca37d8bcd4c15ef948"; 
+    // Strip the data URL prefix if present (e.g. "data:image/jpeg;base64,")
+    const base64Data = base64Image.includes(",")
+      ? base64Image.split(",")[1]
+      : base64Image;
 
-    // שליחה ל-Ximilar (TCG Endpoint)
-    const response = await fetch("https://api.ximilar.com/collectibles/v2/tcg_id", { 
+    const ximilarRes = await fetch(XIMILAR_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Token ${API_KEY}`,
+        Authorization: `Token ${XIMILAR_API_KEY}`,
       },
       body: JSON.stringify({
-        records: [{ _base64: base64Image }],
+        records: [{ _base64: base64Data }],
       }),
     });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Ximilar Error:", errorText);
-        return NextResponse.json({ error: "Failed to identify card" }, { status: response.status });
+    // Surface specific HTTP errors for easier debugging
+    if (ximilarRes.status === 401 || ximilarRes.status === 403) {
+      return NextResponse.json(
+        { success: false, error: "API Key Invalid — Ximilar rejected the token" },
+        { status: 401 }
+      );
     }
 
-    const data = await response.json();
-    // מחקנו את ה-console.log של הריגול כאן
-    return NextResponse.json(data);
+    if (!ximilarRes.ok) {
+      const errorText = await ximilarRes.text().catch(() => "");
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Ximilar API error ${ximilarRes.status}: ${ximilarRes.statusText}`,
+          detail: errorText.slice(0, 500),
+        },
+        { status: 502 }
+      );
+    }
 
-  } catch (error) {
-    console.error("Server Error:", error);
+    const data = await ximilarRes.json();
+    return NextResponse.json(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown server error";
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { success: false, error: `Server error: ${message}` },
       { status: 500 }
     );
   }

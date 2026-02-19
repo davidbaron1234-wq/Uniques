@@ -48,8 +48,8 @@ export async function POST(req: Request) {
     console.log("Gemini Hybrid Response:", cleanText); 
     return NextResponse.json(JSON.parse(cleanText));
 
-  } catch (error: any) {
-    console.error("Gemini Error:", error.message);
+  } catch (error: unknown) {
+    console.error("Gemini Error:", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "AI Error" }, { status: 500 });
   }
 }

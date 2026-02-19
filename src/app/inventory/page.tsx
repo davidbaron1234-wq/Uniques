@@ -23,6 +23,7 @@ import EditProfileModal, { UserProfile } from "@/components/EditProfileModal";
 import GrailsPickerModal from "@/components/GrailsPickerModal";
 import ReviewsListModal from "@/components/ReviewsListModal";
 import ItemConfigForm, { ItemConfig } from "@/components/ItemConfigForm";
+import MarketplaceModal from "@/components/MarketplaceModal";
 import { inventoryItems, currentUser } from "@/lib/data";
 import { formatValue } from "@/lib/format";
 import { CollectibleItem, Category, ItemCondition, ItemStatus } from "@/lib/types";
@@ -36,17 +37,16 @@ import {
   DollarSign,
   TrendingUp,
   Package,
-  Truck,
   Database,
   Edit3,
-  Wallet,
   X,
   Save,
   Trash2,
   ChevronLeft,
   Shield,
   Tag,
-  Award // הוספתי את האייקון הזה לתצוגה
+  Award,
+  BarChart3,
 } from "lucide-react";
 
 // ── localStorage keys ────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ export default function ProfilePage() {
   const [activeFilter, setActiveFilter] = useState<ProfileFilter>("All");
   const [editingItem, setEditingItem] = useState<CollectibleItem | null>(null);
   const [viewMode, setViewMode] = useState(true);
-  
+  const [showMarketplace, setShowMarketplace] = useState(false);
   const [editConfig, setEditConfig] = useState<ItemConfig>({
     askingPrice: undefined,
     condition: "Near Mint",
@@ -598,13 +598,17 @@ export default function ProfilePage() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
-                  <button onClick={handleDeleteItem} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all">
+                <div className="flex gap-2 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
+                  <button onClick={handleDeleteItem} className="flex items-center justify-center px-3.5 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all">
                     <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setShowMarketplace(true)} className="flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-2xl bg-surface/10 text-surface-light/60 font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all">
+                    <BarChart3 className="w-4 h-4" />
+                    Market
                   </button>
                   <button onClick={handleStartEdit} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all">
                     <Edit3 className="w-4 h-4" />
-                    Edit Item
+                    Edit
                   </button>
                 </div>
               </>
@@ -637,6 +641,17 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+
+      {/* Marketplace Modal */}
+      <MarketplaceModal
+        isOpen={showMarketplace}
+        onClose={() => setShowMarketplace(false)}
+        item={editingItem ? {
+          name: editingItem.name,
+          imageUrl: editingItem.customImage || editingItem.imageUrl,
+          marketPrice: editingItem.estimatedValue || 0,
+        } : null}
+      />
 
       <BottomNav />
     </div>

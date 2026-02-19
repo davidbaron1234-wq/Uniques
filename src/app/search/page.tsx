@@ -296,7 +296,7 @@ export default function SearchPage() {
                         <ArrowLeft className="w-5 h-5 text-cream/50" />
                     </button>
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <img src={addItem.imageSmall} className="w-9 h-9 rounded-lg object-cover" />
+                        <img src={addItem.imageSmall} alt={addItem.name} className="w-9 h-9 rounded-lg object-cover" />
                         <div className="min-w-0">
                             <p className="text-[10px] text-cream/40 font-bold uppercase tracking-wider">Add Collection</p>
                             <h2 className="text-sm font-bold text-cream truncate">{addItem.name}</h2>

@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   try {
     const price = await getEbayMarketPrice(query);
     return NextResponse.json({ price });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch price" }, { status: 500 });
   }
 }
