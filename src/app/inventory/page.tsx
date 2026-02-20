@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
+import { useInventory } from "@/lib/InventoryContext";
 import AddItemModal from "@/components/AddItemModal";
 import EditProfileModal, { UserProfile } from "@/components/EditProfileModal";
 import GrailsPickerModal from "@/components/GrailsPickerModal";
@@ -47,6 +48,8 @@ import {
   Tag,
   Award,
   BarChart3,
+  Lock,
+  Unlock,
 } from "lucide-react";
 
 // ── localStorage keys ────────────────────────────────────────────────────
@@ -100,7 +103,7 @@ function loadPinnedGrails(): string[] {
 }
 
 // ── Filter helper ────────────────────────────────────────────────────────
-const PROFILE_FILTERS = ["All", ...CATEGORIES] as const;
+const PROFILE_FILTERS = ["All", "In Trade", ...CATEGORIES] as const;
 type ProfileFilter = (typeof PROFILE_FILTERS)[number];
 
 // ── Sortable grid item ──────────────────────────────────────────────────
@@ -140,7 +143,11 @@ function SortableItem({ item, onTap }: { item: CollectibleItem; onTap: () => voi
         />
       </div>
 
-      {item.upForTrade && (
+      {item.isLocked ? (
+        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-amber-500/90 flex items-center justify-center shadow-soft">
+          <span className="text-[7px] font-bold text-charcoal-dark leading-none">IN TRADE</span>
+        </div>
+      ) : item.upForTrade && (
         <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary/90 flex items-center justify-center shadow-soft">
           <ArrowLeftRight className="w-2.5 h-2.5 text-charcoal-dark" />
         </div>
@@ -201,6 +208,7 @@ function TrustStars({ score, reviewCount, onClick }: { score: number; reviewCoun
 // ═════════════════════════════════════════════════════════════════════════
 
 export default function ProfilePage() {
+  const { unlockItems } = useInventory();
   const [items, setItems] = useState<CollectibleItem[]>(inventoryItems);
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
   const [pinnedGrailIds, setPinnedGrailIds] = useState<string[]>([]);
@@ -268,10 +276,11 @@ export default function ProfilePage() {
     return pinned.slice(0, 3);
   }, [items, pinnedGrailIds]);
 
-  const filteredItems = useMemo(
-    () => activeFilter === "All" ? items : items.filter((item) => item.category === activeFilter),
-    [items, activeFilter]
-  );
+  const filteredItems = useMemo(() => {
+    if (activeFilter === "All")      return items;
+    if (activeFilter === "In Trade") return items.filter((item) => item.isLocked === true);
+    return items.filter((item) => item.category === activeFilter);
+  }, [items, activeFilter]);
 
   const linkedCount = useMemo(
     () => items.filter((i) => i.masterId).length,
@@ -380,6 +389,16 @@ export default function ProfilePage() {
     if (!editingItem) return;
     setItems((prev) => prev.filter((i) => i.id !== editingItem.id));
     setEditingItem(null);
+  };
+
+  const handleCancelOffer = () => {
+    if (!editingItem) return;
+    // Unlock in context (persists to localStorage) and in local state
+    unlockItems([editingItem.id]);
+    setItems((prev) =>
+      prev.map((i) => (i.id === editingItem.id ? { ...i, isLocked: false } : i))
+    );
+    setEditingItem((prev) => prev ? { ...prev, isLocked: false } : null);
   };
 
   const filters = PROFILE_FILTERS;
@@ -563,6 +582,12 @@ export default function ProfilePage() {
                       <p className="text-sm text-cream/40 mt-0.5">{editingItem.category}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      {editingItem.isLocked && (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25">
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                          <span className="text-xs font-bold text-amber-400">In Trade · Pending</span>
+                        </div>
+                      )}
                       {editingItem.graded && editingItem.gradeNum ? (
                          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
                            <Award className="w-3.5 h-3.5 text-purple-400" />
@@ -602,14 +627,26 @@ export default function ProfilePage() {
                   <button onClick={handleDeleteItem} className="flex items-center justify-center px-3.5 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all">
                     <Trash2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setShowMarketplace(true)} className="flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-2xl bg-surface/10 text-surface-light/60 font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all">
-                    <BarChart3 className="w-4 h-4" />
-                    Market
-                  </button>
-                  <button onClick={handleStartEdit} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all">
-                    <Edit3 className="w-4 h-4" />
-                    Edit
-                  </button>
+                  {editingItem.isLocked ? (
+                    <button
+                      onClick={handleCancelOffer}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-amber-500/15 text-amber-400 font-bold text-sm hover:bg-amber-500/25 active:scale-[0.97] transition-all"
+                    >
+                      <Unlock className="w-4 h-4" />
+                      Cancel Offer
+                    </button>
+                  ) : (
+                    <>
+                      <button onClick={() => setShowMarketplace(true)} className="flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-2xl bg-surface/10 text-surface-light/60 font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all">
+                        <BarChart3 className="w-4 h-4" />
+                        Market
+                      </button>
+                      <button onClick={handleStartEdit} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all">
+                        <Edit3 className="w-4 h-4" />
+                        Edit
+                      </button>
+                    </>
+                  )}
                 </div>
               </>
             ) : (

@@ -78,14 +78,18 @@ function InventoryCard({
 }) {
   const label = condLabel(item);
   const isGraded = !!(item.graded && item.grader);
+  const locked = item.isLocked === true;
 
   return (
     <button
-      onClick={onToggle}
-      className={`relative flex flex-col rounded-2xl overflow-hidden border-2 text-left transition-all active:scale-[0.94] ${
-        selected
-          ? "border-primary shadow-[0_0_14px_rgba(202,230,206,0.18)]"
-          : "border-white/[0.06] hover:border-white/[0.15]"
+      onClick={locked ? undefined : onToggle}
+      disabled={locked}
+      className={`relative flex flex-col rounded-2xl overflow-hidden border-2 text-left transition-all ${
+        locked
+          ? "border-amber-500/30 opacity-60 cursor-not-allowed"
+          : selected
+          ? "border-primary shadow-[0_0_14px_rgba(202,230,206,0.18)] active:scale-[0.94]"
+          : "border-white/[0.06] hover:border-white/[0.15] active:scale-[0.94]"
       }`}
     >
       {/* Square image */}
@@ -96,8 +100,17 @@ function InventoryCard({
           className="w-full h-full object-cover"
         />
 
+        {/* Locked — "PENDING" badge */}
+        {locked && (
+          <div className="absolute inset-0 bg-amber-500/10 flex items-start justify-end p-1.5">
+            <span className="text-[8px] font-bold bg-amber-500/90 text-charcoal-dark px-1.5 py-0.5 rounded leading-none">
+              PENDING
+            </span>
+          </div>
+        )}
+
         {/* Selected overlay + checkmark */}
-        {selected && (
+        {!locked && selected && (
           <div className="absolute inset-0 bg-primary/25 flex items-start justify-end p-1.5">
             <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow">
               <Check className="w-3 h-3 text-charcoal-dark" strokeWidth={3} />
@@ -118,14 +131,16 @@ function InventoryCard({
 
       {/* Info row */}
       <div className={`px-1.5 py-1.5 flex flex-col gap-0.5 transition-colors ${
-        selected ? "bg-primary/10" : "bg-white/[0.03]"
+        locked ? "bg-amber-500/5" : selected ? "bg-primary/10" : "bg-white/[0.03]"
       }`}>
         <p className="text-[10px] font-bold text-cream leading-tight line-clamp-2 min-h-[2.4em]">
           {item.name}
         </p>
         <div className="flex items-center justify-between gap-1">
           {item.estimatedValue != null ? (
-            <span className={`text-[10px] font-bold ${selected ? "text-primary" : "text-primary/80"}`}>
+            <span className={`text-[10px] font-bold ${
+              locked ? "text-amber-400/60" : selected ? "text-primary" : "text-primary/80"
+            }`}>
               {formatValue(item.estimatedValue)}
             </span>
           ) : (
@@ -149,7 +164,7 @@ export default function TradeOfferModal({
   counterparty,
   mode,
 }: TradeOfferModalProps) {
-  const { items } = useInventory();
+  const { items, lockItems } = useInventory();
 
   // ── All hooks above early return ──────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -228,6 +243,8 @@ export default function TradeOfferModal({
   };
 
   const handleConfirm = () => {
+    // Lock all items included in the sent offer
+    if (selectedIds.size > 0) lockItems(Array.from(selectedIds));
     setSuccess(true);
     setTimeout(resetAndClose, 2200);
   };

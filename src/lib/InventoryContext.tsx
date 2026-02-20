@@ -22,6 +22,8 @@ interface InventoryContextValue {
   updateItem: (id: string, updates: Partial<CollectibleItem>) => void;
   removeItem: (id: string) => void;
   hasItem: (masterId: string) => boolean;
+  lockItems: (ids: string[]) => void;
+  unlockItems: (ids: string[]) => void;
   toast: string | null;
   clearToast: () => void;
 }
@@ -116,11 +118,25 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }, []);
 
+  const lockItems = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    setItems((prev) =>
+      prev.map((item) => (idSet.has(item.id) ? { ...item, isLocked: true } : item))
+    );
+  }, []);
+
+  const unlockItems = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    setItems((prev) =>
+      prev.map((item) => (idSet.has(item.id) ? { ...item, isLocked: false } : item))
+    );
+  }, []);
+
   const clearToast = useCallback(() => setToast(null), []);
 
   return (
     <InventoryContext.Provider
-      value={{ items, totalValue, addFromCatalog, updateItem, removeItem, hasItem, toast, clearToast }}
+      value={{ items, totalValue, addFromCatalog, updateItem, removeItem, hasItem, lockItems, unlockItems, toast, clearToast }}
     >
       {children}
     </InventoryContext.Provider>

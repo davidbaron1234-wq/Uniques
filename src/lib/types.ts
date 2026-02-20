@@ -107,6 +107,7 @@ export interface CollectibleItem {
   condition?: ItemCondition;
   status?: ItemStatus;
   upForTrade: boolean;
+  isLocked?: boolean;      // true while a sent trade offer is pending
   notes?: string;
   
   // שדות מתקדמים (אופציונליים)
