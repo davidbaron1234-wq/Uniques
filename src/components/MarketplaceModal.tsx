@@ -74,8 +74,9 @@ const GRADED_CATEGORIES = new Set([
 
 // ── Offer item names per category ────────────────────────────────────────────
 
+// Pokémon items use real card names from the seed catalog so thumbnail URLs resolve correctly.
 const OFFER_ITEM_NAMES: Record<string, string[]> = {
-  "Pokémon TCG":  ["Pikachu V Alt Art", "Umbreon VMAX Alt Art", "Charizard ex SAR", "Mewtwo ex SAR", "Lugia ex SAR"],
+  "Pokémon TCG":  ["Charizard", "Blastoise", "Mewtwo", "Pikachu", "Snorlax"],
   "Sports Cards": ["Prizm Silver RC", "Jersey Auto RC", "Optic Holo RPA", "Select Prizm Die-Cut"],
   "Other TCG":    ["Black Lotus (PL)", "Mox Ruby", "Blue-Eyes Ultimate Dragon", "Dark Magician Gold"],
   "Funko Pop":    ["Freddy Funko Chase", "Batman #01 Chase", "GitD Con Exclusive", "SDCC Exclusive"],
@@ -94,18 +95,23 @@ function getOfferItemName(category: string | undefined, idx: number): string {
 
 // ── Item thumbnail images ─────────────────────────────────────────────────────
 
-// Real artwork for known mock items; others fall back to DiceBear shapes
-const POKEAPI = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork";
+// Real card face images from images.pokemontcg.io — confirmed from seed data.
+// URL pattern: https://images.pokemontcg.io/{setId}/{cardNumber}.png
+const TCG = "https://images.pokemontcg.io";
 const ITEM_THUMBNAILS: Record<string, string> = {
-  // Pokémon TCG — official Pokémon artwork keyed by Pokédex number
-  "Pikachu V Alt Art":    `${POKEAPI}/25.png`,
-  "Umbreon VMAX Alt Art": `${POKEAPI}/197.png`,
-  "Charizard ex SAR":     `${POKEAPI}/6.png`,
-  "Mewtwo ex SAR":        `${POKEAPI}/150.png`,
-  "Lugia ex SAR":         `${POKEAPI}/249.png`,
-  // Sports Cards
-  "Prizm Silver RC":      "https://images.pokemontcg.io/base1/4.png", // placeholder art style
-  // Sneakers — use Unsplash stable IDs
+  // ── Pokémon TCG (Base / Jungle / Fossil — all confirmed in seed data) ──────
+  "Charizard":      `${TCG}/base1/4.png`,
+  "Blastoise":      `${TCG}/base1/2.png`,
+  "Mewtwo":         `${TCG}/base1/10.png`,
+  "Pikachu":        `${TCG}/base1/35.png`,
+  "Snorlax":        `${TCG}/base2/11.png`,
+  "Gengar":         `${TCG}/base3/5.png`,
+  "Articuno":       `${TCG}/base3/2.png`,
+  "Dragonite":      `${TCG}/base3/4.png`,
+  "Flareon":        `${TCG}/base2/3.png`,
+  "Vaporeon":       `${TCG}/base2/12.png`,
+  "Dark Charizard": `${TCG}/base5/4.png`,
+  // ── Sneakers — Unsplash stable photos ─────────────────────────────────────
   "Jordan 1 High 'Chicago'": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=80&h=80&fit=crop",
   "Nike SB Dunk 'Panda'":    "https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=80&h=80&fit=crop",
   "Air Max 97 'Silver'":     "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=80&h=80&fit=crop",
@@ -421,12 +427,19 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
   };
 
   const handleAcceptConfirm = () => {
-    // Compare by masterId (exact) first, then case-insensitive trimmed name
+    // Three-tier match (most → least precise):
+    // 1. masterId  — exact catalog ID match
+    // 2. imageUrl  — same CDN image URL = definitively the same card
+    // 3. name      — case-insensitive, covers cross-set same-name cards
     const norm = (s: string) => s.trim().toLowerCase();
+    const marketId   = item?.id ?? "";
+    const marketImg  = item?.imageUrl ?? "";
+    const marketName = item?.name ? norm(item.name) : "";
     const ownsItem = inventory.some(
       (i) =>
-        (item?.id && i.masterId === item.id) ||
-        (i.name != null && item?.name != null && norm(i.name) === norm(item.name)),
+        (marketId  && i.masterId  === marketId)  ||
+        (marketImg && i.imageUrl  === marketImg)  ||
+        (marketName && i.name && norm(i.name) === marketName),
     );
     if (!ownsItem) {
       setAcceptError(
