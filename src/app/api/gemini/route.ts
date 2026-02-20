@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     const { image } = await req.json();
     if (!image) return NextResponse.json({ error: "No image" }, { status: 400 });
     
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const base64Data = image.includes("base64,") ? image.split("base64,")[1] : image;
 
     const prompt = `
