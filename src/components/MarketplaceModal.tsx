@@ -17,6 +17,7 @@ import {
   Award,
   ChevronDown,
   SlidersHorizontal,
+  Package,
 } from "lucide-react";
 import { formatValue } from "@/lib/format";
 import type { Category } from "@/lib/constants";
@@ -41,8 +42,9 @@ type MarketTab = "buy" | "sell";
 type SortMode = "price" | "trust";
 export type TradeIntent = "Cash Only" | "Trade Only" | "Open to Both";
 type Logistics = "Local Meetup" | "Ships Worldwide" | "PayPal G&S";
+type DealTier = "low" | "below" | "fair" | "great";
 
-// ── Category → condition mapping (mirrors ItemConfigForm) ───────────────────
+// ── Category → condition mapping ────────────────────────────────────────────
 
 const CATEGORY_CONDITIONS: Record<string, string[]> = {
   "Pokémon TCG":  ["PSA 10", "PSA 9", "Near Mint", "Lightly Played", "Played", "Damaged"],
@@ -64,13 +66,31 @@ function getConditionsForCategory(cat?: string): string[] {
   return CATEGORY_CONDITIONS[cat] || DEFAULT_CONDITIONS;
 }
 
-// ── Categories that support "Graded Only" filter ────────────────────────────
-
 const GRADED_CATEGORIES = new Set([
   "Pokémon TCG", "Sports Cards", "Other TCG", "Coins", "Comics",
 ]);
 
-// ── Mock data helpers ───────────────────────────────────────────────────────
+// ── Offer item names per category ────────────────────────────────────────────
+
+const OFFER_ITEM_NAMES: Record<string, string[]> = {
+  "Pokémon TCG":  ["Pikachu V Alt Art", "Umbreon VMAX Alt Art", "Charizard ex SAR", "Mewtwo ex SAR", "Lugia ex SAR"],
+  "Sports Cards": ["Prizm Silver RC", "Jersey Auto RC", "Optic Holo RPA", "Select Prizm Die-Cut"],
+  "Other TCG":    ["Black Lotus (PL)", "Mox Ruby", "Blue-Eyes Ultimate Dragon", "Dark Magician Gold"],
+  "Funko Pop":    ["Freddy Funko Chase", "Batman #01 Chase", "GitD Con Exclusive", "SDCC Exclusive"],
+  "Lego":         ["UCS Millennium Falcon", "Technic Bugatti Chiron", "Icons Big Ben", "Creator Eiffel Tower"],
+  "Sneakers":     ["Jordan 1 High 'Chicago'", "Nike SB Dunk 'Panda'", "Air Max 97 'Silver'", "Yeezy 350 'Cream'"],
+  "Video Games":  ["Factory Sealed SNES RPG", "Complete CIB N64", "Limited Edition PS2", "NTSC-J First Print"],
+  "Comics":       ["Amazing Fantasy #15 FR", "X-Men #1 GD", "Batman #1 PL", "Action Comics FR/GD"],
+  "Watches":      ["Seiko Prospex Turtle", "Hamilton Khaki Field", "Tissot PRX Auto", "Citizen Promaster"],
+  "Coins":        ["1921 Morgan Dollar", "1oz Gold Eagle", "1909-S VDB Lincoln", "1881-S Morgan MS65"],
+};
+
+function getOfferItemName(category: string | undefined, idx: number): string {
+  const pool = OFFER_ITEM_NAMES[category ?? ""] ?? ["Rare Collectible", "Limited Edition", "Vintage Piece"];
+  return pool[idx % pool.length];
+}
+
+// ── Mock data types ──────────────────────────────────────────────────────────
 
 const avatar = (seed: string) =>
   `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,ffd5dc`;
@@ -89,15 +109,24 @@ export interface MockSeller {
   logistics: Logistics;
 }
 
+export interface BuyerOfferItem {
+  name: string;
+  condition: string;
+  value: number;
+}
+
 export interface MockBuyer {
   name: string;
   seed: string;
   trust: number;
   trades: number;
-  offerPrice: number;
+  offerPrice: number;        // cash component (0 for Trade Only)
+  offerItems: BuyerOfferItem[]; // items component ([] for Cash Only)
   intent: TradeIntent;
   logistics: Logistics;
 }
+
+// ── Templates ────────────────────────────────────────────────────────────────
 
 const SELLER_TEMPLATES = [
   { name: "Alex",   seed: "Alex",   trust: 4.5, trades: 32, condIdx: 0, priceMult: 1.10, intentIdx: 2, logIdx: 1 },
@@ -108,12 +137,14 @@ const SELLER_TEMPLATES = [
   { name: "Taylor", seed: "Taylor", trust: 4.9, trades: 41, condIdx: 0, priceMult: 1.15, intentIdx: 2, logIdx: 0 },
 ];
 
+// cashFraction: how much of total offer is cash (0=items only, 1=cash only)
+// itemCount: how many items they're offering
 const BUYER_TEMPLATES = [
-  { name: "Casey", seed: "Casey", trust: 4.3, trades: 22, offerMult: 0.88, intentIdx: 2, logIdx: 1 },
-  { name: "Drew",  seed: "Drew",  trust: 4.8, trades: 63, offerMult: 0.92, intentIdx: 0, logIdx: 2 },
-  { name: "Quinn", seed: "Quinn", trust: 3.6, trades: 5,  offerMult: 0.75, intentIdx: 1, logIdx: 0 },
-  { name: "Avery", seed: "Avery", trust: 4.1, trades: 19, offerMult: 0.85, intentIdx: 2, logIdx: 1 },
-  { name: "Blake", seed: "Blake", trust: 4.6, trades: 37, offerMult: 0.90, intentIdx: 0, logIdx: 1 },
+  { name: "Casey", seed: "Casey", trust: 4.3, trades: 22, offerMult: 0.88, cashFraction: 0.40, itemCount: 1, intentIdx: 2, logIdx: 1 },
+  { name: "Drew",  seed: "Drew",  trust: 4.8, trades: 63, offerMult: 0.92, cashFraction: 1.00, itemCount: 0, intentIdx: 0, logIdx: 2 },
+  { name: "Quinn", seed: "Quinn", trust: 3.6, trades: 5,  offerMult: 0.75, cashFraction: 0.00, itemCount: 2, intentIdx: 1, logIdx: 0 },
+  { name: "Avery", seed: "Avery", trust: 4.1, trades: 19, offerMult: 0.85, cashFraction: 0.35, itemCount: 2, intentIdx: 2, logIdx: 1 },
+  { name: "Blake", seed: "Blake", trust: 4.6, trades: 37, offerMult: 0.90, cashFraction: 1.00, itemCount: 0, intentIdx: 0, logIdx: 1 },
 ];
 
 function generateListings(price: number, category?: string) {
@@ -130,23 +161,58 @@ function generateListings(price: number, category?: string) {
     logistics: LOGISTICS_OPTIONS[t.logIdx],
   }));
 
-  const buyers: MockBuyer[] = BUYER_TEMPLATES.map((t) => ({
-    name: t.name,
-    seed: t.seed,
-    trust: t.trust,
-    trades: t.trades,
-    offerPrice: Math.round(price * t.offerMult),
-    intent: INTENTS[t.intentIdx],
-    logistics: LOGISTICS_OPTIONS[t.logIdx],
-  }));
+  const buyers: MockBuyer[] = BUYER_TEMPLATES.map((t) => {
+    const totalValue  = Math.round(price * t.offerMult);
+    const cashAmount  = Math.round(totalValue * t.cashFraction);
+    const itemsValue  = totalValue - cashAmount;
+    const perItem     = t.itemCount > 0 ? Math.round(itemsValue / t.itemCount) : 0;
+
+    const offerItems: BuyerOfferItem[] = Array.from({ length: t.itemCount }, (_, i) => ({
+      name:      getOfferItemName(category, i),
+      condition: conditions[i % conditions.length],
+      value:     perItem,
+    }));
+
+    return {
+      name:       t.name,
+      seed:       t.seed,
+      trust:      t.trust,
+      trades:     t.trades,
+      offerPrice: cashAmount,
+      offerItems,
+      intent:     INTENTS[t.intentIdx],
+      logistics:  LOGISTICS_OPTIONS[t.logIdx],
+    };
+  });
 
   return { sellers, buyers };
 }
 
-// ── Badge styling helpers ───────────────────────────────────────────────────
+// ── Deal quality helpers ─────────────────────────────────────────────────────
+
+function buyerTotalOffer(b: MockBuyer): number {
+  return b.offerPrice + b.offerItems.reduce((s, i) => s + i.value, 0);
+}
+
+function getDealTier(offer: number, market: number): DealTier {
+  if (market <= 0) return "fair";
+  const r = offer / market;
+  if (r < 0.70) return "low";
+  if (r < 0.90) return "below";
+  if (r <= 1.10) return "fair";
+  return "great";
+}
+
+const DEAL_STYLE: Record<DealTier, { badge: string; bar: string; text: string; label: string }> = {
+  low:   { badge: "text-red-400 bg-red-500/10 border-red-500/25",      bar: "bg-red-500",   text: "text-red-400",   label: "Low" },
+  below: { badge: "text-amber-400 bg-amber-500/10 border-amber-500/25", bar: "bg-amber-400", text: "text-amber-400", label: "Below" },
+  fair:  { badge: "text-primary bg-primary/10 border-primary/25",       bar: "bg-primary",   text: "text-primary",  label: "Fair" },
+  great: { badge: "text-green-400 bg-green-500/10 border-green-500/25", bar: "bg-green-400", text: "text-green-400", label: "Great!" },
+};
+
+// ── Badge styling helpers ─────────────────────────────────────────────────────
 
 function conditionColor(c: string): string {
-  // Graded cards
   if (c.startsWith("PSA") || c.startsWith("BGS") || c.startsWith("MS-"))
     return "text-yellow-400 bg-yellow-400/10 border-yellow-400/20";
   switch (c) {
@@ -171,17 +237,17 @@ function conditionColor(c: string): string {
 
 function intentStyle(intent: TradeIntent): { text: string; icon: typeof DollarSign } {
   switch (intent) {
-    case "Cash Only":     return { text: "text-green-400", icon: DollarSign };
-    case "Trade Only":    return { text: "text-purple-400", icon: ArrowLeftRight };
-    case "Open to Both":  return { text: "text-cyan-400", icon: Handshake };
+    case "Cash Only":    return { text: "text-green-400",  icon: DollarSign };
+    case "Trade Only":   return { text: "text-purple-400", icon: ArrowLeftRight };
+    case "Open to Both": return { text: "text-cyan-400",   icon: Handshake };
   }
 }
 
 function logisticsIcon(l: Logistics): typeof Truck {
   switch (l) {
-    case "Local Meetup":     return MapPin;
-    case "Ships Worldwide":  return Globe;
-    case "PayPal G&S":       return CreditCard;
+    case "Local Meetup":    return MapPin;
+    case "Ships Worldwide": return Globe;
+    case "PayPal G&S":      return CreditCard;
   }
 }
 
@@ -190,40 +256,42 @@ function logisticsIcon(l: Logistics): typeof Truck {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceModalProps) {
-  const [activeTab, setActiveTab] = useState<MarketTab>("buy");
-  const [showBidForm, setShowBidForm] = useState(false);
-  const [bidPrice, setBidPrice] = useState("");
+  const [activeTab, setActiveTab]       = useState<MarketTab>("buy");
+  const [showBidForm, setShowBidForm]   = useState(false);
+  const [bidPrice, setBidPrice]         = useState("");
   const [bidSubmitted, setBidSubmitted] = useState(false);
-  const [sortMode, setSortMode] = useState<SortMode>("price");
+  const [sortMode, setSortMode]         = useState<SortMode>("price");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
 
-  // Offer modal state
+  // Offer Builder (Buy tab — sellers)
   const [offerTarget, setOfferTarget] = useState<{
-    counterparty: MockSeller | MockBuyer;
-    mode: "buy" | "accept";
+    counterparty: MockSeller;
+    mode: "buy";
   } | null>(null);
 
-  // All hooks MUST be above any early return ──────────────────────────────
-  const category = item?.category || "Other";
+  // Confirm Accept (Sell tab — buyers)
+  const [acceptTarget, setAcceptTarget]   = useState<MockBuyer | null>(null);
+  const [acceptSuccess, setAcceptSuccess] = useState(false);
+
+  // All hooks above early return ──────────────────────────────────────────
+  const category       = item?.category || "Other";
   const supportsGrading = GRADED_CATEGORIES.has(category);
   const { sellers, buyers } = generateListings(item?.marketPrice || 100, category);
 
   const filteredSellers = useMemo(() => {
     let list = [...sellers];
-    if (activeFilters.has("Graded Only")) {
+    if (activeFilters.has("Graded Only"))
       list = list.filter((s) =>
         s.condition.startsWith("PSA") || s.condition.startsWith("BGS") ||
         s.condition.startsWith("CGC") || s.condition.startsWith("MS-")
       );
-    }
     if (activeFilters.has("Cash Only"))
       list = list.filter((s) => s.intent === "Cash Only" || s.intent === "Open to Both");
     if (activeFilters.has("Trade Only"))
       list = list.filter((s) => s.intent === "Trade Only" || s.intent === "Open to Both");
     if (activeFilters.has("Local Meetup"))
       list = list.filter((s) => s.logistics === "Local Meetup");
-
     if (sortMode === "price") list.sort((a, b) => a.askingPrice - b.askingPrice);
     else list.sort((a, b) => b.trust - a.trust);
     return list;
@@ -237,8 +305,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
       list = list.filter((b) => b.intent === "Trade Only" || b.intent === "Open to Both");
     if (activeFilters.has("Local Meetup"))
       list = list.filter((b) => b.logistics === "Local Meetup");
-
-    if (sortMode === "price") list.sort((a, b) => b.offerPrice - a.offerPrice);
+    if (sortMode === "price") list.sort((a, b) => buyerTotalOffer(b) - buyerTotalOffer(a));
     else list.sort((a, b) => b.trust - a.trust);
     return list;
   }, [buyers, activeFilters, sortMode]);
@@ -253,8 +320,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
   const toggleFilter = (f: string) => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
-      if (next.has(f)) next.delete(f);
-      else next.add(f);
+      next.has(f) ? next.delete(f) : next.add(f);
       return next;
     });
   };
@@ -280,6 +346,14 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
     onClose();
   };
 
+  const handleAcceptConfirm = () => {
+    setAcceptSuccess(true);
+    setTimeout(() => {
+      setAcceptSuccess(false);
+      setAcceptTarget(null);
+    }, 2200);
+  };
+
   // ── Render a seller row ─────────────────────────────────────────────────
   const renderSeller = (s: MockSeller) => {
     const iStyle = intentStyle(s.intent);
@@ -290,7 +364,6 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
         key={s.seed}
         className="p-3.5 rounded-2xl bg-background-light/70 border border-white/[0.04] hover:border-white/[0.08] transition-colors space-y-2.5"
       >
-        {/* Top row: avatar + name + price */}
         <div className="flex items-center gap-3">
           <img src={avatar(s.seed)} alt={s.name} className="w-10 h-10 rounded-full border-2 border-charcoal-dark bg-charcoal-light/20 flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -307,8 +380,6 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
             <p className="text-sm font-bold text-primary">{formatValue(s.askingPrice)}</p>
           </div>
         </div>
-
-        {/* Bottom row: condition + intent + logistics + action */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold ${conditionColor(s.condition)}`}>
             {s.condition.startsWith("PSA") || s.condition.startsWith("BGS") || s.condition.startsWith("MS-") ? (
@@ -335,14 +406,22 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
 
   // ── Render a buyer row ──────────────────────────────────────────────────
   const renderBuyer = (b: MockBuyer) => {
-    const iStyle = intentStyle(b.intent);
+    const iStyle     = intentStyle(b.intent);
     const IntentIcon = iStyle.icon;
-    const LogIcon = logisticsIcon(b.logistics);
+    const LogIcon    = logisticsIcon(b.logistics);
+    const total      = buyerTotalOffer(b);
+    const tier       = getDealTier(total, item.marketPrice);
+    const dStyle     = DEAL_STYLE[tier];
+    const pct        = item.marketPrice > 0 ? Math.round((total / item.marketPrice) * 100) : 0;
+    const hasItems   = b.offerItems.length > 0;
+    const hasCash    = b.offerPrice > 0;
+
     return (
       <div
         key={b.seed}
         className="p-3.5 rounded-2xl bg-background-light/70 border border-white/[0.04] hover:border-white/[0.08] transition-colors space-y-2.5"
       >
+        {/* Top: avatar + name + deal badge */}
         <div className="flex items-center gap-3">
           <img src={avatar(b.seed)} alt={b.name} className="w-10 h-10 rounded-full border-2 border-charcoal-dark bg-charcoal-light/20 flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -355,11 +434,13 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
               <span className="text-[10px] text-cream/20">{b.trades} trades</span>
             </div>
           </div>
-          <div className="text-right flex-shrink-0">
-            <p className="text-sm font-bold text-green-400">{formatValue(b.offerPrice)}</p>
-          </div>
+          {/* Deal quality badge */}
+          <span className={`flex-shrink-0 px-2 py-1 rounded-lg border text-[10px] font-bold ${dStyle.badge}`}>
+            {dStyle.label} {pct}%
+          </span>
         </div>
 
+        {/* Intent + logistics badges */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className={`flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-white/5 border border-white/[0.06] text-[10px] font-semibold ${iStyle.text}`}>
             <IntentIcon className="w-2.5 h-2.5" />{b.intent}
@@ -367,9 +448,66 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
           <span className="flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-white/5 border border-white/[0.06] text-[10px] font-semibold text-cream/35">
             <LogIcon className="w-2.5 h-2.5" />{b.logistics}
           </span>
+        </div>
+
+        {/* Offer breakdown */}
+        <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-3 py-2.5 space-y-2">
+          {/* Item offers */}
+          {b.offerItems.map((oi, i) => (
+            <div key={i} className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Package className="w-3 h-3 text-cream/25 flex-shrink-0" />
+                <span className="text-[11px] text-cream/60 truncate">{oi.name}</span>
+                <span className="text-[9px] text-cream/25 bg-white/5 px-1.5 py-0.5 rounded flex-shrink-0">
+                  {oi.condition}
+                </span>
+              </div>
+              <span className="text-[11px] text-primary font-semibold flex-shrink-0">
+                {formatValue(oi.value)}
+              </span>
+            </div>
+          ))}
+
+          {/* Cash offer */}
+          {hasCash && (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <DollarSign className="w-3 h-3 text-green-400" />
+                <span className="text-[11px] text-cream/60">Cash</span>
+              </div>
+              <span className="text-[11px] text-green-400 font-semibold">
+                {formatValue(b.offerPrice)}
+              </span>
+            </div>
+          )}
+
+          {/* Total line (only when hybrid) */}
+          {hasItems && hasCash && (
+            <div className="border-t border-white/[0.06] pt-2 flex items-center justify-between">
+              <span className="text-[11px] text-cream/35 font-semibold">Total offer</span>
+              <span className={`text-[11px] font-bold ${dStyle.text}`}>
+                {formatValue(total)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Deal bar + Accept */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 space-y-1">
+            <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${dStyle.bar}`}
+                style={{ width: `${Math.min(pct, 100)}%` }}
+              />
+            </div>
+            <p className={`text-[10px] font-semibold ${dStyle.text}`}>
+              {dStyle.label} · {pct}% of {formatValue(item.marketPrice)}
+            </p>
+          </div>
           <button
-            onClick={() => setOfferTarget({ counterparty: b, mode: "accept" })}
-            className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-xl bg-green-500/15 text-green-400 text-[10px] font-bold hover:bg-green-500/25 active:scale-[0.97] transition-all"
+            onClick={() => { setAcceptTarget(b); setAcceptSuccess(false); }}
+            className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-xl bg-green-500/15 text-green-400 text-[10px] font-bold hover:bg-green-500/25 active:scale-[0.97] transition-all"
           >
             <Check className="w-3 h-3" />
             Accept
@@ -396,14 +534,10 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
           <X className="w-4.5 h-4.5 text-white/80" />
         </button>
 
-        {/* ── Header: Card Info ──────────────────────────────────── */}
+        {/* ── Header ──────────────────────────────────────────────── */}
         <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex-shrink-0">
           <div className="flex items-center gap-4">
-            <img
-              src={item.imageUrl}
-              alt={item.name}
-              className="w-16 h-16 rounded-2xl object-cover bg-charcoal-light/20 flex-shrink-0"
-            />
+            <img src={item.imageUrl} alt={item.name} className="w-16 h-16 rounded-2xl object-cover bg-charcoal-light/20 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-bold text-cream truncate">{item.name}</h2>
               <div className="flex items-center gap-2 mt-0.5">
@@ -450,8 +584,6 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
         <div className="px-5 py-3 border-b border-white/[0.04] flex-shrink-0 space-y-2.5">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-3.5 h-3.5 text-cream/25 flex-shrink-0" />
-
-            {/* Sort dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowSortMenu(!showSortMenu)}
@@ -464,25 +596,19 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                 <div className="absolute top-full left-0 mt-1 w-36 bg-charcoal-dark border border-white/10 rounded-xl shadow-xl z-40 overflow-hidden">
                   <button
                     onClick={() => { setSortMode("price"); setShowSortMenu(false); }}
-                    className={`w-full px-3 py-2.5 text-left text-[11px] font-semibold transition-colors ${
-                      sortMode === "price" ? "bg-primary/15 text-primary" : "text-cream/50 hover:bg-white/5"
-                    }`}
+                    className={`w-full px-3 py-2.5 text-left text-[11px] font-semibold transition-colors ${sortMode === "price" ? "bg-primary/15 text-primary" : "text-cream/50 hover:bg-white/5"}`}
                   >
                     <DollarSign className="w-3 h-3 inline mr-1.5 -mt-0.5" />Price
                   </button>
                   <button
                     onClick={() => { setSortMode("trust"); setShowSortMenu(false); }}
-                    className={`w-full px-3 py-2.5 text-left text-[11px] font-semibold transition-colors ${
-                      sortMode === "trust" ? "bg-primary/15 text-primary" : "text-cream/50 hover:bg-white/5"
-                    }`}
+                    className={`w-full px-3 py-2.5 text-left text-[11px] font-semibold transition-colors ${sortMode === "trust" ? "bg-primary/15 text-primary" : "text-cream/50 hover:bg-white/5"}`}
                   >
                     <Star className="w-3 h-3 inline mr-1.5 -mt-0.5" />Trust Score
                   </button>
                 </div>
               )}
             </div>
-
-            {/* Filter chips */}
             <div className="flex gap-1.5 overflow-x-auto scrollbar-none flex-1">
               {filterChips.map((chip) => (
                 <button
@@ -501,7 +627,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
           </div>
         </div>
 
-        {/* ── Scrollable list ────────────────────────────────────── */}
+        {/* ── Scrollable list ──────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-3">
           {activeTab === "buy" ? (
             <>
@@ -513,9 +639,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                   <Truck className="w-8 h-8 text-cream/15 mx-auto mb-2" />
                   <p className="text-xs text-cream/25">No sellers match your filters</p>
                 </div>
-              ) : (
-                filteredSellers.map(renderSeller)
-              )}
+              ) : filteredSellers.map(renderSeller)}
             </>
           ) : (
             <>
@@ -527,14 +651,12 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                   <Truck className="w-8 h-8 text-cream/15 mx-auto mb-2" />
                   <p className="text-xs text-cream/25">No buyers match your filters</p>
                 </div>
-              ) : (
-                filteredBuyers.map(renderBuyer)
-              )}
+              ) : filteredBuyers.map(renderBuyer)}
             </>
           )}
         </div>
 
-        {/* ── Sticky bottom: Place Bid ───────────────────────────── */}
+        {/* ── Sticky bottom: Place Bid ─────────────────────────────── */}
         <div className="px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
           {showBidForm ? (
             <div className="space-y-3 animate-slide-up">
@@ -542,9 +664,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-cream/30 text-sm font-semibold">$</span>
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="number" min="0" step="0.01"
                   value={bidPrice}
                   onChange={(e) => setBidPrice(e.target.value)}
                   placeholder={String(Math.round((item.marketPrice || 100) * 0.9))}
@@ -556,19 +676,13 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                 <button
                   onClick={() => { setShowBidForm(false); setBidPrice(""); }}
                   className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all"
-                >
-                  Cancel
-                </button>
+                >Cancel</button>
                 <button
                   onClick={handleSubmitBid}
                   disabled={!bidPrice || bidSubmitted}
                   className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all disabled:opacity-40"
                 >
-                  {bidSubmitted ? (
-                    <><Check className="w-4 h-4" />Bid Placed!</>
-                  ) : (
-                    <><Gavel className="w-4 h-4" />Submit Bid</>
-                  )}
+                  {bidSubmitted ? <><Check className="w-4 h-4" />Bid Placed!</> : <><Gavel className="w-4 h-4" />Submit Bid</>}
                 </button>
               </div>
             </div>
@@ -585,13 +699,155 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
       </div>
     </div>
 
+    {/* ── Offer Builder (sellers) ─────────────────────────────────────── */}
     <TradeOfferModal
       isOpen={offerTarget !== null}
       onClose={() => setOfferTarget(null)}
       marketItem={item}
       counterparty={offerTarget?.counterparty ?? null}
-      mode={offerTarget?.mode ?? "buy"}
+      mode="buy"
     />
+
+    {/* ── Confirm Accept overlay (buyers) ─────────────────────────────── */}
+    {acceptTarget && (
+      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
+          onClick={() => { if (!acceptSuccess) setAcceptTarget(null); }}
+        />
+        <div className="relative w-full max-w-sm bg-charcoal-dark rounded-3xl overflow-hidden animate-slide-up">
+          {acceptSuccess ? (
+            /* ── Success ── */
+            <div className="p-8 text-center">
+              <div className="w-14 h-14 rounded-full bg-green-500/20 border-2 border-green-500/35 flex items-center justify-center mx-auto mb-4">
+                <Check className="w-7 h-7 text-green-400" strokeWidth={2.5} />
+              </div>
+              <h3 className="text-base font-bold text-cream mb-2">Deal Accepted!</h3>
+              <p className="text-sm text-cream/40 leading-relaxed">
+                <span className="text-cream/60 font-semibold">{acceptTarget.name}</span> has been
+                notified. Coordinate delivery details via message.
+              </p>
+            </div>
+          ) : (
+            /* ── Confirmation ── */
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider">
+                    Accept Offer
+                  </p>
+                  <h3 className="text-base font-bold text-cream mt-0.5">Is this a fair deal?</h3>
+                </div>
+                <button
+                  onClick={() => setAcceptTarget(null)}
+                  className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/10 flex items-center justify-center transition-colors flex-shrink-0"
+                >
+                  <X className="w-4 h-4 text-cream/50" />
+                </button>
+              </div>
+
+              {/* What they're selling */}
+              <div className="flex items-center gap-3 mb-4 p-3 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
+                <img src={item.imageUrl} alt={item.name} className="w-10 h-10 rounded-xl object-cover bg-charcoal-light/20 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-cream truncate">{item.name}</p>
+                  <p className="text-[10px] text-cream/30 mt-0.5">
+                    Your item · asking {formatValue(item.marketPrice)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Offer breakdown */}
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] px-3.5 py-3 space-y-2 mb-3">
+                <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider">
+                  {acceptTarget.name}&apos;s offer
+                </p>
+
+                {acceptTarget.offerItems.map((oi, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Package className="w-3 h-3 text-cream/25 flex-shrink-0" />
+                      <span className="text-[11px] text-cream/60 truncate">{oi.name}</span>
+                      <span className="text-[9px] text-cream/25 bg-white/5 px-1.5 py-0.5 rounded flex-shrink-0">
+                        {oi.condition}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-primary font-semibold flex-shrink-0">
+                      {formatValue(oi.value)}
+                    </span>
+                  </div>
+                ))}
+
+                {acceptTarget.offerPrice > 0 && (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <DollarSign className="w-3 h-3 text-green-400" />
+                      <span className="text-[11px] text-cream/60">Cash</span>
+                    </div>
+                    <span className="text-[11px] text-green-400 font-semibold">
+                      {formatValue(acceptTarget.offerPrice)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Total */}
+                {(() => {
+                  const total = buyerTotalOffer(acceptTarget);
+                  const tier  = getDealTier(total, item.marketPrice);
+                  const ds    = DEAL_STYLE[tier];
+                  return (
+                    <div className="border-t border-white/[0.06] pt-2 flex items-center justify-between">
+                      <span className="text-[11px] text-cream/35 font-semibold">Total</span>
+                      <span className={`text-[11px] font-bold ${ds.text}`}>{formatValue(total)}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Deal quality bar */}
+              {(() => {
+                const total  = buyerTotalOffer(acceptTarget);
+                const tier   = getDealTier(total, item.marketPrice);
+                const ds     = DEAL_STYLE[tier];
+                const pct    = item.marketPrice > 0 ? Math.round((total / item.marketPrice) * 100) : 0;
+                const barPct = Math.min(pct, 100);
+                return (
+                  <div className="space-y-1.5 mb-4">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-cream/30">vs your asking price</span>
+                      <span className={`font-bold ${ds.text}`}>{ds.label} · {pct}%</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${ds.bar}`}
+                        style={{ width: `${barPct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAcceptTarget(null)}
+                  className="px-4 py-3 rounded-2xl bg-white/[0.05] text-cream/40 font-bold text-sm hover:bg-white/10 active:scale-[0.97] transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAcceptConfirm}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-500/20 text-green-400 font-bold text-sm hover:bg-green-500/30 active:scale-[0.97] transition-all"
+                >
+                  <Check className="w-4 h-4" />
+                  Confirm & Accept
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
     </>
   );
 }

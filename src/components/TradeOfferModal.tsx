@@ -396,13 +396,35 @@ export default function TradeOfferModal({
               )}
             </div>
           )}
+
+          {/* ── Cash add-on — always visible above the grid ── */}
+          <div className="relative">
+            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-cream/25 pointer-events-none" />
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={cashAmount}
+              onChange={(e) => setCashAmount(e.target.value)}
+              placeholder="Add cash to your offer ($0)"
+              className="w-full pl-9 pr-8 py-2 rounded-xl bg-background-light text-cream text-sm placeholder:text-cream/20 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            {cashValue > 0 && (
+              <button
+                onClick={() => setCashAmount("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-cream/30 hover:text-cream/60 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ══ SCROLLABLE BODY ══════════════════════════════════════════ */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
 
           {/* ── Inventory grid ── */}
-          <div className="px-4 pt-3 pb-2">
+          <div className="px-4 pt-3 pb-4">
             {tradeableItems.length === 0 ? (
               /* No items marked for trade at all */
               <div className="flex flex-col items-center py-10 text-center">
@@ -459,32 +481,6 @@ export default function TradeOfferModal({
             )}
           </div>
 
-          {/* ── Cash add-on ── */}
-          <div className="px-4 pb-4 pt-2">
-            <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider mb-2">
-              Add Cash to Offer
-            </p>
-            <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/25 pointer-events-none" />
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={cashAmount}
-                onChange={(e) => setCashAmount(e.target.value)}
-                placeholder="0"
-                className="w-full pl-9 pr-9 py-3 rounded-xl bg-background-light text-cream text-sm placeholder:text-cream/20 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              {cashValue > 0 && (
-                <button
-                  onClick={() => setCashAmount("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-cream/30 hover:text-cream/60 transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* ══ FOOTER: Live calculator + actions ════════════════════════ */}
