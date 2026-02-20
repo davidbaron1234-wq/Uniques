@@ -287,6 +287,11 @@ export default function ProfilePage() {
     [items]
   );
 
+  const lockedCount = useMemo(
+    () => items.filter((i) => i.isLocked).length,
+    [items]
+  );
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -518,36 +523,108 @@ export default function ProfilePage() {
             <h2 className="text-sm font-bold text-cream/80">Collection</h2>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-5 px-5 scrollbar-none">
-            {filters.map((f) => (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                  activeFilter === f ? "bg-surface/25 text-surface-light shadow-glow-surface" : "bg-background-light text-cream/40 hover:text-cream/60"
-                }`}
-              >
-                {f}
-              </button>
-            ))}
+            {filters.map((f) => {
+              const isInTrade = f === "In Trade";
+              const isActive = activeFilter === f;
+              return (
+                <button
+                  key={f}
+                  onClick={() => setActiveFilter(f)}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                    isInTrade && isActive
+                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                      : isInTrade && !isActive
+                      ? "bg-background-light text-amber-400/60 hover:text-amber-400"
+                      : isActive
+                      ? "bg-surface/25 text-surface-light shadow-glow-surface"
+                      : "bg-background-light text-cream/40 hover:text-cream/60"
+                  }`}
+                >
+                  {f}
+                  {isInTrade && lockedCount > 0 && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                      isActive ? "bg-amber-500/30 text-amber-300" : "bg-amber-500/20 text-amber-400"
+                    }`}>
+                      {lockedCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* ── Grid ───────────────────────────────────────────── */}
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={filteredItems.map((i) => i.id)} strategy={rectSortingStrategy}>
-            <div className="px-5 grid grid-cols-3 gap-3 pb-6">
-              {filteredItems.map((item) => (
-                <SortableItem key={item.id} item={item} onTap={() => handleViewItem(item)} />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        {filteredItems.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Package className="w-10 h-10 text-cream/20 mb-3" />
-            <p className="text-cream/40 font-medium text-sm">No items in this category</p>
+        {/* ── "In Trade" dedicated list view ─────────────────── */}
+        {activeFilter === "In Trade" ? (
+          <div className="px-5 pb-6">
+            {filteredItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
+                  <Lock className="w-7 h-7 text-amber-400/50" />
+                </div>
+                <p className="text-cream/40 font-medium text-sm">No items in trade</p>
+                <p className="text-cream/25 text-xs mt-1 max-w-[200px] leading-relaxed">
+                  When you send a trade offer, those items will appear here so you always know where they are.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <p className="text-[11px] text-amber-400/60 font-semibold uppercase tracking-wider mb-3">
+                  {filteredItems.length} item{filteredItems.length !== 1 ? "s" : ""} pending · tap to cancel
+                </p>
+                {filteredItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleViewItem(item)}
+                    className="w-full flex items-center gap-3 p-3 rounded-2xl bg-background-light border border-amber-500/15 hover:border-amber-500/30 transition-colors text-left"
+                  >
+                    <div className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0">
+                      <img
+                        src={item.customImage || item.imageUrl}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-amber-500/20" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-cream truncate">{item.name}</p>
+                      <p className="text-xs text-amber-400/70 mt-0.5 truncate">
+                        {item.lockedNote ?? "Pending trade offer"}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {item.estimatedValue != null && (
+                        <span className="text-xs font-bold text-primary">{formatValue(item.estimatedValue)}</span>
+                      )}
+                      <span className="text-[9px] bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded font-bold">
+                        PENDING
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+        ) : (
+          <>
+            {/* ── Normal DnD grid ──────────────────────────────── */}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={filteredItems.map((i) => i.id)} strategy={rectSortingStrategy}>
+                <div className="px-5 grid grid-cols-3 gap-3 pb-6">
+                  {filteredItems.map((item) => (
+                    <SortableItem key={item.id} item={item} onTap={() => handleViewItem(item)} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+
+            {filteredItems.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Package className="w-10 h-10 text-cream/20 mb-3" />
+                <p className="text-cream/40 font-medium text-sm">No items in this category</p>
+              </div>
+            )}
+          </>
         )}
       </main>
 
@@ -583,9 +660,14 @@ export default function ProfilePage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {editingItem.isLocked && (
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25">
-                          <Lock className="w-3.5 h-3.5 text-amber-400" />
-                          <span className="text-xs font-bold text-amber-400">In Trade · Pending</span>
+                        <div className="flex items-start gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 w-full">
+                          <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <span className="text-xs font-bold text-amber-400">In Trade · Pending</span>
+                            {editingItem.lockedNote && (
+                              <p className="text-[11px] text-amber-400/70 mt-0.5 leading-snug">{editingItem.lockedNote}</p>
+                            )}
+                          </div>
                         </div>
                       )}
                       {editingItem.graded && editingItem.gradeNum ? (

@@ -243,8 +243,11 @@ export default function TradeOfferModal({
   };
 
   const handleConfirm = () => {
-    // Lock all items included in the sent offer
-    if (selectedIds.size > 0) lockItems(Array.from(selectedIds));
+    // Lock items and attach context so user knows which offer holds each item
+    if (selectedIds.size > 0) {
+      const note = `Sent to ${counterparty.name} for "${marketItem.name}"`;
+      lockItems(Array.from(selectedIds), note);
+    }
     setSuccess(true);
     setTimeout(resetAndClose, 2200);
   };

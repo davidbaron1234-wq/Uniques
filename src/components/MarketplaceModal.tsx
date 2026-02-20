@@ -22,6 +22,8 @@ import {
 import { formatValue } from "@/lib/format";
 import type { Category } from "@/lib/constants";
 import { useInventory } from "@/lib/InventoryContext";
+import type { TradeHistoryEntry } from "@/lib/types";
+import { currentUser } from "@/lib/data";
 import TradeOfferModal from "./TradeOfferModal";
 
 // ── Public types ────────────────────────────────────────────────────────────
@@ -333,7 +335,7 @@ function OfferItemRow({ oi }: { oi: BuyerOfferItem }) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceModalProps) {
-  const { items: inventory, removeItem } = useInventory();
+  const { items: inventory, removeItem, addTradeHistory } = useInventory();
   const [activeTab, setActiveTab]       = useState<MarketTab>("buy");
   const [showBidForm, setShowBidForm]   = useState(false);
   const [bidPrice, setBidPrice]         = useState("");
@@ -447,14 +449,51 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
       );
       return;
     }
-    // Remove the accepted item from inventory (trade completed)
+
+    // Find the actual inventory item to record in history
     const matchedItem = inventory.find(
       (i) =>
         (marketId  && i.masterId  === marketId)  ||
         (marketImg && i.imageUrl  === marketImg)  ||
         (marketName && i.name && norm(i.name) === marketName),
     );
+
+    // ── Create history record BEFORE removing ──────────────────────────
+    if (acceptTarget) {
+      const now = new Date().toISOString();
+      const entry: TradeHistoryEntry = {
+        id: `trade-${Date.now()}`,
+        from: {
+          name: acceptTarget.name,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${acceptTarget.seed}&backgroundColor=b6e3f4,c0aede,ffd5dc`,
+        },
+        to: { name: "You", avatar: currentUser.avatar },
+        fromItems: acceptTarget.offerItems.map((oi, idx) => ({
+          id: `h-${Date.now()}-${idx}`,
+          name: oi.name,
+          imageUrl: oi.thumbnailUrl,
+          estimatedValue: oi.value,
+        })),
+        fromCash: acceptTarget.offerPrice,
+        toItems: matchedItem
+          ? [{
+              id: matchedItem.id,
+              name: matchedItem.name,
+              imageUrl: matchedItem.customImage || matchedItem.imageUrl,
+              estimatedValue: matchedItem.estimatedValue,
+            }]
+          : [{ id: "sold", name: item?.name ?? "Item", imageUrl: item?.imageUrl ?? "", estimatedValue: item?.marketPrice }],
+        toCash: 0,
+        status: "accepted",
+        createdAt: now,
+        completedAt: now,
+      };
+      addTradeHistory(entry);
+    }
+
+    // ── Now safe to remove the traded item ─────────────────────────────
     if (matchedItem) removeItem(matchedItem.id);
+
     setAcceptError(null);
     setAcceptSuccess(true);
     setTimeout(() => {

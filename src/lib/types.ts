@@ -108,6 +108,7 @@ export interface CollectibleItem {
   status?: ItemStatus;
   upForTrade: boolean;
   isLocked?: boolean;      // true while a sent trade offer is pending
+  lockedNote?: string;     // human-readable context, e.g. "Sent to Alex for Charizard"
   notes?: string;
   
   // שדות מתקדמים (אופציונליים)
@@ -146,6 +147,20 @@ export interface UserProfile {
   joinDate: string;
   paymentMethods?: string[];
   shippingPreferences?: string[];
+}
+
+// Persisted trade history entry (both static seed and user-created)
+export interface TradeHistoryEntry {
+  id: string;
+  from: { name: string; avatar: string };
+  to: { name: string; avatar: string };
+  fromItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+  fromCash: number;
+  toItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+  toCash: number;
+  status: "accepted" | "declined";
+  createdAt: string;
+  completedAt: string;
 }
 
 export interface TradeOffer {

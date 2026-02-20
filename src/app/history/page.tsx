@@ -2,11 +2,37 @@
 
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
-import { tradeHistory } from "@/lib/data";
+import { tradeHistory as staticHistory } from "@/lib/data";
+import { useInventory } from "@/lib/InventoryContext";
 import { formatValue } from "@/lib/format";
 import { History, Check, X, ArrowLeftRight, DollarSign } from "lucide-react";
+import type { TradeHistoryEntry } from "@/lib/types";
+
+// Normalise the static TradeOffer seed data into the same shape as TradeHistoryEntry
+function toEntry(t: typeof staticHistory[number]): TradeHistoryEntry {
+  return {
+    id: t.id,
+    from:      { name: t.from.name,  avatar: t.from.avatar  },
+    to:        { name: t.to.name,    avatar: t.to.avatar    },
+    fromItems: t.fromItems.map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+    fromCash:  t.fromCash,
+    toItems:   t.toItems.map((i)   => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+    toCash:    t.toCash,
+    status:    t.status as "accepted" | "declined",
+    createdAt: t.createdAt,
+    completedAt: t.completedAt,
+  };
+}
 
 export default function HistoryPage() {
+  const { tradeHistoryEntries } = useInventory();
+
+  // Merge: user-created entries first (newest), then static seed data
+  const allEntries: TradeHistoryEntry[] = [
+    ...tradeHistoryEntries,
+    ...staticHistory.map(toEntry),
+  ];
+
   return (
     <div className="min-h-screen pb-20">
       <Header />
@@ -18,12 +44,12 @@ export default function HistoryPage() {
             <h1 className="text-xl font-bold text-cream">Trade History</h1>
           </div>
           <p className="text-sm text-cream/40 font-medium">
-            {tradeHistory.length} completed trades
+            {allEntries.length} trade{allEntries.length !== 1 ? "s" : ""}
           </p>
         </div>
 
         <div className="space-y-3 px-5">
-          {tradeHistory.map((trade, i) => {
+          {allEntries.map((trade, i) => {
             const isAccepted = trade.status === "accepted";
             const date = new Date(trade.completedAt);
             const formattedDate = date.toLocaleDateString("en-US", {
@@ -36,11 +62,15 @@ export default function HistoryPage() {
               <div
                 key={trade.id}
                 className="rounded-2xl bg-background-light shadow-soft overflow-hidden animate-slide-up"
-                style={{ animationDelay: `${i * 0.1}s`, animationFillMode: "both" }}
+                style={{ animationDelay: `${i * 0.07}s`, animationFillMode: "both" }}
               >
+                {/* Status bar */}
                 <div className={`px-5 py-2.5 flex items-center justify-between ${isAccepted ? "bg-primary/8" : "bg-red-400/8"}`}>
                   <div className="flex items-center gap-2">
-                    {isAccepted ? <Check className="w-4 h-4 text-primary" /> : <X className="w-4 h-4 text-red-400" />}
+                    {isAccepted
+                      ? <Check className="w-4 h-4 text-primary" />
+                      : <X className="w-4 h-4 text-red-400" />
+                    }
                     <span className={`text-sm font-bold ${isAccepted ? "text-primary" : "text-red-400"}`}>
                       {isAccepted ? "Completed" : "Declined"}
                     </span>
@@ -48,64 +78,78 @@ export default function HistoryPage() {
                   <span className="text-xs text-cream/30">{formattedDate}</span>
                 </div>
 
+                {/* Trade body */}
                 <div className="p-5">
                   <div className="flex items-center gap-3">
+                    {/* From side */}
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="w-7 h-7 rounded-full bg-surface/20 overflow-hidden">
+                        <div className="w-7 h-7 rounded-full bg-surface/20 overflow-hidden flex-shrink-0">
                           <img src={trade.from.avatar} alt={trade.from.name} className="w-full h-full object-cover" />
                         </div>
-                        <span className="text-xs text-cream/50 font-medium">{trade.from.name}</span>
+                        <span className="text-xs text-cream/50 font-medium truncate">{trade.from.name}</span>
                       </div>
-                      {trade.fromItems.map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 bg-charcoal-dark/40 rounded-xl p-2">
-                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-charcoal-light/20 flex-shrink-0">
-                            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                      <div className="space-y-1.5">
+                        {trade.fromItems.map((item) => (
+                          <div key={item.id} className="flex items-center gap-2 bg-charcoal-dark/40 rounded-xl p-2">
+                            <div className="w-9 h-9 rounded-lg overflow-hidden bg-charcoal-light/20 flex-shrink-0">
+                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-cream/60 truncate font-medium">{item.name}</p>
+                              {item.estimatedValue != null && (
+                                <p className="text-[9px] text-primary/60 font-semibold">{formatValue(item.estimatedValue)}</p>
+                              )}
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-[10px] text-cream/60 truncate font-medium">{item.name}</p>
-                            {item.estimatedValue && (
-                              <p className="text-[9px] text-primary/60 font-semibold">{formatValue(item.estimatedValue)}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                        {trade.fromItems.length === 0 && (
+                          <p className="text-[10px] text-cream/25 italic">Cash only</p>
+                        )}
+                      </div>
                       {trade.fromCash > 0 && (
                         <div className="flex items-center gap-1 mt-2 text-primary">
                           <DollarSign className="w-3 h-3" />
-                          <span className="text-xs font-bold">+{trade.fromCash.toLocaleString()}</span>
+                          <span className="text-xs font-bold">+{formatValue(trade.fromCash)}</span>
                         </div>
                       )}
                     </div>
 
+                    {/* Arrow */}
                     <div className="flex-shrink-0 w-8 h-8 rounded-full bg-background flex items-center justify-center">
                       <ArrowLeftRight className="w-4 h-4 text-cream/30" />
                     </div>
 
+                    {/* To side */}
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="w-7 h-7 rounded-full bg-primary/20 overflow-hidden">
+                        <div className="w-7 h-7 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
                           <img src={trade.to.avatar} alt={trade.to.name} className="w-full h-full object-cover" />
                         </div>
-                        <span className="text-xs text-cream/50 font-medium">{trade.to.name}</span>
+                        <span className="text-xs text-cream/50 font-medium truncate">{trade.to.name}</span>
                       </div>
-                      {trade.toItems.map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 bg-charcoal-dark/40 rounded-xl p-2">
-                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-charcoal-light/20 flex-shrink-0">
-                            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                      <div className="space-y-1.5">
+                        {trade.toItems.map((item) => (
+                          <div key={item.id} className="flex items-center gap-2 bg-charcoal-dark/40 rounded-xl p-2">
+                            <div className="w-9 h-9 rounded-lg overflow-hidden bg-charcoal-light/20 flex-shrink-0">
+                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-cream/60 truncate font-medium">{item.name}</p>
+                              {item.estimatedValue != null && (
+                                <p className="text-[9px] text-primary/60 font-semibold">{formatValue(item.estimatedValue)}</p>
+                              )}
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-[10px] text-cream/60 truncate font-medium">{item.name}</p>
-                            {item.estimatedValue && (
-                              <p className="text-[9px] text-primary/60 font-semibold">{formatValue(item.estimatedValue)}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                        {trade.toItems.length === 0 && (
+                          <p className="text-[10px] text-cream/25 italic">Cash only</p>
+                        )}
+                      </div>
                       {trade.toCash > 0 && (
                         <div className="flex items-center gap-1 mt-2 text-cream/70">
                           <DollarSign className="w-3 h-3" />
-                          <span className="text-xs font-bold">+{trade.toCash.toLocaleString()}</span>
+                          <span className="text-xs font-bold">+{formatValue(trade.toCash)}</span>
                         </div>
                       )}
                     </div>
@@ -116,7 +160,7 @@ export default function HistoryPage() {
           })}
         </div>
 
-        {tradeHistory.length === 0 && (
+        {allEntries.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <div className="w-16 h-16 rounded-full bg-background-light flex items-center justify-center mb-4 shadow-soft">
               <History className="w-8 h-8 text-cream/20" />
