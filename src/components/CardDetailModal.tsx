@@ -103,6 +103,7 @@ export default function CardDetailModal({ item, onClose, onAdd }: CardDetailModa
 
   const marketplaceItem: MarketplaceItem | null = item
     ? {
+        id: item.id,
         name: item.name,
         imageUrl: item.imageLarge || item.imageSmall,
         marketPrice: item.marketPrice,

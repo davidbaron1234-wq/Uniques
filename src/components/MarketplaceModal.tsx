@@ -17,15 +17,17 @@ import {
   Award,
   ChevronDown,
   SlidersHorizontal,
-  Package,
+  AlertCircle,
 } from "lucide-react";
 import { formatValue } from "@/lib/format";
 import type { Category } from "@/lib/constants";
+import { useInventory } from "@/lib/InventoryContext";
 import TradeOfferModal from "./TradeOfferModal";
 
 // ── Public types ────────────────────────────────────────────────────────────
 
 export interface MarketplaceItem {
+  id?: string;
   name: string;
   imageUrl: string;
   marketPrice: number;
@@ -113,6 +115,7 @@ export interface BuyerOfferItem {
   name: string;
   condition: string;
   value: number;
+  thumbnailUrl: string;
 }
 
 export interface MockBuyer {
@@ -167,11 +170,15 @@ function generateListings(price: number, category?: string) {
     const itemsValue  = totalValue - cashAmount;
     const perItem     = t.itemCount > 0 ? Math.round(itemsValue / t.itemCount) : 0;
 
-    const offerItems: BuyerOfferItem[] = Array.from({ length: t.itemCount }, (_, i) => ({
-      name:      getOfferItemName(category, i),
-      condition: conditions[i % conditions.length],
-      value:     perItem,
-    }));
+    const offerItems: BuyerOfferItem[] = Array.from({ length: t.itemCount }, (_, i) => {
+      const itemName = getOfferItemName(category, i);
+      return {
+        name:         itemName,
+        condition:    conditions[i % conditions.length],
+        value:        perItem,
+        thumbnailUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(itemName)}`,
+      };
+    });
 
     return {
       name:       t.name,
@@ -251,11 +258,36 @@ function logisticsIcon(l: Logistics): typeof Truck {
   }
 }
 
+// ── Offer item row (shared between buyer list and ConfirmAccept) ─────────────
+
+function OfferItemRow({ oi }: { oi: BuyerOfferItem }) {
+  const isGraded =
+    oi.condition.startsWith("PSA") ||
+    oi.condition.startsWith("BGS") ||
+    oi.condition.startsWith("MS-");
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-charcoal-light/20 border border-white/[0.06]">
+        <img src={oi.thumbnailUrl} alt={oi.name} className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0 space-y-0.5">
+        <p className="text-[11px] text-cream/70 font-semibold leading-tight truncate">{oi.name}</p>
+        <span className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border font-bold ${conditionColor(oi.condition)}`}>
+          {isGraded && <Award className="w-2 h-2" />}
+          {oi.condition}
+        </span>
+      </div>
+      <span className="text-[11px] text-primary font-bold flex-shrink-0">{formatValue(oi.value)}</span>
+    </div>
+  );
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // ██  MARKETPLACE MODAL  ██████████████████████████████████████████████████████
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceModalProps) {
+  const { items: inventory } = useInventory();
   const [activeTab, setActiveTab]       = useState<MarketTab>("buy");
   const [showBidForm, setShowBidForm]   = useState(false);
   const [bidPrice, setBidPrice]         = useState("");
@@ -273,10 +305,12 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
   // Confirm Accept (Sell tab — buyers)
   const [acceptTarget, setAcceptTarget]   = useState<MockBuyer | null>(null);
   const [acceptSuccess, setAcceptSuccess] = useState(false);
+  const [acceptError, setAcceptError]     = useState<string | null>(null);
 
   // All hooks above early return ──────────────────────────────────────────
-  const category       = item?.category || "Other";
+  const category        = item?.category || "Other";
   const supportsGrading = GRADED_CATEGORIES.has(category);
+  const marketRef       = (item?.marketPrice ?? 0) > 0 ? item!.marketPrice : 100;
   const { sellers, buyers } = generateListings(item?.marketPrice || 100, category);
 
   const filteredSellers = useMemo(() => {
@@ -347,10 +381,19 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
   };
 
   const handleAcceptConfirm = () => {
+    const ownsItem = inventory.some(
+      (i) => (item?.id && i.masterId === item.id) || i.name === item?.name,
+    );
+    if (!ownsItem) {
+      setAcceptError("You don't have this item in your inventory to trade.");
+      return;
+    }
+    setAcceptError(null);
     setAcceptSuccess(true);
     setTimeout(() => {
       setAcceptSuccess(false);
       setAcceptTarget(null);
+      setAcceptError(null);
     }, 2200);
   };
 
@@ -410,9 +453,9 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
     const IntentIcon = iStyle.icon;
     const LogIcon    = logisticsIcon(b.logistics);
     const total      = buyerTotalOffer(b);
-    const tier       = getDealTier(total, item.marketPrice);
+    const tier       = getDealTier(total, marketRef);
     const dStyle     = DEAL_STYLE[tier];
-    const pct        = item.marketPrice > 0 ? Math.round((total / item.marketPrice) * 100) : 0;
+    const pct        = Math.round((total / marketRef) * 100);
     const hasItems   = b.offerItems.length > 0;
     const hasCash    = b.offerPrice > 0;
 
@@ -452,20 +495,9 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
 
         {/* Offer breakdown */}
         <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-3 py-2.5 space-y-2">
-          {/* Item offers */}
+          {/* Item offers — visual rows */}
           {b.offerItems.map((oi, i) => (
-            <div key={i} className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Package className="w-3 h-3 text-cream/25 flex-shrink-0" />
-                <span className="text-[11px] text-cream/60 truncate">{oi.name}</span>
-                <span className="text-[9px] text-cream/25 bg-white/5 px-1.5 py-0.5 rounded flex-shrink-0">
-                  {oi.condition}
-                </span>
-              </div>
-              <span className="text-[11px] text-primary font-semibold flex-shrink-0">
-                {formatValue(oi.value)}
-              </span>
-            </div>
+            <OfferItemRow key={i} oi={oi} />
           ))}
 
           {/* Cash offer */}
@@ -502,11 +534,11 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
               />
             </div>
             <p className={`text-[10px] font-semibold ${dStyle.text}`}>
-              {dStyle.label} · {pct}% of {formatValue(item.marketPrice)}
+              {dStyle.label} · {pct}% of {formatValue(marketRef)}
             </p>
           </div>
           <button
-            onClick={() => { setAcceptTarget(b); setAcceptSuccess(false); }}
+            onClick={() => { setAcceptTarget(b); setAcceptSuccess(false); setAcceptError(null); }}
             className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-xl bg-green-500/15 text-green-400 text-[10px] font-bold hover:bg-green-500/25 active:scale-[0.97] transition-all"
           >
             <Check className="w-3 h-3" />
@@ -713,7 +745,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
       <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
         <div
           className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
-          onClick={() => { if (!acceptSuccess) setAcceptTarget(null); }}
+          onClick={() => { if (!acceptSuccess) { setAcceptTarget(null); setAcceptError(null); } }}
         />
         <div className="relative w-full max-w-sm bg-charcoal-dark rounded-3xl overflow-hidden animate-slide-up">
           {acceptSuccess ? (
@@ -739,7 +771,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                   <h3 className="text-base font-bold text-cream mt-0.5">Is this a fair deal?</h3>
                 </div>
                 <button
-                  onClick={() => setAcceptTarget(null)}
+                  onClick={() => { setAcceptTarget(null); setAcceptError(null); }}
                   className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/10 flex items-center justify-center transition-colors flex-shrink-0"
                 >
                   <X className="w-4 h-4 text-cream/50" />
@@ -764,18 +796,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                 </p>
 
                 {acceptTarget.offerItems.map((oi, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Package className="w-3 h-3 text-cream/25 flex-shrink-0" />
-                      <span className="text-[11px] text-cream/60 truncate">{oi.name}</span>
-                      <span className="text-[9px] text-cream/25 bg-white/5 px-1.5 py-0.5 rounded flex-shrink-0">
-                        {oi.condition}
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-primary font-semibold flex-shrink-0">
-                      {formatValue(oi.value)}
-                    </span>
-                  </div>
+                  <OfferItemRow key={i} oi={oi} />
                 ))}
 
                 {acceptTarget.offerPrice > 0 && (
@@ -793,7 +814,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                 {/* Total */}
                 {(() => {
                   const total = buyerTotalOffer(acceptTarget);
-                  const tier  = getDealTier(total, item.marketPrice);
+                  const tier  = getDealTier(total, marketRef);
                   const ds    = DEAL_STYLE[tier];
                   return (
                     <div className="border-t border-white/[0.06] pt-2 flex items-center justify-between">
@@ -807,14 +828,14 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
               {/* Deal quality bar */}
               {(() => {
                 const total  = buyerTotalOffer(acceptTarget);
-                const tier   = getDealTier(total, item.marketPrice);
+                const tier   = getDealTier(total, marketRef);
                 const ds     = DEAL_STYLE[tier];
-                const pct    = item.marketPrice > 0 ? Math.round((total / item.marketPrice) * 100) : 0;
+                const pct    = Math.round((total / marketRef) * 100);
                 const barPct = Math.min(pct, 100);
                 return (
                   <div className="space-y-1.5 mb-4">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-cream/30">vs your asking price</span>
+                      <span className="text-cream/30">vs market value</span>
                       <span className={`font-bold ${ds.text}`}>{ds.label} · {pct}%</span>
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
@@ -827,10 +848,18 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                 );
               })()}
 
+              {/* Inventory error */}
+              {acceptError && (
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/25 mb-3">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                  <p className="text-[11px] text-red-400 font-semibold">{acceptError}</p>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex gap-2">
                 <button
-                  onClick={() => setAcceptTarget(null)}
+                  onClick={() => { setAcceptTarget(null); setAcceptError(null); }}
                   className="px-4 py-3 rounded-2xl bg-white/[0.05] text-cream/40 font-bold text-sm hover:bg-white/10 active:scale-[0.97] transition-all"
                 >
                   Cancel
