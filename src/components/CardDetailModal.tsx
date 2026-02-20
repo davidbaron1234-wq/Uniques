@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Plus, Sparkles, BookOpen, DollarSign, ArrowLeftRight } from "lucide-react";
 import { MasterItem } from "@/lib/catalog/types";
+import { mapCatalogCategory } from "@/lib/constants";
 import { formatValue } from "@/lib/format";
 import MarketplaceModal, { MarketplaceItem } from "./MarketplaceModal";
 
@@ -101,10 +102,16 @@ export default function CardDetailModal({ item, onClose, onAdd }: CardDetailModa
   };
 
   const marketplaceItem: MarketplaceItem | null = item
-    ? { name: item.name, imageUrl: item.imageLarge || item.imageSmall, marketPrice: item.marketPrice }
+    ? {
+        name: item.name,
+        imageUrl: item.imageLarge || item.imageSmall,
+        marketPrice: item.marketPrice,
+        category: mapCatalogCategory(item.category),
+      }
     : null;
 
   return (
+    <>
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop with blur */}
       <div
@@ -223,7 +230,7 @@ export default function CardDetailModal({ item, onClose, onAdd }: CardDetailModa
         {/* Bottom action bar */}
         <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
           <button
-            onClick={() => setShowMarketplace(true)}
+            onClick={(e) => { e.stopPropagation(); setShowMarketplace(true); }}
             className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-surface/10 text-surface-light/60 font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all"
           >
             <ArrowLeftRight className="w-4 h-4" />
@@ -238,13 +245,14 @@ export default function CardDetailModal({ item, onClose, onAdd }: CardDetailModa
           </button>
         </div>
       </div>
-
-      {/* Marketplace overlay */}
-      <MarketplaceModal
-        isOpen={showMarketplace}
-        onClose={() => setShowMarketplace(false)}
-        item={marketplaceItem}
-      />
     </div>
+
+    {/* Marketplace overlay — rendered OUTSIDE the z-[100] stacking context */}
+    <MarketplaceModal
+      isOpen={showMarketplace}
+      onClose={() => setShowMarketplace(false)}
+      item={marketplaceItem}
+    />
+    </>
   );
 }

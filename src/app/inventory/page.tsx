@@ -650,6 +650,7 @@ export default function ProfilePage() {
           name: editingItem.name,
           imageUrl: editingItem.customImage || editingItem.imageUrl,
           marketPrice: editingItem.estimatedValue || 0,
+          category: editingItem.category,
         } : null}
       />
 
