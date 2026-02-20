@@ -1,7 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-const genAI = new GoogleGenerativeAI("AIzaSyAnMkpL0_wk-DcODbStO93mSxhVSuHti90");
+const apiKey = process.env.GEMINI_API_KEY?.trim();
+if (!apiKey) throw new Error("GEMINI_API_KEY is not set in environment variables.");
+const genAI = new GoogleGenerativeAI(apiKey);
 
 export async function POST(req: Request) {
   try {
