@@ -5,7 +5,6 @@ import {
   X,
   ArrowLeftRight,
   DollarSign,
-  MessageCircle,
   Check,
   Star,
   TrendingUp,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 import { formatValue } from "@/lib/format";
 import type { Category } from "@/lib/constants";
+import TradeOfferModal from "./TradeOfferModal";
 
 // ── Public types ────────────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ interface MarketplaceModalProps {
 
 type MarketTab = "buy" | "sell";
 type SortMode = "price" | "trust";
-type TradeIntent = "Cash Only" | "Trade Only" | "Open to Both";
+export type TradeIntent = "Cash Only" | "Trade Only" | "Open to Both";
 type Logistics = "Local Meetup" | "Ships Worldwide" | "PayPal G&S";
 
 // ── Category → condition mapping (mirrors ItemConfigForm) ───────────────────
@@ -78,7 +78,7 @@ const avatar = (seed: string) =>
 const INTENTS: TradeIntent[] = ["Cash Only", "Trade Only", "Open to Both"];
 const LOGISTICS_OPTIONS: Logistics[] = ["Local Meetup", "Ships Worldwide", "PayPal G&S"];
 
-interface MockSeller {
+export interface MockSeller {
   name: string;
   seed: string;
   trust: number;
@@ -89,7 +89,7 @@ interface MockSeller {
   logistics: Logistics;
 }
 
-interface MockBuyer {
+export interface MockBuyer {
   name: string;
   seed: string;
   trust: number;
@@ -197,6 +197,12 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
   const [sortMode, setSortMode] = useState<SortMode>("price");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+
+  // Offer modal state
+  const [offerTarget, setOfferTarget] = useState<{
+    counterparty: MockSeller | MockBuyer;
+    mode: "buy" | "accept";
+  } | null>(null);
 
   // All hooks MUST be above any early return ──────────────────────────────
   const category = item?.category || "Other";
@@ -315,9 +321,12 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
           <span className="flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-white/5 border border-white/[0.06] text-[10px] font-semibold text-cream/35">
             <LogIcon className="w-2.5 h-2.5" />{s.logistics}
           </span>
-          <button className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-xl bg-surface/15 text-surface-light text-[10px] font-bold hover:bg-surface/25 active:scale-[0.97] transition-all">
-            <MessageCircle className="w-3 h-3" />
-            Message
+          <button
+            onClick={() => setOfferTarget({ counterparty: s, mode: "buy" })}
+            className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary/15 text-primary text-[10px] font-bold hover:bg-primary/25 active:scale-[0.97] transition-all"
+          >
+            <ArrowLeftRight className="w-3 h-3" />
+            Offer
           </button>
         </div>
       </div>
@@ -358,7 +367,10 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
           <span className="flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-white/5 border border-white/[0.06] text-[10px] font-semibold text-cream/35">
             <LogIcon className="w-2.5 h-2.5" />{b.logistics}
           </span>
-          <button className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-xl bg-green-500/15 text-green-400 text-[10px] font-bold hover:bg-green-500/25 active:scale-[0.97] transition-all">
+          <button
+            onClick={() => setOfferTarget({ counterparty: b, mode: "accept" })}
+            className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-xl bg-green-500/15 text-green-400 text-[10px] font-bold hover:bg-green-500/25 active:scale-[0.97] transition-all"
+          >
             <Check className="w-3 h-3" />
             Accept
           </button>
@@ -368,6 +380,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in" onClick={handleClose} />
@@ -571,5 +584,14 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
         </div>
       </div>
     </div>
+
+    <TradeOfferModal
+      isOpen={offerTarget !== null}
+      onClose={() => setOfferTarget(null)}
+      marketItem={item}
+      counterparty={offerTarget?.counterparty ?? null}
+      mode={offerTarget?.mode ?? "buy"}
+    />
+    </>
   );
 }
