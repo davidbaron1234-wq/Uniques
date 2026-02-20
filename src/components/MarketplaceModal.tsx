@@ -92,6 +92,33 @@ function getOfferItemName(category: string | undefined, idx: number): string {
   return pool[idx % pool.length];
 }
 
+// ── Item thumbnail images ─────────────────────────────────────────────────────
+
+// Real artwork for known mock items; others fall back to DiceBear shapes
+const POKEAPI = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork";
+const ITEM_THUMBNAILS: Record<string, string> = {
+  // Pokémon TCG — official Pokémon artwork keyed by Pokédex number
+  "Pikachu V Alt Art":    `${POKEAPI}/25.png`,
+  "Umbreon VMAX Alt Art": `${POKEAPI}/197.png`,
+  "Charizard ex SAR":     `${POKEAPI}/6.png`,
+  "Mewtwo ex SAR":        `${POKEAPI}/150.png`,
+  "Lugia ex SAR":         `${POKEAPI}/249.png`,
+  // Sports Cards
+  "Prizm Silver RC":      "https://images.pokemontcg.io/base1/4.png", // placeholder art style
+  // Sneakers — use Unsplash stable IDs
+  "Jordan 1 High 'Chicago'": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=80&h=80&fit=crop",
+  "Nike SB Dunk 'Panda'":    "https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=80&h=80&fit=crop",
+  "Air Max 97 'Silver'":     "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=80&h=80&fit=crop",
+  "Yeezy 350 'Cream'":       "https://images.unsplash.com/photo-1539185441755-769473a23570?w=80&h=80&fit=crop",
+};
+
+function getItemThumbnail(name: string): string {
+  return (
+    ITEM_THUMBNAILS[name] ??
+    `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(name)}&size=40`
+  );
+}
+
 // ── Mock data types ──────────────────────────────────────────────────────────
 
 const avatar = (seed: string) =>
@@ -176,7 +203,7 @@ function generateListings(price: number, category?: string) {
         name:         itemName,
         condition:    conditions[i % conditions.length],
         value:        perItem,
-        thumbnailUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(itemName)}`,
+        thumbnailUrl: getItemThumbnail(itemName),
       };
     });
 
@@ -261,14 +288,27 @@ function logisticsIcon(l: Logistics): typeof Truck {
 // ── Offer item row (shared between buyer list and ConfirmAccept) ─────────────
 
 function OfferItemRow({ oi }: { oi: BuyerOfferItem }) {
+  const [imgErr, setImgErr] = useState(false);
   const isGraded =
     oi.condition.startsWith("PSA") ||
     oi.condition.startsWith("BGS") ||
     oi.condition.startsWith("MS-");
+  const initial = oi.name.trim()[0]?.toUpperCase() ?? "?";
   return (
     <div className="flex items-center gap-2.5">
       <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-charcoal-light/20 border border-white/[0.06]">
-        <img src={oi.thumbnailUrl} alt={oi.name} className="w-full h-full object-cover" />
+        {imgErr ? (
+          <div className="w-full h-full flex items-center justify-center bg-primary/15">
+            <span className="text-xs font-bold text-primary">{initial}</span>
+          </div>
+        ) : (
+          <img
+            src={oi.thumbnailUrl}
+            alt={oi.name}
+            className="w-full h-full object-cover"
+            onError={() => setImgErr(true)}
+          />
+        )}
       </div>
       <div className="flex-1 min-w-0 space-y-0.5">
         <p className="text-[11px] text-cream/70 font-semibold leading-tight truncate">{oi.name}</p>
@@ -381,11 +421,17 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
   };
 
   const handleAcceptConfirm = () => {
+    // Compare by masterId (exact) first, then case-insensitive trimmed name
+    const norm = (s: string) => s.trim().toLowerCase();
     const ownsItem = inventory.some(
-      (i) => (item?.id && i.masterId === item.id) || i.name === item?.name,
+      (i) =>
+        (item?.id && i.masterId === item.id) ||
+        (i.name != null && item?.name != null && norm(i.name) === norm(item.name)),
     );
     if (!ownsItem) {
-      setAcceptError("You don't have this item in your inventory to trade.");
+      setAcceptError(
+        `Cannot accept offer: you do not currently possess "${item?.name}" in your inventory.`,
+      );
       return;
     }
     setAcceptError(null);
