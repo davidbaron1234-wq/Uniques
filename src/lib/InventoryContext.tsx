@@ -159,7 +159,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setItems((prev) =>
       prev.map((item) =>
         idSet.has(item.id)
-          ? { ...item, isLocked: false, lockedNote: undefined }
+          ? { ...item, isLocked: false, lockedType: undefined, lockedNote: undefined, pendingDeal: undefined }
           : item
       )
     );

@@ -107,8 +107,10 @@ export interface CollectibleItem {
   condition?: ItemCondition;
   status?: ItemStatus;
   upForTrade: boolean;
-  isLocked?: boolean;      // true while a sent trade offer is pending
-  lockedNote?: string;     // human-readable context, e.g. "Sent to Alex for Charizard"
+  isLocked?: boolean;             // true while item is tied to a pending/accepted trade
+  lockedType?: "sent" | "accepted"; // "sent" = offer sent, "accepted" = deal accepted, awaiting fulfillment
+  lockedNote?: string;            // human-readable context shown in "In Trade" view
+  pendingDeal?: PendingDeal;      // populated only when lockedType === "accepted"
   notes?: string;
   
   // שדות מתקדמים (אופציונליים)
@@ -147,6 +149,14 @@ export interface UserProfile {
   joinDate: string;
   paymentMethods?: string[];
   shippingPreferences?: string[];
+}
+
+// Details stored on a locked item while a deal awaits fulfillment
+export interface PendingDeal {
+  counterpartyName: string;
+  counterpartyAvatar: string;
+  theirItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+  theirCash: number;
 }
 
 // Persisted trade history entry (both static seed and user-created)

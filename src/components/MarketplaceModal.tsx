@@ -22,8 +22,7 @@ import {
 import { formatValue } from "@/lib/format";
 import type { Category } from "@/lib/constants";
 import { useInventory } from "@/lib/InventoryContext";
-import type { TradeHistoryEntry } from "@/lib/types";
-import { currentUser } from "@/lib/data";
+import type { PendingDeal } from "@/lib/types";
 import TradeOfferModal from "./TradeOfferModal";
 
 // ── Public types ────────────────────────────────────────────────────────────
@@ -335,7 +334,7 @@ function OfferItemRow({ oi }: { oi: BuyerOfferItem }) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceModalProps) {
-  const { items: inventory, removeItem, addTradeHistory } = useInventory();
+  const { items: inventory, updateItem } = useInventory();
   const [activeTab, setActiveTab]       = useState<MarketTab>("buy");
   const [showBidForm, setShowBidForm]   = useState(false);
   const [bidPrice, setBidPrice]         = useState("");
@@ -450,7 +449,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
       return;
     }
 
-    // Find the actual inventory item to record in history
+    // Find the actual inventory item to lock (NOT remove — fulfillment happens manually)
     const matchedItem = inventory.find(
       (i) =>
         (marketId  && i.masterId  === marketId)  ||
@@ -458,41 +457,26 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
         (marketName && i.name && norm(i.name) === marketName),
     );
 
-    // ── Create history record BEFORE removing ──────────────────────────
-    if (acceptTarget) {
-      const now = new Date().toISOString();
-      const entry: TradeHistoryEntry = {
-        id: `trade-${Date.now()}`,
-        from: {
-          name: acceptTarget.name,
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${acceptTarget.seed}&backgroundColor=b6e3f4,c0aede,ffd5dc`,
-        },
-        to: { name: "You", avatar: currentUser.avatar },
-        fromItems: acceptTarget.offerItems.map((oi, idx) => ({
-          id: `h-${Date.now()}-${idx}`,
+    // ── Lock item with full deal context; inventory removal happens at fulfillment ──
+    if (matchedItem && acceptTarget) {
+      const pendingDeal: PendingDeal = {
+        counterpartyName: acceptTarget.name,
+        counterpartyAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${acceptTarget.seed}&backgroundColor=b6e3f4,c0aede,ffd5dc`,
+        theirItems: acceptTarget.offerItems.map((oi, idx) => ({
+          id: `pd-${Date.now()}-${idx}`,
           name: oi.name,
           imageUrl: oi.thumbnailUrl,
           estimatedValue: oi.value,
         })),
-        fromCash: acceptTarget.offerPrice,
-        toItems: matchedItem
-          ? [{
-              id: matchedItem.id,
-              name: matchedItem.name,
-              imageUrl: matchedItem.customImage || matchedItem.imageUrl,
-              estimatedValue: matchedItem.estimatedValue,
-            }]
-          : [{ id: "sold", name: item?.name ?? "Item", imageUrl: item?.imageUrl ?? "", estimatedValue: item?.marketPrice }],
-        toCash: 0,
-        status: "accepted",
-        createdAt: now,
-        completedAt: now,
+        theirCash: acceptTarget.offerPrice,
       };
-      addTradeHistory(entry);
+      updateItem(matchedItem.id, {
+        isLocked: true,
+        lockedType: "accepted",
+        lockedNote: `Deal accepted with ${acceptTarget.name}. Awaiting fulfillment.`,
+        pendingDeal,
+      });
     }
-
-    // ── Now safe to remove the traded item ─────────────────────────────
-    if (matchedItem) removeItem(matchedItem.id);
 
     setAcceptError(null);
     setAcceptSuccess(true);
@@ -862,8 +846,11 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
               </div>
               <h3 className="text-base font-bold text-cream mb-2">Deal Accepted!</h3>
               <p className="text-sm text-cream/40 leading-relaxed">
-                <span className="text-cream/60 font-semibold">{acceptTarget.name}</span> has been
-                notified. Coordinate delivery details via message.
+                The item is now in your{" "}
+                <span className="text-amber-400 font-semibold">In Trade</span> section.
+                Once you and{" "}
+                <span className="text-cream/60 font-semibold">{acceptTarget.name}</span>{" "}
+                have exchanged, tap <span className="text-green-400 font-semibold">Mark as Completed</span> to finalise.
               </p>
             </div>
           ) : (

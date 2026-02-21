@@ -27,7 +27,7 @@ import ItemConfigForm, { ItemConfig } from "@/components/ItemConfigForm";
 import MarketplaceModal from "@/components/MarketplaceModal";
 import { inventoryItems, currentUser } from "@/lib/data";
 import { formatValue } from "@/lib/format";
-import { CollectibleItem, Category, ItemCondition, ItemStatus } from "@/lib/types";
+import { CollectibleItem, Category, ItemCondition, ItemStatus, TradeHistoryEntry } from "@/lib/types";
 import { CATEGORIES } from "@/lib/constants";
 import {
   Plus,
@@ -50,6 +50,7 @@ import {
   BarChart3,
   Lock,
   Unlock,
+  CheckCircle2,
 } from "lucide-react";
 
 // ── localStorage keys ────────────────────────────────────────────────────
@@ -208,7 +209,7 @@ function TrustStars({ score, reviewCount, onClick }: { score: number; reviewCoun
 // ═════════════════════════════════════════════════════════════════════════
 
 export default function ProfilePage() {
-  const { unlockItems } = useInventory();
+  const { unlockItems, addTradeHistory } = useInventory();
   const [items, setItems] = useState<CollectibleItem[]>(inventoryItems);
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
   const [pinnedGrailIds, setPinnedGrailIds] = useState<string[]>([]);
@@ -396,14 +397,59 @@ export default function ProfilePage() {
     setEditingItem(null);
   };
 
+  // Sent offer cancelled — unlock and clear all lock fields
   const handleCancelOffer = () => {
     if (!editingItem) return;
-    // Unlock in context (persists to localStorage) and in local state
     unlockItems([editingItem.id]);
     setItems((prev) =>
-      prev.map((i) => (i.id === editingItem.id ? { ...i, isLocked: false } : i))
+      prev.map((i) =>
+        i.id === editingItem.id
+          ? { ...i, isLocked: false, lockedType: undefined, lockedNote: undefined, pendingDeal: undefined }
+          : i
+      )
     );
-    setEditingItem((prev) => prev ? { ...prev, isLocked: false } : null);
+    setEditingItem(null);
+  };
+
+  // Accepted deal cancelled before real-world fulfillment
+  const handleCancelDeal = () => {
+    if (!editingItem) return;
+    unlockItems([editingItem.id]);
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === editingItem.id
+          ? { ...i, isLocked: false, lockedType: undefined, lockedNote: undefined, pendingDeal: undefined }
+          : i
+      )
+    );
+    setEditingItem(null);
+  };
+
+  // Finalize: write history record then permanently remove the traded item
+  const handleMarkCompleted = () => {
+    if (!editingItem?.pendingDeal) return;
+    const deal = editingItem.pendingDeal;
+    const now = new Date().toISOString();
+    const entry: TradeHistoryEntry = {
+      id: `trade-${Date.now()}`,
+      from: { name: deal.counterpartyName, avatar: deal.counterpartyAvatar },
+      to: { name: "You", avatar: currentUser.avatar },
+      fromItems: deal.theirItems,
+      fromCash: deal.theirCash,
+      toItems: [{
+        id: editingItem.id,
+        name: editingItem.name,
+        imageUrl: editingItem.customImage || editingItem.imageUrl,
+        estimatedValue: editingItem.estimatedValue,
+      }],
+      toCash: 0,
+      status: "accepted",
+      createdAt: now,
+      completedAt: now,
+    };
+    addTradeHistory(entry);
+    setItems((prev) => prev.filter((i) => i.id !== editingItem.id));
+    setEditingItem(null);
   };
 
   const filters = PROFILE_FILTERS;
@@ -572,36 +618,49 @@ export default function ProfilePage() {
                 <p className="text-[11px] text-amber-400/60 font-semibold uppercase tracking-wider mb-3">
                   {filteredItems.length} item{filteredItems.length !== 1 ? "s" : ""} pending · tap to cancel
                 </p>
-                {filteredItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => handleViewItem(item)}
-                    className="w-full flex items-center gap-3 p-3 rounded-2xl bg-background-light border border-amber-500/15 hover:border-amber-500/30 transition-colors text-left"
-                  >
-                    <div className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0">
-                      <img
-                        src={item.customImage || item.imageUrl}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-amber-500/20" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-cream truncate">{item.name}</p>
-                      <p className="text-xs text-amber-400/70 mt-0.5 truncate">
-                        {item.lockedNote ?? "Pending trade offer"}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      {item.estimatedValue != null && (
-                        <span className="text-xs font-bold text-primary">{formatValue(item.estimatedValue)}</span>
-                      )}
-                      <span className="text-[9px] bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded font-bold">
-                        PENDING
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                {filteredItems.map((item) => {
+                  const isAccepted = item.lockedType === "accepted";
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleViewItem(item)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-2xl bg-background-light transition-colors text-left border ${
+                        isAccepted
+                          ? "border-green-500/20 hover:border-green-500/35"
+                          : "border-amber-500/15 hover:border-amber-500/30"
+                      }`}
+                    >
+                      <div className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0">
+                        <img
+                          src={item.customImage || item.imageUrl}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className={`absolute inset-0 ${isAccepted ? "bg-green-500/15" : "bg-amber-500/20"}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-cream truncate">{item.name}</p>
+                        <p className={`text-xs mt-0.5 truncate ${isAccepted ? "text-green-400/70" : "text-amber-400/70"}`}>
+                          {item.lockedNote ?? (isAccepted ? "Deal accepted · Awaiting fulfillment" : "Pending trade offer")}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        {item.estimatedValue != null && (
+                          <span className="text-xs font-bold text-primary">{formatValue(item.estimatedValue)}</span>
+                        )}
+                        {isAccepted ? (
+                          <span className="text-[9px] bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded font-bold">
+                            ACCEPTED
+                          </span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded font-bold">
+                            PENDING
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -659,11 +718,22 @@ export default function ProfilePage() {
                       <p className="text-sm text-cream/40 mt-0.5">{editingItem.category}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {editingItem.isLocked && (
+                      {editingItem.isLocked && editingItem.lockedType === "accepted" && (
+                        <div className="flex items-start gap-1.5 px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/25 w-full">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <span className="text-xs font-bold text-green-400">Deal Accepted · Awaiting Fulfillment</span>
+                            {editingItem.lockedNote && (
+                              <p className="text-[11px] text-green-400/60 mt-0.5 leading-snug">{editingItem.lockedNote}</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {editingItem.isLocked && editingItem.lockedType !== "accepted" && (
                         <div className="flex items-start gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 w-full">
                           <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                           <div>
-                            <span className="text-xs font-bold text-amber-400">In Trade · Pending</span>
+                            <span className="text-xs font-bold text-amber-400">Offer Sent · Pending Response</span>
                             {editingItem.lockedNote && (
                               <p className="text-[11px] text-amber-400/70 mt-0.5 leading-snug">{editingItem.lockedNote}</p>
                             )}
@@ -709,7 +779,26 @@ export default function ProfilePage() {
                   <button onClick={handleDeleteItem} className="flex items-center justify-center px-3.5 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all">
                     <Trash2 className="w-4 h-4" />
                   </button>
-                  {editingItem.isLocked ? (
+                  {editingItem.isLocked && editingItem.lockedType === "accepted" ? (
+                    // Accepted deal — show Cancel Deal + Mark as Completed
+                    <>
+                      <button
+                        onClick={handleCancelDeal}
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-2xl bg-white/[0.06] text-cream/40 font-bold text-sm hover:bg-white/10 active:scale-[0.97] transition-all"
+                      >
+                        <Unlock className="w-4 h-4" />
+                        Cancel Deal
+                      </button>
+                      <button
+                        onClick={handleMarkCompleted}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-500/20 text-green-400 font-bold text-sm hover:bg-green-500/30 active:scale-[0.97] transition-all"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Mark as Completed
+                      </button>
+                    </>
+                  ) : editingItem.isLocked ? (
+                    // Sent offer — show Cancel Offer
                     <button
                       onClick={handleCancelOffer}
                       className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-amber-500/15 text-amber-400 font-bold text-sm hover:bg-amber-500/25 active:scale-[0.97] transition-all"
