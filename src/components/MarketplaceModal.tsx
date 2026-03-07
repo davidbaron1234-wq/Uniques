@@ -428,37 +428,34 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
   };
 
   const handleAcceptConfirm = () => {
-    // Three-tier match (most → least precise):
-    // 1. masterId  — exact catalog ID match
-    // 2. imageUrl  — same CDN image URL = definitively the same card
-    // 3. name      — case-insensitive, covers cross-set same-name cards
-    const norm = (s: string) => s.trim().toLowerCase();
+    // Normalize to alphanumeric-only slug: strips ALL punctuation, whitespace variants,
+    // invisible chars (U+00A0, U+200B, etc.) and Unicode apostrophes in one pass.
+    // "Erika's Oddish " → "erikasoddish",  "Budew\u00A0" → "budew"
+    const norm = (s: string) =>
+      s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
     const marketId   = item?.id ?? "";
-    const marketImg  = item?.imageUrl ?? "";
     const marketName = item?.name ? norm(item.name) : "";
-    const ownsItem = inventory.some(
+    const marketImg  = item?.imageUrl ?? "";
+
+    // Three-tier match — priority: masterId → name → imageUrl
+    // Name is checked before imageUrl so AI-scanned items (blob/base64 URLs) still match.
+    const matchedItem = inventory.find(
       (i) =>
-        (marketId  && i.masterId  === marketId)  ||
-        (marketImg && i.imageUrl  === marketImg)  ||
-        (marketName && i.name && norm(i.name) === marketName),
+        (marketId   && i.masterId && i.masterId === marketId)  ||
+        (marketName && i.name    && norm(i.name) === marketName) ||
+        (marketImg  && i.imageUrl === marketImg),
     );
-    if (!ownsItem) {
+
+    if (!matchedItem) {
       setAcceptError(
         `Cannot accept offer: you do not currently possess "${item?.name}" in your inventory.`,
       );
       return;
     }
 
-    // Find the actual inventory item to lock (NOT remove — fulfillment happens manually)
-    const matchedItem = inventory.find(
-      (i) =>
-        (marketId  && i.masterId  === marketId)  ||
-        (marketImg && i.imageUrl  === marketImg)  ||
-        (marketName && i.name && norm(i.name) === marketName),
-    );
-
     // ── Lock item with full deal context; inventory removal happens at fulfillment ──
-    if (matchedItem && acceptTarget) {
+    if (acceptTarget) {
       const pendingDeal: PendingDeal = {
         counterpartyName: acceptTarget.name,
         counterpartyAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${acceptTarget.seed}&backgroundColor=b6e3f4,c0aede,ffd5dc`,
@@ -669,7 +666,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                 <div className="flex items-center gap-1.5 mt-1">
                   <TrendingUp className="w-3.5 h-3.5 text-green-400" />
                   <span className="text-sm font-bold text-green-400">{formatValue(item.marketPrice)}</span>
-                  <span className="text-[10px] text-cream/25 ml-0.5">market price</span>
+                  <span className="text-[10px] text-cream/25 ml-0.5">eBay Avg</span>
                 </div>
               )}
             </div>

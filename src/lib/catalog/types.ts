@@ -1,7 +1,21 @@
 import { LucideIcon } from "lucide-react";
 
 // ── Master Catalog Type System (Global) ────────────────────────────────────
-export type CatalogCategory = "Pokémon TCG" | "Trading Cards" | "Sneakers" | "Coins";
+// Includes all 11 app categories so eBay items can be classified precisely.
+// "Trading Cards" is kept for backwards compatibility with seed data.
+export type CatalogCategory =
+  | "Pokémon TCG"
+  | "Sports Cards"
+  | "Other TCG"
+  | "Funko Pop"
+  | "Lego"
+  | "Sneakers"
+  | "Video Games"
+  | "Comics"
+  | "Watches"
+  | "Coins"
+  | "Trading Cards"
+  | "Other";
 
 export interface MasterItem {
   id: string;

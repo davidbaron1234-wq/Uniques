@@ -1,17 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
-import CardDetailModal from "@/components/CardDetailModal"; 
-import ItemConfigForm, { ItemConfig } from "@/components/ItemConfigForm"; 
+import CardDetailModal from "@/components/CardDetailModal";
+import ItemConfigForm, { ItemConfig } from "@/components/ItemConfigForm";
 import { formatValue } from "@/lib/format";
 import { MasterItem } from "@/lib/catalog/types";
 import { CollectibleItem } from "@/lib/types";
 import { CATEGORIES, Category } from "@/lib/constants";
-import { Search, X, Loader2, Check, Save, ArrowLeft, AlertCircle } from "lucide-react";
+import {
+  Search, X, Loader2, Check, Save, ArrowLeft, AlertCircle,
+  Star, UserPlus, UserCheck, Users,
+} from "lucide-react";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 60;
 
 const SEARCH_FILTERS = ["All", ...CATEGORIES] as const;
 type SearchFilter = (typeof SEARCH_FILTERS)[number];
@@ -28,11 +33,191 @@ function mapCatalogCategory(apiCategory: string): Category {
   if (lower.includes("watch")) return "Watches";
   if (lower.includes("comic")) return "Comics";
   if (lower.includes("game") || lower.includes("console")) return "Video Games";
-  return "Other"; 
+  return "Other";
 }
 
-export default function SearchPage() {
-  const [query, setQuery] = useState("");
+// ── Accent-insensitive text normalization ─────────────────────────────────────
+const normalize = (str: string) =>
+  str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+// ── Collector directory (mock data) ───────────────────────────────────────────
+
+type Collector = {
+  id: string;
+  name: string;
+  handle: string;
+  avatar: string;
+  trades: number;
+  collectionValue: number;
+  categories: string[];
+  trustScore: number;
+  online: boolean;
+};
+
+const COLLECTORS: Collector[] = [
+  {
+    id: "user-drew",
+    name: "Drew",
+    handle: "drew",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Drew&backgroundColor=B5EAD7",
+    trades: 63,
+    collectionValue: 27000,
+    categories: ["Pokémon TCG", "Funko Pop"],
+    trustScore: 4.9,
+    online: true,
+  },
+  {
+    id: "user-ethan",
+    name: "Ethan",
+    handle: "ethan",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ethan&backgroundColor=FFDAC1",
+    trades: 38,
+    collectionValue: 31200,
+    categories: ["Sports Cards", "Lego", "Funko Pop"],
+    trustScore: 4.6,
+    online: true,
+  },
+  {
+    id: "user-sam",
+    name: "Sam",
+    handle: "sam",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sam&backgroundColor=FCF9D5",
+    trades: 91,
+    collectionValue: 14500,
+    categories: ["Pokémon TCG"],
+    trustScore: 4.8,
+    online: false,
+  },
+  {
+    id: "user-alex",
+    name: "Alex",
+    handle: "alex",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex&backgroundColor=AA95C5",
+    trades: 27,
+    collectionValue: 48000,
+    categories: ["Funko Pop"],
+    trustScore: 4.7,
+    online: false,
+  },
+  {
+    id: "user-jordan",
+    name: "Jordan",
+    handle: "jordan",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan&backgroundColor=CAE6CE",
+    trades: 44,
+    collectionValue: 9800,
+    categories: ["Sneakers"],
+    trustScore: 4.5,
+    online: false,
+  },
+  {
+    id: "user-riley",
+    name: "Riley",
+    handle: "riley",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Riley&backgroundColor=FFD9E8",
+    trades: 15,
+    collectionValue: 5600,
+    categories: ["Comics", "Video Games"],
+    trustScore: 4.3,
+    online: false,
+  },
+];
+
+// ── Collector card ─────────────────────────────────────────────────────────────
+
+function CollectorCard({
+  collector,
+  followed,
+  onFollow,
+  index,
+}: {
+  collector: Collector;
+  followed: boolean;
+  onFollow: () => void;
+  index: number;
+}) {
+  return (
+    <div
+      className="flex items-center bg-background-light rounded-2xl overflow-hidden hover:bg-white/[0.05] transition-colors animate-slide-up"
+      style={{ animationDelay: `${index * 0.05}s`, animationFillMode: "both" }}
+    >
+      {/* Clickable profile area */}
+      <Link
+        href={`/u/${collector.handle}`}
+        className="flex items-center gap-3 flex-1 p-4 min-w-0"
+      >
+        {/* Avatar + online dot */}
+        <div className="relative flex-shrink-0">
+          <div className="w-11 h-11 rounded-full overflow-hidden border border-white/[0.08]">
+            <img
+              src={collector.avatar}
+              alt={collector.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          {collector.online && (
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-charcoal-dark" />
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <p className="text-sm font-bold text-cream truncate">{collector.name}</p>
+            <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 flex-shrink-0" />
+            <span className="text-[10px] text-cream/40 font-semibold flex-shrink-0">{collector.trustScore}</span>
+          </div>
+          <p className="text-[10px] text-cream/30 font-medium">@{collector.handle}</p>
+          <p className="text-[10px] text-cream/25 mt-1">
+            {collector.trades} trades · {formatValue(collector.collectionValue)} collection
+          </p>
+          <div className="flex gap-1 mt-1.5 flex-wrap">
+            {collector.categories.slice(0, 2).map((cat) => (
+              <span
+                key={cat}
+                className="text-[9px] font-semibold text-cream/30 bg-white/[0.05] px-1.5 py-0.5 rounded"
+              >
+                {cat}
+              </span>
+            ))}
+          </div>
+        </div>
+      </Link>
+
+      {/* Follow button — outside the Link to avoid nested interactive elements */}
+      <div className="pr-4 flex-shrink-0">
+        <button
+          onClick={onFollow}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95 ${
+            followed
+              ? "bg-primary/10 text-primary border border-primary/20"
+              : "bg-white/[0.07] text-cream/50 hover:bg-white/[0.13] hover:text-cream/80 border border-white/[0.08]"
+          }`}
+        >
+          {followed
+            ? <UserCheck className="w-3 h-3" />
+            : <UserPlus className="w-3 h-3" />
+          }
+          {followed ? "Following" : "Follow"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+function SearchPageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"Items" | "Collectors">("Items");
+  const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const itemId = searchParams.get("itemId");
+  const autoOpen = searchParams.get("autoOpen");
+  const action = searchParams.get("action");
+  const [autoTradeOpen, setAutoTradeOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<SearchFilter>("All");
   const [results, setResults] = useState<MasterItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -40,8 +225,6 @@ export default function SearchPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
-  
   const [viewItem, setViewItem] = useState<MasterItem | null>(null);
   const [addItem, setAddItem] = useState<MasterItem | null>(null);
 
@@ -57,6 +240,23 @@ export default function SearchPage() {
   });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Category pills drag-to-scroll ──────────────────────────────────────
+  const pillsRef = useRef<HTMLDivElement>(null);
+  const pillsDrag = useRef({ active: false, startX: 0, scrollLeft: 0 });
+  const handlePillsDown = (e: React.MouseEvent) => {
+    pillsDrag.current = { active: true, startX: e.pageX, scrollLeft: pillsRef.current?.scrollLeft ?? 0 };
+    if (pillsRef.current) pillsRef.current.style.cursor = "grabbing";
+  };
+  const handlePillsMove = (e: React.MouseEvent) => {
+    if (!pillsDrag.current.active || !pillsRef.current) return;
+    e.preventDefault();
+    pillsRef.current.scrollLeft = pillsDrag.current.scrollLeft - (e.pageX - pillsDrag.current.startX);
+  };
+  const handlePillsEnd = () => {
+    pillsDrag.current.active = false;
+    if (pillsRef.current) pillsRef.current.style.cursor = "grab";
+  };
   const [localToast, setLocalToast] = useState<{ msg: string, type: 'success' | 'error' } | null>(null);
 
   const fetchResults = useCallback(
@@ -69,10 +269,11 @@ export default function SearchPage() {
 
       try {
         const params = new URLSearchParams();
-        if (searchQuery.length >= 2) params.set("q", searchQuery);
+        if (searchQuery.trim().length >= 2) params.set("q", searchQuery.trim());
         if (category !== "All") params.set("category", category);
         params.set("page", String(pageNum));
         params.set("pageSize", String(PAGE_SIZE));
+        params.set("categoryIds", "1,220,64482,11116,281");
 
         const res = await fetch(`/api/catalog/search?${params.toString()}`);
         if (!res.ok) throw new Error("Search failed");
@@ -92,13 +293,13 @@ export default function SearchPage() {
       } finally {
         setLoading(false);
         setLoadingMore(false);
-        setInitialLoad(false);
       }
     },
     []
   );
 
   useEffect(() => {
+    if (activeTab !== "Items") return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       fetchResults(query, selectedCategory, 1, false);
@@ -106,7 +307,41 @@ export default function SearchPage() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, selectedCategory, fetchResults]);
+  }, [query, selectedCategory, activeTab, fetchResults]);
+
+  // Sync local query state when the Header pushes a new ?q= while the user is
+  // already on /search (useState initializer only runs on mount, not on URL changes).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q !== null && q !== query) {
+      setQuery(q);
+    }
+  }, [searchParams]);
+
+  // Auto-open the detail modal when a deep-linked itemId is present and results
+  // have loaded. Tries an exact ID match first, then falls back to results[0].
+  // Cleans the itemId out of the URL immediately to prevent re-triggering on
+  // subsequent renders (e.g. load-more updating the results array).
+  useEffect(() => {
+    if (!itemId || results.length === 0) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const match = results.find((r) => r.id === itemId || (r as any).masterId === itemId);
+    setViewItem(match ?? results[0]);
+    const qs = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+    window.history.replaceState(null, "", `/search${qs}`);
+  }, [itemId, results]);
+
+  // Auto-open the first result when a Radar match deep-link includes autoOpen=true.
+  // If action=trade is also present, flag the modal to skip to the trade/marketplace view.
+  // Cleans all params from the URL after triggering to prevent re-firing on re-renders.
+  useEffect(() => {
+    if (autoOpen !== "true" || results.length === 0) return;
+    setViewItem(results[0]);
+    if (action === "trade") setAutoTradeOpen(true);
+    const qs = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+    window.history.replaceState(null, "", `/search${qs}`);
+  }, [autoOpen, action, results]);
 
   const handleLoadMore = () => {
     if (page < totalPages && !loadingMore) {
@@ -125,13 +360,13 @@ export default function SearchPage() {
         graded: false,
         gradeNum: "10",
         grader: "PSA",
-        customImage: undefined // איפוס תמונה מהעלאה קודמת
+        customImage: undefined
     });
   };
 
   const handleSaveToInventory = () => {
     if (!addItem) return;
-    
+
     try {
         const newItem: CollectibleItem = {
             id: `new-${Date.now()}`,
@@ -139,10 +374,7 @@ export default function SearchPage() {
             name: addItem.name,
             category: mapCatalogCategory(addItem.category),
             imageUrl: addItem.imageLarge || addItem.imageSmall,
-            
-            // ✅ המחיר נשמר כאן מהטופס
-            estimatedValue: config.askingPrice, 
-            
+            estimatedValue: config.askingPrice,
             condition: config.condition,
             status: config.status,
             upForTrade: config.status === "For Trade",
@@ -152,15 +384,11 @@ export default function SearchPage() {
             gradeNum: config.graded ? config.gradeNum : undefined,
             year: config.year,
             pieces: config.pieces,
-            
-            // ✅ כאן נכנסת התמונה המכווצת שבנינו בתיקון הקודם
-            customImage: config.customImage 
+            customImage: config.customImage
         };
 
         const currentInventoryString = localStorage.getItem("uniques_inventory");
         const currentInventory = currentInventoryString ? JSON.parse(currentInventoryString) : [];
-        
-        // שמירה ל-LocalStorage
         localStorage.setItem("uniques_inventory", JSON.stringify([newItem, ...currentInventory]));
 
         setAddItem(null);
@@ -168,12 +396,30 @@ export default function SearchPage() {
         setTimeout(() => setLocalToast(null), 3000);
 
     } catch (e) {
-        // ✅ אם הגענו לכאן, כנראה שגם הכיווץ לא הספיק (יותר מדי פריטים בזיכרון)
         console.error("LocalStorage Save error:", e);
         setLocalToast({ msg: "Memory full! Try removing old items or a smaller image.", type: 'error' });
         setTimeout(() => setLocalToast(null), 5000);
     }
   };
+
+  const toggleFollow = (id: string) => {
+    setFollowedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  // Filter collectors by query (name, handle, or category)
+  const filteredCollectors = COLLECTORS.filter((c) => {
+    if (!query.trim()) return true;
+    const q = normalize(query);
+    return (
+      normalize(c.name).includes(q) ||
+      normalize(c.handle).includes(q) ||
+      c.categories.some((cat) => normalize(cat).includes(q))
+    );
+  });
 
   const hasMore = page < totalPages;
 
@@ -182,114 +428,168 @@ export default function SearchPage() {
       <Header />
 
       <main className="max-w-lg mx-auto">
-        <div className="px-5 pt-6 pb-3">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-cream/30" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search 5,000+ collectibles..."
-              className="w-full pl-12 pr-10 py-3.5 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-charcoal-light/50"
-              >
-                <X className="w-4 h-4 text-cream/30" />
-              </button>
-            )}
-          </div>
-        </div>
 
-        <div className="px-5 pb-3">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {SEARCH_FILTERS.map((cat) => (
+        {/* ── Tab toggle ── */}
+        <div className="px-5 pt-4 pb-3">
+          <div className="flex gap-2 p-1 rounded-2xl bg-background-light">
+            {(["Items", "Collectors"] as const).map((tab) => (
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                  selectedCategory === cat
-                    ? "bg-surface/25 text-surface-light shadow-glow-surface"
-                    : "bg-background-light text-cream/35 hover:text-cream/60"
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold transition-all ${
+                  activeTab === tab
+                    ? "bg-primary text-charcoal-dark shadow-soft"
+                    : "text-cream/40 hover:text-cream/70"
                 }`}
               >
-                {cat}
+                {tab === "Collectors" && <Users className="w-3.5 h-3.5" />}
+                {tab}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="px-5 pb-4">
-          {!initialLoad && (
-            <p className="text-xs text-cream/30 mb-3 font-medium">
-              {total.toLocaleString()} result{total !== 1 ? "s" : ""}
-            </p>
-          )}
-
-          {loading && (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-6 h-6 text-surface-light/50 animate-spin" />
-            </div>
-          )}
-
-          {!loading && (
-            <>
-              <div className="grid grid-cols-3 gap-3">
-                {results.map((item, i) => (
+        {/* ── Items tab content ── */}
+        {activeTab === "Items" && (
+          <>
+            {/* Category pills (Items only) */}
+            <div className="px-5 pb-3">
+              <div
+                ref={pillsRef}
+                className="flex flex-nowrap gap-2 overflow-x-auto pb-1 scrollbar-none cursor-grab select-none"
+                onMouseDown={handlePillsDown}
+                onMouseMove={handlePillsMove}
+                onMouseUp={handlePillsEnd}
+                onMouseLeave={handlePillsEnd}
+              >
+                {SEARCH_FILTERS.map((cat) => (
                   <button
-                    key={item.id}
-                    onClick={() => setViewItem(item)}
-                    className="rounded-2xl overflow-hidden bg-background-light shadow-soft card-hover group animate-scale-in text-left"
-                    style={{ animationDelay: `${Math.min(i, 20) * 0.03}s`, animationFillMode: "both" }}
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                      selectedCategory === cat
+                        ? "bg-surface/25 text-surface-light shadow-glow-surface"
+                        : "bg-background-light text-cream/35 hover:text-cream/60"
+                    }`}
                   >
-                    <div className="relative aspect-square overflow-hidden">
-                      <img
-                        src={item.imageSmall}
-                        alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                    </div>
-                    <div className="p-2.5">
-                      <p className="text-xs text-cream/80 truncate font-medium">{item.name}</p>
-                      {item.marketPrice > 0 && (
-                        <p className="text-[10px] text-primary/70 font-semibold mt-0.5">
-                          {formatValue(item.marketPrice)}
-                        </p>
-                      )}
-                    </div>
+                    {cat}
                   </button>
                 ))}
               </div>
+            </div>
 
-              {hasMore && (
-                <div className="flex justify-center mt-6">
-                  <button
-                    onClick={handleLoadMore}
-                    disabled={loadingMore}
-                    className="px-6 py-3 rounded-2xl bg-surface/15 text-surface-light text-sm font-semibold hover:bg-surface/25 active:scale-[0.97] transition-all disabled:opacity-50"
-                  >
-                    {loadingMore ? "Loading..." : `Load More (${results.length} of ${total.toLocaleString()})`}
-                  </button>
+            {/* Results grid */}
+            <div className="px-5 pb-4">
+              {loading && (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-6 h-6 text-surface-light/50 animate-spin" />
                 </div>
               )}
-            </>
-          )}
-        </div>
+
+              {!loading && (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    {results.map((item, i) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setViewItem(item)}
+                        className="rounded-2xl overflow-hidden bg-background-light shadow-soft card-hover group animate-scale-in text-left"
+                        style={{ animationDelay: `${Math.min(i, 20) * 0.03}s`, animationFillMode: "both" }}
+                      >
+                        <div className={`aspect-square flex items-center justify-center ${
+                          item.category === "Lego" || item.category === "Funko Pop"
+                            ? "bg-white p-2"
+                            : "bg-white/[0.05] p-3"
+                        }`}>
+                          <img
+                            src={item.imageSmall}
+                            alt={item.name}
+                            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        </div>
+                        <div className="p-2.5">
+                          <p className="text-xs text-cream/80 truncate font-medium">{item.name}</p>
+                          {item.marketPrice > 0 && (
+                            <p className="text-[10px] text-primary/70 font-semibold mt-0.5">
+                              {formatValue(item.marketPrice)}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {hasMore && (
+                    <div className="flex justify-center mt-6">
+                      <button
+                        onClick={handleLoadMore}
+                        disabled={loadingMore}
+                        className="px-6 py-3 rounded-2xl bg-surface/15 text-surface-light text-sm font-semibold hover:bg-surface/25 active:scale-[0.97] transition-all disabled:opacity-50"
+                      >
+                        {loadingMore ? "Loading..." : "Load More"}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── Collectors tab content ── */}
+        {activeTab === "Collectors" && (
+          <div className="px-5 pb-6">
+            {/* Count */}
+            <p className="text-xs text-cream/30 font-medium mb-3">
+              {filteredCollectors.length} collector{filteredCollectors.length !== 1 ? "s" : ""}
+              {query.trim() ? ` matching "${query}"` : ""}
+            </p>
+
+            {filteredCollectors.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="w-16 h-16 rounded-full bg-background-light flex items-center justify-center mb-4">
+                  <Users className="w-8 h-8 text-cream/20" />
+                </div>
+                <p className="text-cream/40 font-medium">No collectors found</p>
+                <p className="text-cream/25 text-sm mt-1">Try a different name or category</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {filteredCollectors.map((c, i) => (
+                  <CollectorCard
+                    key={c.id}
+                    collector={c}
+                    followed={followedIds.has(c.id)}
+                    onFollow={() => toggleFollow(c.id)}
+                    index={i}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       <CardDetailModal
         item={viewItem}
-        onClose={() => setViewItem(null)}
+        autoOpenTrade={autoTradeOpen}
+        onClose={() => {
+          setViewItem(null);
+          setAutoTradeOpen(false);
+          // Strip itemId from the URL so it doesn't re-open the modal on re-render
+          if (searchParams.get("itemId")) {
+            const qs = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+            window.history.replaceState(null, "", `/search${qs}`);
+          }
+        }}
         onAdd={() => viewItem && handleStartAdd(viewItem)}
       />
 
       {addItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in" onClick={() => setAddItem(null)} />
-            
+
             <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl overflow-hidden max-h-[90vh] flex flex-col animate-slide-up border border-white/10 shadow-2xl">
                 <div className="flex items-center gap-4 px-5 py-4 border-b border-white/[0.06] bg-charcoal-dark z-10">
                     <button onClick={() => setAddItem(null)} className="p-1.5 rounded-xl hover:bg-charcoal-light transition-colors">
@@ -305,9 +605,9 @@ export default function SearchPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-5">
-                    <ItemConfigForm 
-                        config={config} 
-                        onChange={setConfig} 
+                    <ItemConfigForm
+                        config={config}
+                        onChange={setConfig}
                         category={mapCatalogCategory(addItem.category)}
                     />
                 </div>
@@ -316,7 +616,7 @@ export default function SearchPage() {
                     <button onClick={() => setAddItem(null)} className="px-6 py-3 rounded-2xl bg-white/5 text-cream font-bold hover:bg-white/10 transition-colors">
                         Cancel
                     </button>
-                    <button 
+                    <button
                         onClick={handleSaveToInventory}
                         className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold hover:bg-primary/30 active:scale-95 transition-all shadow-glow-primary"
                     >
@@ -339,5 +639,13 @@ export default function SearchPage() {
 
       <BottomNav />
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense>
+      <SearchPageContent />
+    </Suspense>
   );
 }

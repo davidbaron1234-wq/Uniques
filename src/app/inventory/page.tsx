@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   DndContext,
   closestCenter,
@@ -16,6 +16,8 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import { useInventory } from "@/lib/InventoryContext";
@@ -25,7 +27,7 @@ import GrailsPickerModal from "@/components/GrailsPickerModal";
 import ReviewsListModal from "@/components/ReviewsListModal";
 import ItemConfigForm, { ItemConfig } from "@/components/ItemConfigForm";
 import MarketplaceModal from "@/components/MarketplaceModal";
-import { inventoryItems, currentUser } from "@/lib/data";
+import { currentUser, tradeOffers } from "@/lib/data";
 import { formatValue } from "@/lib/format";
 import { CollectibleItem, Category, ItemCondition, ItemStatus, TradeHistoryEntry } from "@/lib/types";
 import { CATEGORIES } from "@/lib/constants";
@@ -51,12 +53,58 @@ import {
   Lock,
   Unlock,
   CheckCircle2,
+  ArrowRight,
+  History,
+  Zap,
 } from "lucide-react";
 
+// ── Soft paywall modal ────────────────────────────────────────────────────
+function LimitReachedModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div className="relative w-full max-w-sm bg-charcoal-dark rounded-3xl p-6 animate-slide-up border border-white/[0.08] shadow-2xl space-y-4">
+        <button onClick={onClose} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/10 flex items-center justify-center transition-colors">
+          <X className="w-4 h-4 text-cream/50" />
+        </button>
+
+        <div className="flex flex-col items-center text-center gap-3 pt-1">
+          <div className="w-14 h-14 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center">
+            <Package className="w-7 h-7 text-primary" />
+          </div>
+          <div>
+            <p className="text-lg font-extrabold text-cream leading-tight">Inventory Limit Reached</p>
+            <p className="text-xs text-cream/40 mt-1.5 leading-relaxed max-w-[240px] mx-auto">
+              You&apos;ve hit the <span className="text-cream/60 font-semibold">10-item limit</span> on the Free plan.
+              Upgrade to Uniques Pro to add unlimited items and unlock Wall-Street analytics.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-1">
+          <button
+            onClick={onUpgrade}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-primary text-charcoal-dark font-extrabold text-sm hover:bg-primary/90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 relative overflow-hidden group"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+            <Zap className="w-4 h-4 relative" />
+            <span className="relative">Upgrade to Pro — $4.99/mo</span>
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full py-3 rounded-2xl text-cream/40 text-sm font-semibold hover:text-cream/60 transition-colors"
+          >
+            Maybe later
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── localStorage keys ────────────────────────────────────────────────────
-const STORAGE_INVENTORY = "uniques_inventory";
 const STORAGE_PROFILE = "uniques_profile";
-const STORAGE_GRAILS = "uniques_pinned_grails";
+const STORAGE_GRAILS  = "uniques_pinned_grails";
 
 // ── Defaults ─────────────────────────────────────────────────────────────
 const defaultProfile: UserProfile = {
@@ -67,18 +115,6 @@ const defaultProfile: UserProfile = {
 };
 
 // ── Loaders ──────────────────────────────────────────────────────────────
-function loadInventory(): CollectibleItem[] {
-  if (typeof window === "undefined") return inventoryItems;
-  try {
-    const saved = localStorage.getItem(STORAGE_INVENTORY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch { /* corrupt data */ }
-  return inventoryItems;
-}
-
 function loadProfile(): UserProfile {
   if (typeof window === "undefined") return defaultProfile;
   try {
@@ -136,19 +172,19 @@ function SortableItem({ item, onTap }: { item: CollectibleItem; onTap: () => voi
         <GripVertical className="w-3.5 h-3.5 text-white/70" />
       </button>
 
-      <div className="aspect-square bg-charcoal-light/20 overflow-hidden">
+      <div className={`aspect-square flex items-center justify-center ${
+        item.category === "Lego" || item.category === "Funko Pop"
+          ? "bg-white p-2"
+          : "bg-white/[0.05] p-3"
+      }`}>
         <img
           src={item.customImage || item.imageUrl}
           alt={item.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
         />
       </div>
 
-      {item.isLocked ? (
-        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-amber-500/90 flex items-center justify-center shadow-soft">
-          <span className="text-[7px] font-bold text-charcoal-dark leading-none">IN TRADE</span>
-        </div>
-      ) : item.upForTrade && (
+      {item.upForTrade && !item.isLocked && (
         <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary/90 flex items-center justify-center shadow-soft">
           <ArrowLeftRight className="w-2.5 h-2.5 text-charcoal-dark" />
         </div>
@@ -164,11 +200,21 @@ function SortableItem({ item, onTap }: { item: CollectibleItem; onTap: () => voi
         <p className="text-[10px] text-cream/80 truncate leading-tight font-medium">
           {item.name}
         </p>
-        {item.estimatedValue && (
+        {item.isLocked ? (
+          <p className="text-[9px] font-bold text-amber-400 mt-0.5 flex items-center gap-1 flex-wrap">
+            <span className="flex items-center gap-0.5">
+              <Lock className="w-2 h-2" />
+              In Trade
+            </span>
+            {item.estimatedValue ? (
+              <span className="text-cream/35 font-normal">· {formatValue(item.estimatedValue)}</span>
+            ) : null}
+          </p>
+        ) : item.estimatedValue ? (
           <p className="text-[9px] text-primary/70 font-semibold mt-0.5">
             {formatValue(item.estimatedValue)}
           </p>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -209,13 +255,16 @@ function TrustStars({ score, reviewCount, onClick }: { score: number; reviewCoun
 // ═════════════════════════════════════════════════════════════════════════
 
 export default function ProfilePage() {
-  const { unlockItems, addTradeHistory } = useInventory();
-  const [items, setItems] = useState<CollectibleItem[]>(inventoryItems);
+  const router = useRouter();
+  const { data: session } = useSession();
+  const isFree = !session?.user?.tier || session.user.tier === "free";
+  const { items, setItems, updateItem, removeItem, unlockItems, addTradeHistory, addRawItem, tradeHistoryEntries } = useInventory();
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
   const [pinnedGrailIds, setPinnedGrailIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddModal, setShowAddModal]     = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showGrailsPicker, setShowGrailsPicker] = useState(false);
   const [showReviews, setShowReviews] = useState(false);
@@ -234,17 +283,28 @@ export default function ProfilePage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
+  // ── Category pills drag-to-scroll ─────────────────────────────────────
+  const pillsRef = useRef<HTMLDivElement>(null);
+  const pillsDrag = useRef({ active: false, startX: 0, scrollLeft: 0 });
+  const handlePillsDown = (e: React.MouseEvent) => {
+    pillsDrag.current = { active: true, startX: e.pageX, scrollLeft: pillsRef.current?.scrollLeft ?? 0 };
+    if (pillsRef.current) pillsRef.current.style.cursor = "grabbing";
+  };
+  const handlePillsMove = (e: React.MouseEvent) => {
+    if (!pillsDrag.current.active || !pillsRef.current) return;
+    e.preventDefault();
+    pillsRef.current.scrollLeft = pillsDrag.current.scrollLeft - (e.pageX - pillsDrag.current.startX);
+  };
+  const handlePillsEnd = () => {
+    pillsDrag.current.active = false;
+    if (pillsRef.current) pillsRef.current.style.cursor = "grab";
+  };
+
   useEffect(() => {
-    setItems(loadInventory());
     setProfile(loadProfile());
     setPinnedGrailIds(loadPinnedGrails());
     setHydrated(true);
   }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try { localStorage.setItem(STORAGE_INVENTORY, JSON.stringify(items)); } catch { /* quota */ }
-  }, [items, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -341,7 +401,9 @@ export default function ProfilePage() {
       year: newItem.year,
       pieces: newItem.pieces
     };
-    setItems((prev) => [item, ...prev]);
+    // addRawItem updates the shared InventoryContext — items on this page
+    // re-renders automatically since items now comes from context.
+    addRawItem(item);
   };
 
   const handleViewItem = (item: CollectibleItem) => {
@@ -365,49 +427,34 @@ export default function ProfilePage() {
     setViewMode(false);
   };
 
-  // 🔥 כאן היה חלק מהאדום - הוספתי "as ItemCondition" כדי לסדר את זה
   const handleSaveEdit = () => {
     if (!editingItem) return;
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === editingItem.id
-          ? {
-              ...i,
-              estimatedValue: editConfig.askingPrice,
-              condition: editConfig.condition as ItemCondition,
-              status: editConfig.status as ItemStatus,
-              upForTrade: editConfig.status === "For Trade",
-              notes: editConfig.notes || undefined,
-              customImage: editConfig.customImage,
-              graded: editConfig.graded,
-              grader: editConfig.grader,
-              gradeNum: editConfig.gradeNum,
-              year: editConfig.year,
-              pieces: editConfig.pieces
-            }
-          : i
-      )
-    );
+    updateItem(editingItem.id, {
+      estimatedValue: editConfig.askingPrice,
+      condition: editConfig.condition as ItemCondition,
+      status: editConfig.status as ItemStatus,
+      upForTrade: editConfig.status === "For Trade",
+      notes: editConfig.notes || undefined,
+      customImage: editConfig.customImage,
+      graded: editConfig.graded,
+      grader: editConfig.grader,
+      gradeNum: editConfig.gradeNum,
+      year: editConfig.year,
+      pieces: editConfig.pieces,
+    });
     setEditingItem(null);
   };
 
   const handleDeleteItem = () => {
     if (!editingItem) return;
-    setItems((prev) => prev.filter((i) => i.id !== editingItem.id));
+    removeItem(editingItem.id);
     setEditingItem(null);
   };
 
-  // Sent offer cancelled — unlock and clear all lock fields
+  // Sent offer cancelled — unlockItems in context clears all lock fields
   const handleCancelOffer = () => {
     if (!editingItem) return;
     unlockItems([editingItem.id]);
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === editingItem.id
-          ? { ...i, isLocked: false, lockedType: undefined, lockedNote: undefined, pendingDeal: undefined }
-          : i
-      )
-    );
     setEditingItem(null);
   };
 
@@ -415,13 +462,6 @@ export default function ProfilePage() {
   const handleCancelDeal = () => {
     if (!editingItem) return;
     unlockItems([editingItem.id]);
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === editingItem.id
-          ? { ...i, isLocked: false, lockedType: undefined, lockedNote: undefined, pendingDeal: undefined }
-          : i
-      )
-    );
     setEditingItem(null);
   };
 
@@ -448,7 +488,7 @@ export default function ProfilePage() {
       completedAt: now,
     };
     addTradeHistory(entry);
-    setItems((prev) => prev.filter((i) => i.id !== editingItem.id));
+    removeItem(editingItem.id);
     setEditingItem(null);
   };
 
@@ -568,7 +608,14 @@ export default function ProfilePage() {
             <Package className="w-4 h-4 text-cream/50" />
             <h2 className="text-sm font-bold text-cream/80">Collection</h2>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-5 px-5 scrollbar-none">
+          <div
+            ref={pillsRef}
+            className="flex flex-nowrap gap-2 overflow-x-auto pb-2 -mx-5 px-5 scrollbar-none cursor-grab select-none"
+            onMouseDown={handlePillsDown}
+            onMouseMove={handlePillsMove}
+            onMouseUp={handlePillsEnd}
+            onMouseLeave={handlePillsEnd}
+          >
             {filters.map((f) => {
               const isInTrade = f === "In Trade";
               const isActive = activeFilter === f;
@@ -576,7 +623,7 @@ export default function ProfilePage() {
                 <button
                   key={f}
                   onClick={() => setActiveFilter(f)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                     isInTrade && isActive
                       ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                       : isInTrade && !isActive
@@ -687,13 +734,28 @@ export default function ProfilePage() {
         )}
       </main>
 
-      <button onClick={() => setShowAddModal(true)} className="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-primary shadow-soft-lg shadow-primary/20 flex items-center justify-center hover:bg-primary-dark active:scale-90 transition-all z-40 animate-bounce-soft">
+      <button
+        onClick={() => {
+          if (isFree && items.length >= 10) {
+            setShowLimitModal(true);
+          } else {
+            setShowAddModal(true);
+          }
+        }}
+        className="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-primary shadow-soft-lg shadow-primary/20 flex items-center justify-center hover:bg-primary-dark active:scale-90 transition-all z-40 animate-bounce-soft"
+      >
         <Plus className="w-7 h-7 text-charcoal-dark" strokeWidth={2.5} />
       </button>
 
       {/* ── Modals ──────────────────────────────────────────── */}
+      {showLimitModal && (
+        <LimitReachedModal
+          onClose={() => setShowLimitModal(false)}
+          onUpgrade={() => { setShowLimitModal(false); router.push("/upgrade"); }}
+        />
+      )}
       <AddItemModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAdd={handleAddItem} />
-      <EditProfileModal isOpen={showEditProfile} onClose={() => setShowEditProfile(false)} profile={profile} onSave={setProfile} />
+      <EditProfileModal isOpen={showEditProfile} onClose={() => setShowEditProfile(false)} profile={profile} onSave={setProfile} isPro={!isFree} />
       <GrailsPickerModal isOpen={showGrailsPicker} onClose={() => setShowGrailsPicker(false)} items={items} pinnedIds={pinnedGrailIds} onSave={setPinnedGrailIds} />
       <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={currentUser.trustScore || 4.8} />
 
@@ -776,9 +838,12 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <div className="flex gap-2 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
-                  <button onClick={handleDeleteItem} className="flex items-center justify-center px-3.5 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {/* Delete is hidden for locked items — they're tied to active trades */}
+                  {!editingItem.isLocked && (
+                    <button onClick={handleDeleteItem} className="flex items-center justify-center px-3.5 py-3 rounded-2xl bg-red-500/10 text-red-400 font-bold text-sm hover:bg-red-500/20 active:scale-[0.97] transition-all">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                   {editingItem.isLocked && editingItem.lockedType === "accepted" ? (
                     // Accepted deal — show Cancel Deal + Mark as Completed
                     <>
@@ -798,13 +863,25 @@ export default function ProfilePage() {
                       </button>
                     </>
                   ) : editingItem.isLocked ? (
-                    // Sent offer — show Cancel Offer
+                    // Sent offer — route to the specific trade card in History
                     <button
-                      onClick={handleCancelOffer}
+                      onClick={() => {
+                        // Find the pending trade containing this item (by id or name)
+                        const hasItem = (t: { fromItems: Array<{ id: string; name: string }>; toItems: Array<{ id: string; name: string }> }) =>
+                          [...t.fromItems, ...t.toItems].some(
+                            (i) => i.id === editingItem.id || i.name === editingItem.name
+                          );
+                        const match =
+                          tradeHistoryEntries.find((t) => t.status === "pending" && hasItem(t)) ??
+                          tradeOffers.find(hasItem);
+                        setEditingItem(null);
+                        router.push(match ? `/history#trade-${match.id}` : "/history");
+                      }}
                       className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-amber-500/15 text-amber-400 font-bold text-sm hover:bg-amber-500/25 active:scale-[0.97] transition-all"
                     >
-                      <Unlock className="w-4 h-4" />
-                      Cancel Offer
+                      <History className="w-4 h-4" />
+                      Manage in History
+                      <ArrowRight className="w-3.5 h-3.5 opacity-60" />
                     </button>
                   ) : (
                     <>

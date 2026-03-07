@@ -168,9 +168,10 @@ export interface TradeHistoryEntry {
   fromCash: number;
   toItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
   toCash: number;
-  status: "accepted" | "declined";
+  status: "pending" | "accepted" | "declined";
   createdAt: string;
-  completedAt: string;
+  completedAt?: string;  // absent while a trade is still pending
+  message?: string;      // optional note from the offerer
 }
 
 export interface TradeOffer {

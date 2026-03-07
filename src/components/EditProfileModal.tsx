@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, Camera, Trash2, ImagePlus, Save, Wallet, Truck } from "lucide-react";
+import { X, Camera, Trash2, ImagePlus, Save, Wallet, Truck, ShieldCheck, Info } from "lucide-react";
 
 export interface UserProfile {
   name: string;
@@ -20,6 +20,7 @@ interface EditProfileModalProps {
   onClose: () => void;
   profile: UserProfile;
   onSave: (profile: UserProfile) => void;
+  isPro?: boolean;
 }
 
 function ChipSelector({
@@ -80,17 +81,23 @@ function ChipSelector({
   );
 }
 
+const NAME_CHANGE_KEY = "last_name_change";
+const LOCK_DAYS = 90;
+
 export default function EditProfileModal({
   isOpen,
   onClose,
   profile,
   onSave,
+  isPro = false,
 }: EditProfileModalProps) {
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio);
   const [avatar, setAvatar] = useState(profile.avatar);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(profile.paymentMethods || []);
   const [shippingPreferences, setShippingPreferences] = useState<string[]>(profile.shippingPreferences || []);
+  const [nameLocked, setNameLocked] = useState(false);
+  const [daysRemaining, setDaysRemaining] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync form when profile prop changes (e.g. modal re-opens)
@@ -101,6 +108,22 @@ export default function EditProfileModal({
       setAvatar(profile.avatar);
       setPaymentMethods(profile.paymentMethods || []);
       setShippingPreferences(profile.shippingPreferences || []);
+
+      // Check 90-day name lock
+      const raw = localStorage.getItem(NAME_CHANGE_KEY);
+      if (raw) {
+        const daysSince = (Date.now() - Number(raw)) / (1000 * 60 * 60 * 24);
+        if (daysSince < LOCK_DAYS) {
+          setNameLocked(true);
+          setDaysRemaining(Math.ceil(LOCK_DAYS - daysSince));
+        } else {
+          setNameLocked(false);
+          setDaysRemaining(0);
+        }
+      } else {
+        setNameLocked(false);
+        setDaysRemaining(0);
+      }
     }
   }, [isOpen, profile]);
 
@@ -130,6 +153,10 @@ export default function EditProfileModal({
 
   const handleSave = () => {
     if (!name.trim()) return;
+    const nameChanged = name.trim() !== profile.name;
+    if (nameChanged && !nameLocked) {
+      localStorage.setItem(NAME_CHANGE_KEY, String(Date.now()));
+    }
     onSave({
       name: name.trim(),
       bio: bio.trim(),
@@ -211,17 +238,44 @@ export default function EditProfileModal({
 
           {/* ── Name ───────────────────────────────────────────── */}
           <div>
-            <label className="block text-sm font-semibold text-cream/70 mb-2">
-              Display Name
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-semibold text-cream/70">Display Name</label>
+              {isPro && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-[10px] font-bold text-primary">
+                  <ShieldCheck className="w-3 h-3" />
+                  Pro · Verified
+                </span>
+              )}
+            </div>
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => !nameLocked && setName(e.target.value)}
+              readOnly={nameLocked}
               placeholder="Your name"
               maxLength={40}
-              className="w-full px-4 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
+              className={`w-full px-4 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none transition-all ${
+                nameLocked
+                  ? "opacity-50 cursor-not-allowed select-none"
+                  : "focus:ring-2 focus:ring-surface/30"
+              }`}
             />
+            {nameLocked ? (
+              <div className="flex items-start gap-1.5 mt-2 px-1">
+                <span className="text-[10px] text-red-400/80 font-semibold leading-relaxed">
+                  🔒 Display name locked for {daysRemaining} more day{daysRemaining !== 1 ? "s" : ""}.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-1.5 mt-2 px-1">
+                <Info className="w-3 h-3 text-amber-400/70 flex-shrink-0 mt-0.5" />
+                <p className="text-[10px] text-cream/35 leading-relaxed">
+                  Display names can only be changed{" "}
+                  <span className="text-amber-400/70 font-semibold">once every 90 days</span>{" "}
+                  to maintain community trust and prevent scams.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* ── Bio ────────────────────────────────────────────── */}

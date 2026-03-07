@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import {
-  X, Search, Loader2, ChevronLeft, Save, ScanLine, AlertCircle, DollarSign, CheckCircle2, Barcode, Tag
+  X, Search, Loader2, ChevronLeft, Save, ScanLine, AlertCircle, DollarSign, CheckCircle2, Barcode, Tag, Sparkles, ImagePlus
 } from "lucide-react";
 import { CATEGORIES, Category, mapCatalogCategory } from "@/lib/constants";
 import { MasterItem } from "@/lib/catalog/types";
@@ -33,6 +35,10 @@ interface AddItemModalProps {
 }
 
 export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalProps) {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const isFree = !session?.user?.tier || session.user.tier === "free";
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [step, setStep] = useState<"search" | "configure">("search");
   const [name, setName] = useState("");
   const [category, setCategory] = useState<Category | "">("");
@@ -48,13 +54,14 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   
   const [barcodeInput, setBarcodeInput] = useState("");
   const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
+  const [conditionError, setConditionError] = useState(false);
 
   // 🔥 הוספתי את המצב 'manual' לטיפוסים כאן
   const [priceStatus, setPriceStatus] = useState<{ msg: string; type: 'success' | 'loading' | 'error' | 'warning' | 'manual' } | null>(null);
 
   const [config, setConfig] = useState<ItemConfig>({
     askingPrice: undefined,
-    condition: "Near Mint",
+    condition: "",
     status: "For Trade",
     notes: "",
     year: "",
@@ -64,7 +71,8 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     gradeNum: "10"
   });
   
-  const scanInputRef = useRef<HTMLInputElement>(null);
+  const scanInputRef  = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   // ── מנוע מחירים (Sniper) ──
@@ -217,6 +225,13 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     }
   }, [isOpen, catalogTotal]);
 
+  // Auto-dismiss condition error toast after 3 s
+  useEffect(() => {
+    if (!conditionError) return;
+    const t = setTimeout(() => setConditionError(false), 3000);
+    return () => clearTimeout(t);
+  }, [conditionError]);
+
   const searchCatalog = useCallback((query: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query || query.length < 2) {
@@ -241,6 +256,31 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     setCatalogImage(item.imageLarge || item.imageSmall);
     setShowSuggestions(false);
     setCategory(mapCatalogCategory(item.category));
+  };
+
+  // ── Plain photo attach (no AI) — available to all users ──────────────────
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const img = new Image();
+      img.src = reader.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX = 800;
+        const scale = img.width > MAX ? MAX / img.width : 1;
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const b64 = canvas.toDataURL("image/jpeg", 0.75);
+        setScannedImage(b64);
+        setConfig((prev) => ({ ...prev, customImage: b64 }));
+      };
+    };
+    reader.readAsDataURL(file);
+    // reset so same file can be re-selected
+    e.target.value = "";
   };
 
   // ── מנוע סריקה ראשי ──
@@ -348,6 +388,11 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
 
   const handleSave = () => {
     if (!name.trim() || !category) return;
+    // Condition is mandatory unless the item is graded (grade replaces condition)
+    if (!config.graded && !config.condition) {
+      setConditionError(true);
+      return;
+    }
     onAdd({
       name: name.trim(),
       category: category as Category,
@@ -372,18 +417,34 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   const resetForm = () => {
     setStep("search"); setName(""); setCategory(""); setCatalogImage(null); setScannedImage(null);
     setMasterId(undefined); setSuggestions([]); setIsScanning(false); setScanError(null); setPriceStatus(null);
-    setBarcodeInput("");
-    setConfig({ askingPrice: undefined, condition: "Near Mint", status: "For Trade", notes: "", year: "", pieces: "", graded: false, gradeNum: "10" });
+    setBarcodeInput(""); setConditionError(false);
+    setConfig({ askingPrice: undefined, condition: "", status: "For Trade", notes: "", year: "", pieces: "", graded: false, gradeNum: "10" });
+  };
+
+  // Wrapper so selecting a condition clears the error immediately
+  const handleConfigChange = (next: typeof config) => {
+    setConfig(next);
+    if (next.condition || next.graded) setConditionError(false);
   };
 
   const handleClose = () => { resetForm(); onClose(); };
-  const isStepOneValid = name.trim() && category;
+  const isStepOneValid  = name.trim() && category;
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={handleClose} />
+
+      {/* Floating condition-error toast */}
+      {conditionError && (
+        <div className="absolute bottom-8 inset-x-0 flex justify-center z-10 pointer-events-none px-6">
+          <div className="animate-slide-up flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-red-500/90 backdrop-blur-sm shadow-2xl border border-red-400/30">
+            <AlertCircle className="w-4 h-4 text-white flex-shrink-0" />
+            <span className="text-sm font-semibold text-white whitespace-nowrap">Please select a condition before saving</span>
+          </div>
+        </div>
+      )}
 
       <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl overflow-hidden max-h-[90vh] flex flex-col animate-slide-up">
         <button onClick={handleClose} className="absolute top-3 right-3 z-30 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors">
@@ -396,24 +457,64 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               <h2 className="text-lg font-bold text-cream">Add New Item</h2>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div>
+              {/* Two action buttons: upload (free) + AI scan (pro) */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* ── Upload Photo — everyone ── */}
                 <button
                   type="button"
-                  onClick={() => scanInputRef.current?.click()}
-                  disabled={isScanning}
-                  className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-gradient-to-r from-purple-500/15 to-purple-500/15 border border-purple-500/20 hover:border-purple-400 transition-all group"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="flex flex-col items-center gap-2 px-3 py-4 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] hover:border-white/20 transition-all active:scale-95"
                 >
-                  <div className="w-11 h-11 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                    {isScanning ? <Loader2 className="w-5 h-5 text-purple-400 animate-spin" /> : 
-                     <ScanLine className="w-5 h-5 text-purple-400" />}
+                  <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center">
+                    <ImagePlus className="w-5 h-5 text-cream/50" />
                   </div>
-                  <div className="text-left">
-                    <p className="text-sm text-cream font-bold">{isScanning ? "Scanning..." : "Scan with AI Vision"}</p>
-                    <p className="text-[10px] text-cream/30 mt-0.5">Cards, Funko Pops, Figures & More</p>
+                  <div className="text-center">
+                    <p className="text-xs font-bold text-cream/70">Upload Photo</p>
+                    <p className="text-[9px] text-cream/30 mt-0.5">Free · Any image</p>
                   </div>
                 </button>
-                <input ref={scanInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanUpload} className="hidden" />
+
+                {/* ── Magic AI Scan — pro only (premium styling) ── */}
+                <div className="relative group">
+                  {/* Animated glow border — always visible for free to entice, brighter for pro */}
+                  <div className={`absolute -inset-[1.5px] rounded-2xl bg-gradient-to-br from-purple-500 via-violet-400 to-fuchsia-500 transition-opacity duration-300 ${
+                    isFree ? "opacity-40 animate-pulse" : "opacity-70 group-hover:opacity-100"
+                  }`} />
+                  <button
+                    type="button"
+                    disabled={isScanning}
+                    onClick={() => {
+                      if (isFree) { setShowUpgradePrompt(true); }
+                      else { scanInputRef.current?.click(); }
+                    }}
+                    className="relative w-full flex flex-col items-center gap-2 px-3 py-4 rounded-2xl bg-[#1a1520] transition-all active:scale-[0.97]"
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isFree ? "bg-purple-500/10" : "bg-purple-500/25"}`}>
+                      {isScanning
+                        ? <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+                        : <Sparkles className="w-5 h-5 text-purple-400" />
+                      }
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <p className="text-xs font-extrabold text-purple-300">
+                          {isScanning ? "Scanning…" : "Magic AI Scan"}
+                        </p>
+                        {isFree && (
+                          <span className="text-[8px] font-black text-primary bg-primary/20 border border-primary/40 px-1.5 py-0.5 rounded-md leading-none tracking-wide">PRO</span>
+                        )}
+                      </div>
+                      <p className="text-[9px] text-purple-400/60 mt-0.5">
+                        {isFree ? "Tap to unlock" : "Auto-identify & price"}
+                      </p>
+                    </div>
+                  </button>
+                </div>
               </div>
+
+              {/* Hidden file inputs */}
+              <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+              <input ref={scanInputRef}  type="file" accept="image/*" capture="environment" onChange={handleScanUpload} className="hidden" />
 
               <div className="flex gap-2">
                  <div className="relative flex-1">
@@ -458,8 +559,18 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   <div className="absolute z-50 w-full mt-2 bg-charcoal-light rounded-2xl border border-white/10 overflow-hidden shadow-2xl max-h-60 overflow-y-auto">
                     {suggestions.map((s) => (
                       <button key={s.id} onClick={() => handleSelectSuggestion(s)} className="w-full p-3 flex items-center gap-3 hover:bg-white/5 text-left border-b border-white/5 transition-colors">
-                        <img src={s.imageSmall} alt={s.name} className="w-10 h-10 rounded-lg object-cover" />
-                        <div><p className="text-sm text-cream font-bold">{s.name}</p><p className="text-[10px] text-cream/40">{s.category}</p></div>
+                        <img src={s.imageSmall} alt={s.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-cream font-bold truncate">{s.name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <p className="text-[10px] text-cream/40">{s.category}</p>
+                            {s.marketPrice > 0 && (
+                              <p className="text-[10px] text-primary/70 font-semibold">
+                                · ${s.marketPrice.toFixed(2)} <span className="text-cream/30 font-normal">eBay Avg</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -467,7 +578,24 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </div>
 
               <div>
-                <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className="w-full px-4 py-3 rounded-2xl bg-background-light text-cream appearance-none focus:outline-none">
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    const newCat = e.target.value as Category;
+                    setCategory(newCat);
+                    // If the user hasn't typed anything yet, auto-browse eBay for this category
+                    if (!name.trim()) {
+                      setIsSearching(true);
+                      setSuggestions([]);
+                      fetch(`/api/catalog/search?category=${encodeURIComponent(newCat)}&pageSize=8`)
+                        .then((r) => r.json())
+                        .then((data) => { setSuggestions(data.items || []); setShowSuggestions(true); })
+                        .catch(() => setSuggestions([]))
+                        .finally(() => setIsSearching(false));
+                    }
+                  }}
+                  className="w-full px-4 py-3 rounded-2xl bg-background-light text-cream appearance-none focus:outline-none"
+                >
                   <option value="" disabled>Select a category</option>
                   {CATEGORIES.map((cat) => <option key={cat} value={cat} className="bg-charcoal-dark text-cream">{cat}</option>)}
                 </select>
@@ -493,17 +621,61 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-5">
-              <ItemConfigForm config={config} onChange={setConfig} category={category as string} />
+              <ItemConfigForm config={config} onChange={handleConfigChange} category={category as string} />
             </div>
-            <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
-              <button onClick={() => setStep("search")} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Back</button>
-              <button onClick={handleSave} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all">
-                <Save className="w-4 h-4" />
-                Save to Collection
-              </button>
+            <div className="px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
+              <div className="flex gap-3">
+                <button onClick={() => { setStep("search"); setConditionError(false); }} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Back</button>
+                <button
+                  onClick={handleSave}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  Save to Collection
+                </button>
+              </div>
             </div>
           </>
         )}
+
+        {/* ── Upgrade Prompt Overlay ── */}
+        {showUpgradePrompt && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-3xl bg-charcoal-dark/95 backdrop-blur-md p-6">
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-purple-500/10 via-transparent to-fuchsia-500/10 pointer-events-none" />
+
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 via-violet-400 to-fuchsia-500 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/30">
+              <Sparkles className="w-8 h-8 text-white" />
+            </div>
+
+            <h2 className="relative text-xl font-extrabold text-cream mb-2">Magic AI Scan</h2>
+            <p className="relative text-sm text-cream/40 text-center mb-3 max-w-[260px] leading-relaxed">
+              Instantly identify any collectible — cards, sneakers, LEGO, watches — and auto-fill market price data.
+            </p>
+            <div className="relative inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 border border-primary/30 mb-6">
+              <Sparkles className="w-3 h-3 text-primary" />
+              <span className="text-xs font-bold text-primary">Uniques Pro · $4.99/mo</span>
+            </div>
+
+            <button
+              onClick={() => window.open("/upgrade", "_blank")}
+              className="relative w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-extrabold text-sm hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-purple-500/20 mb-3 overflow-hidden group"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+              <span className="relative flex items-center justify-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                See Pro Plans
+              </span>
+            </button>
+
+            <button
+              onClick={() => setShowUpgradePrompt(false)}
+              className="relative w-full py-3 rounded-2xl bg-white/[0.05] text-cream/50 font-semibold text-sm hover:bg-white/[0.08] hover:text-cream/70 transition-all"
+            >
+              Maybe later
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );

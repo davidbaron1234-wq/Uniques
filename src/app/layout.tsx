@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { InventoryProvider } from "@/lib/InventoryContext";
+import { NotificationProvider } from "@/lib/NotificationContext";
+import AuthProvider from "@/components/AuthProvider";
+import ToastOverlay from "@/components/ToastOverlay";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,9 +29,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased font-body">
-        <InventoryProvider>
-          {children}
-        </InventoryProvider>
+        <AuthProvider>
+          <InventoryProvider>
+            <NotificationProvider>
+              {children}
+              <ToastOverlay />
+            </NotificationProvider>
+          </InventoryProvider>
+        </AuthProvider>
       </body>
     </html>
   );
