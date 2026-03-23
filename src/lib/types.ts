@@ -133,6 +133,7 @@ export interface User {
   trustScore: number;
   totalTrades: number;
   memberSince: string;
+  tier?: 'free' | 'pro';
   socialLinks?: {
     instagram?: string;
     twitter?: string;
@@ -164,9 +165,9 @@ export interface TradeHistoryEntry {
   id: string;
   from: { name: string; avatar: string };
   to: { name: string; avatar: string };
-  fromItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+  fromItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number; category?: string }>;
   fromCash: number;
-  toItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+  toItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number; category?: string }>;
   toCash: number;
   status: "pending" | "accepted" | "declined";
   createdAt: string;

@@ -119,7 +119,7 @@ export default function TradeOfferModal({
       })),
       fromCash: cashValue,
       toItems: [{
-        id:             marketItem.id,
+        id:             marketItem.id ?? "",
         name:           marketItem.name,
         imageUrl:       marketItem.imageUrl,
         estimatedValue: marketItem.marketPrice,
@@ -222,12 +222,12 @@ export default function TradeOfferModal({
         </div>
 
         {/* ══ SCROLLABLE BODY ══════════════════════════════════════════ */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="flex-1 overflow-y-auto scrollbar-none overscroll-contain">
 
           {/* ── Your Offer: PowerPicker ── */}
           <div className="px-4 pt-4 pb-2">
             <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider mb-3">
-              Your Offer · select items
+              Your Offer · select pieces
             </p>
 
             {availableItems.length === 0 ? (
@@ -235,9 +235,9 @@ export default function TradeOfferModal({
                 <div className="w-14 h-14 rounded-full bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mb-3">
                   <PackageOpen className="w-7 h-7 text-cream/20" />
                 </div>
-                <p className="text-sm font-bold text-cream/40 mb-1">No items available</p>
+                <p className="text-sm font-bold text-cream/40 mb-1">Your vault is empty</p>
                 <p className="text-xs text-cream/25 leading-relaxed max-w-[200px]">
-                  Add items to your inventory to include them here
+                  Curate pieces to your vault to include them here
                 </p>
               </div>
             ) : (
@@ -253,7 +253,7 @@ export default function TradeOfferModal({
           {/* ── Cash add-on (green = I add cash) ── */}
           <div className="px-4 pb-2 pt-2">
             <p className="text-[9px] text-cream/20 font-bold uppercase tracking-wider mb-1.5">
-              + Add cash to sweeten
+              + Sweeten with cash
             </p>
             <div className="relative">
               <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-green-400/40 pointer-events-none" />
@@ -328,7 +328,7 @@ export default function TradeOfferModal({
             </div>
           ) : (
             <p className="text-[11px] text-cream/20 text-center py-1">
-              Select items or add cash to see trade equity
+              Select pieces or add cash to see trade equity
             </p>
           )}
 
@@ -338,7 +338,7 @@ export default function TradeOfferModal({
               onClick={resetAndClose}
               className="px-4 py-3 rounded-2xl bg-white/[0.05] text-cream/40 font-bold text-sm hover:bg-white/10 active:scale-[0.97] transition-all"
             >
-              Cancel
+              Close
             </button>
             <button
               onClick={handleConfirm}

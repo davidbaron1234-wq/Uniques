@@ -4,47 +4,24 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Loader2, Check } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
-
-const NICHES = [
-  { label: "Pokémon TCG", emoji: "🃏" },
-  { label: "Sports Cards", emoji: "⚾" },
-  { label: "Watches",      emoji: "⌚" },
-  { label: "Coins",        emoji: "🪙" },
-  { label: "Sneakers",     emoji: "👟" },
-  { label: "Funko Pop",    emoji: "🎭" },
-  { label: "Lego",         emoji: "🧱" },
-  { label: "Comics",       emoji: "📚" },
-];
 
 export default function RegisterPage() {
   const router  = useRouter();
-  const [step,      setStep]      = useState<1 | 2>(1);
   const [name,      setName]      = useState("");
   const [email,     setEmail]     = useState("");
   const [password,  setPassword]  = useState("");
   const [showPass,  setShowPass]  = useState(false);
-  const [niches,    setNiches]    = useState<string[]>([]);
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState("");
 
-  const toggleNiche = (label: string) =>
-    setNiches((prev) =>
-      prev.includes(label) ? prev.filter((n) => n !== label) : [...prev, label]
-    );
-
-  const handleStep1 = (e: React.FormEvent) => {
+  const handleComplete = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     if (password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
     }
-    setStep(2);
-  };
-
-  const handleComplete = async () => {
     setError("");
     setLoading(true);
     const result = await signIn("credentials", {
@@ -56,9 +33,8 @@ export default function RegisterPage() {
     setLoading(false);
     if (result?.error) {
       setError("Something went wrong. Please try again.");
-      setStep(1);
     } else {
-      router.push("/");
+      router.push("/onboarding");
     }
   };
 
@@ -85,27 +61,13 @@ export default function RegisterPage() {
       <BgGlow />
 
       <div className="relative w-full max-w-sm space-y-8">
-        {/* Logo + step indicator */}
+        {/* Logo */}
         <div className="flex flex-col items-center gap-3">
           <Logo />
-          <div className="flex items-center gap-2 mt-1">
-            {[1, 2].map((s) => (
-              <div
-                key={s}
-                className={`h-1.5 rounded-full transition-all duration-300 ${
-                  s === step ? "w-8 bg-primary" : s < step ? "w-4 bg-primary/50" : "w-4 bg-white/10"
-                }`}
-              />
-            ))}
-          </div>
-          <p className="text-sm text-cream/40">
-            {step === 1 ? "Create your account" : "What do you collect?"}
-          </p>
+          <p className="text-sm text-cream/40">Create your account</p>
         </div>
 
-        {/* ── Step 1: Credentials ── */}
-        {step === 1 && (
-          <div className="glass border border-white/[0.08] rounded-3xl p-6 space-y-5 shadow-2xl">
+        <div className="glass border border-white/[0.08] rounded-3xl p-6 space-y-5 shadow-2xl">
             <button
               type="button"
               className="w-full flex items-center justify-center gap-3 py-3 rounded-2xl bg-white/[0.06] border border-white/[0.08] text-cream/70 text-sm font-semibold hover:bg-white/[0.1] active:scale-[0.98] transition-all"
@@ -120,7 +82,7 @@ export default function RegisterPage() {
               <div className="flex-1 h-px bg-white/[0.06]" />
             </div>
 
-            <form onSubmit={handleStep1} className="space-y-3">
+            <form onSubmit={handleComplete} className="space-y-3">
               <div className="relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/25 pointer-events-none" />
                 <input
@@ -175,76 +137,17 @@ export default function RegisterPage() {
 
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-primary text-charcoal-dark text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all shadow-lg"
-              >
-                Continue <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* ── Step 2: Niche picker ── */}
-        {step === 2 && (
-          <div className="glass border border-white/[0.08] rounded-3xl p-6 space-y-5 shadow-2xl">
-            <div>
-              <p className="text-xs font-bold text-cream/40 uppercase tracking-wider mb-1">Select all that apply</p>
-              <p className="text-cream/60 text-sm">We&apos;ll personalise your feed and suggest the best trades for you.</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {NICHES.map(({ label, emoji }) => {
-                const selected = niches.includes(label);
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => toggleNiche(label)}
-                    className={`relative flex items-center gap-3 px-3.5 py-3 rounded-2xl border text-left transition-all active:scale-[0.97] ${
-                      selected
-                        ? "bg-primary/15 border-primary/40 text-cream"
-                        : "bg-white/[0.03] border-white/[0.07] text-cream/50 hover:border-white/20 hover:text-cream/70"
-                    }`}
-                  >
-                    <span className="text-xl leading-none">{emoji}</span>
-                    <span className="text-xs font-bold leading-tight">{label}</span>
-                    {selected && (
-                      <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
-                        <Check className="w-2.5 h-2.5 text-charcoal-dark" strokeWidth={3} />
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {error && <p className="text-xs text-red-400 px-1">{error}</p>}
-
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={handleComplete}
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-primary text-charcoal-dark text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
               >
                 {loading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <>Complete Registration <ArrowRight className="w-4 h-4" /></>
+                  <>Create Account <ArrowRight className="w-4 h-4" /></>
                 )}
               </button>
-              {niches.length === 0 && (
-                <button
-                  type="button"
-                  onClick={handleComplete}
-                  disabled={loading}
-                  className="w-full py-2.5 text-xs text-cream/30 hover:text-cream/50 transition-colors"
-                >
-                  Skip for now
-                </button>
-              )}
-            </div>
+            </form>
           </div>
-        )}
 
         <p className="text-center text-sm text-cream/35">
           Already have an account?{" "}

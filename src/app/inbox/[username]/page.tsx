@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowLeftRight, Check, RefreshCw, Send, Smile, X } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Check, CheckCheck, RefreshCw, Send, Smile, X } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useInventory } from "@/lib/InventoryContext";
 import { useNotifications } from "@/lib/NotificationContext";
@@ -258,6 +258,29 @@ const EMOJI_CATEGORIES: EmojiCategory[] = [
 const ALL_EMOJIS = EMOJI_CATEGORIES.flatMap((c) => c.emojis);
 
 
+// ── Typing indicator (3 bouncing dots) ───────────────────────────────────────
+
+function TypingIndicator({ avatar, name }: { avatar: string; name: string }) {
+  return (
+    <div className="flex items-end gap-2 justify-start mt-3">
+      <div className="flex-shrink-0 w-7 h-7 rounded-full overflow-hidden bg-surface/20">
+        <img src={avatar} alt={name} className="w-full h-full object-cover" />
+      </div>
+      <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-background-light">
+        <div className="flex gap-1 items-center h-3">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-cream/40 animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s`, animationDuration: "0.9s" }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
@@ -274,10 +297,13 @@ export default function ChatPage() {
   const [showEmoji,       setShowEmoji]       = useState(false);
   const [emojiSearch,     setEmojiSearch]     = useState("");
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
+  const [isTyping,        setIsTyping]        = useState(false);
   // Per-message trade status (keyed by msg.id); allows inline resolution without touching seed data
   const [tradeStatuses,   setTradeStatuses]   = useState<Record<string, TradeStatus>>({});
   // The trade-offer message the user wants to counter; drives the counter ProposeTradeModal
   const [counterMsg,      setCounterMsg]      = useState<Msg | null>(null);
+
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bottomRef  = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
@@ -295,7 +321,7 @@ export default function ChatPage() {
     try {
       const raw = sessionStorage.getItem("injected_trade");
       if (!raw) return;
-      const payload = JSON.parse(raw) as {
+      let payload: {
         targetUser:     string;
         offeredItems:   Array<{ name: string; imageUrl: string }>;
         requestedItems: Array<{ name: string; imageUrl: string }>;
@@ -303,6 +329,7 @@ export default function ChatPage() {
         theirCashOffer: number;
         message?:       string;
       };
+      try { payload = JSON.parse(raw); } catch { sessionStorage.removeItem("injected_trade"); return; }
       if (payload.targetUser !== username) return;
       sessionStorage.removeItem("injected_trade");
       const now = Date.now();
@@ -391,6 +418,11 @@ export default function ChatPage() {
     setShowEmoji(false);
     setEmojiSearch("");
     inputRef.current?.focus();
+
+    // Simulate the other user typing a reply for 3 seconds
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    setIsTyping(true);
+    typingTimerRef.current = setTimeout(() => setIsTyping(false), 3000);
   };
 
   const appendEmoji = (emoji: string) => {
@@ -617,12 +649,15 @@ export default function ChatPage() {
 
                       {/* ── CTA section — changes based on direction + status ── */}
                       <div className="px-3 pb-3">
-                        {/* ── SETTLED: accepted ── */}
+                        {/* ── SETTLED: accepted — clickable link to Trade History ── */}
                         {tradeStatus === "accepted" && (
-                          <div className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-green-500/15 border border-green-500/20">
-                            <Check className="w-3.5 h-3.5 text-green-400" />
-                            <span className="text-xs font-bold text-green-400">Trade Accepted</span>
-                          </div>
+                          <button
+                            onClick={() => router.push("/history")}
+                            className="flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-green-500/15 border border-green-500/20 hover:bg-green-500/25 hover:border-green-500/35 active:scale-[0.97] transition-all cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                            <span className="text-xs font-bold text-green-400">Trade Accepted · View History</span>
+                          </button>
                         )}
 
                         {/* ── SETTLED: declined / cancelled ── */}
@@ -664,7 +699,7 @@ export default function ChatPage() {
                             {/* Decline */}
                             <button
                               onClick={() => handleDeclineOffer(msg.id)}
-                              className="flex-1 flex items-center justify-center py-2 rounded-xl text-red-400/70 text-[11px] font-bold active:scale-95 hover:bg-red-400/10 transition-all"
+                              className="flex-1 flex items-center justify-center py-2 rounded-xl bg-red-500/15 border border-red-500/20 text-red-400 text-[11px] font-bold active:scale-95 hover:bg-red-500/25 transition-all"
                             >
                               Decline
                             </button>
@@ -701,14 +736,18 @@ export default function ChatPage() {
                   )}
 
                   {showTime && (
-                    <p className={`text-[9px] mt-1 px-1 text-cream/25 ${isMe ? "text-right" : ""}`}>
-                      {msg.time}
-                    </p>
+                    <div className={`flex items-center gap-1 mt-1 px-1 ${isMe ? "justify-end" : "justify-start"}`}>
+                      <p className="text-[9px] text-cream/25">{msg.time}</p>
+                      {isMe && !msg.tradeOffer && (
+                        <CheckCheck className="w-3 h-3 text-teal-400/80 flex-shrink-0" />
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
             );
           })}
+          {isTyping && <TypingIndicator avatar={conv.avatar} name={conv.name} />}
           <div ref={bottomRef} />
         </div>
       </main>

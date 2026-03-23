@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { InventoryProvider } from "@/lib/InventoryContext";
+import { PreferencesProvider } from "@/lib/UserPreferencesContext";
 import { NotificationProvider } from "@/lib/NotificationContext";
+import { AchievementsProvider } from "@/lib/AchievementsContext";
 import AuthProvider from "@/components/AuthProvider";
 import ToastOverlay from "@/components/ToastOverlay";
+import TourCleanup from "@/components/TourCleanup";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,10 +34,15 @@ export default function RootLayout({
       <body className="antialiased font-body">
         <AuthProvider>
           <InventoryProvider>
+            <PreferencesProvider>
             <NotificationProvider>
-              {children}
-              <ToastOverlay />
+              <AchievementsProvider>
+                <TourCleanup />
+                {children}
+                <ToastOverlay />
+              </AchievementsProvider>
             </NotificationProvider>
+            </PreferencesProvider>
           </InventoryProvider>
         </AuthProvider>
       </body>

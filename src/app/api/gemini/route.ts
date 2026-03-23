@@ -47,8 +47,10 @@ export async function POST(req: Request) {
     const text = result.response.text();
     const cleanText = text.replace(/```json|```/g, "").trim();
     
-    console.log("Gemini Hybrid Response:", cleanText); 
-    return NextResponse.json(JSON.parse(cleanText));
+    console.log("Gemini Hybrid Response:", cleanText);
+    let parsed;
+    try { parsed = JSON.parse(cleanText); } catch { return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 }); }
+    return NextResponse.json(parsed);
 
   } catch (error: unknown) {
     console.error("Gemini Error:", error instanceof Error ? error.message : error);

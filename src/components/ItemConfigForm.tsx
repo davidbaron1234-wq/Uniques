@@ -23,9 +23,9 @@ interface ItemConfigFormProps {
   category?: string;
 }
 
-// ── הגדרות מצב לפי קטגוריה ──
+// ── Condition definitions per category (exported as single source of truth) ──
 
-const CARD_CONDITIONS = [
+export const CARD_CONDITIONS = [
   { value: "Mint", label: "Mint (M)" },
   { value: "Near Mint", label: "Near Mint (NM)" },
   { value: "Lightly Played", label: "Lightly Played (LP)" },
@@ -33,60 +33,86 @@ const CARD_CONDITIONS = [
   { value: "Damaged", label: "Damaged (HP)" },
 ];
 
-const FUNKO_CONDITIONS = [
+export const FUNKO_CONDITIONS = [
   { value: "Mint Box", label: "Mint Box 📦" },
   { value: "Damaged Box", label: "Damaged Box 💥" },
   { value: "Out of Box", label: "Out of Box (OOB) 🧘" },
 ];
 
-const LEGO_CONDITIONS = [
+export const LEGO_CONDITIONS = [
   { value: "Sealed", label: "Sealed (NIB) ✨" },
   { value: "Complete", label: "Built (Complete) ✅" },
   { value: "Incomplete", label: "Incomplete ⚠️" },
 ];
 
-const GAME_CONDITIONS = [
+export const GAME_CONDITIONS = [
   { value: "Sealed", label: "Sealed 🔒" },
   { value: "CIB", label: "Complete (CIB) 💿" },
   { value: "No Manual", label: "Boxed (No Manual) 📄" },
   { value: "Loose", label: "Loose (Disc/Cart) 💾" },
 ];
 
-const SNEAKER_CONDITIONS = [
+export const SNEAKER_CONDITIONS = [
   { value: "Deadstock", label: "Deadstock (New) 👟" },
   { value: "VNDS", label: "VNDS (Tried On) ✨" },
   { value: "Used", label: "Used / Worn 🚶" },
   { value: "Beaters", label: "Beaters 💀" },
 ];
 
-const COMIC_CONDITIONS = [
+export const COMIC_CONDITIONS = [
   { value: "Near Mint", label: "Near Mint (9.0+) 💎" },
   { value: "Very Fine", label: "Very Fine (7.0-9.0) ✨" },
   { value: "Fine", label: "Fine (5.0-7.0) 👌" },
   { value: "Reader", label: "Reader Copy 📖" },
 ];
 
-const WATCH_CONDITIONS = [
+export const WATCH_CONDITIONS = [
   { value: "New", label: "Brand New ⌚" },
   { value: "Box & Papers", label: "Box & Papers ✅" },
   { value: "Watch Only", label: "Watch Only 🛑" },
   { value: "Needs Service", label: "Needs Service 🔧" },
 ];
 
-const COIN_CONDITIONS = [
+export const COIN_CONDITIONS = [
   { value: "Raw", label: "Raw / Circulated 🪙" },
   { value: "Uncirculated", label: "Uncirculated (MS) ✨" },
   { value: "Proof", label: "Proof (PF/PR) 💎" },
   { value: "Bullion", label: "Bullion Value ⚖️" },
 ];
 
-const GENERIC_CONDITIONS = [
+export const GENERIC_CONDITIONS = [
   { value: "New", label: "New / Sealed" },
   { value: "Like New", label: "Like New" },
   { value: "Good", label: "Good" },
   { value: "Fair", label: "Fair" },
   { value: "Poor", label: "Poor" },
 ];
+
+// Exported helper — use this anywhere to get the right conditions for a category
+export function getConditionsForCategory(category?: string): { value: string; label: string }[] {
+  switch (category) {
+    case "Pokémon TCG":
+    case "Sports Cards":
+    case "Other TCG":
+      return CARD_CONDITIONS;
+    case "Funko Pop":
+      return FUNKO_CONDITIONS;
+    case "Lego":
+      return LEGO_CONDITIONS;
+    case "Video Games":
+      return GAME_CONDITIONS;
+    case "Sneakers":
+      return SNEAKER_CONDITIONS;
+    case "Comics":
+      return COMIC_CONDITIONS;
+    case "Watches":
+      return WATCH_CONDITIONS;
+    case "Coins":
+      return COIN_CONDITIONS;
+    default:
+      return GENERIC_CONDITIONS;
+  }
+}
 
 const STATUSES: { value: ItemStatus; label: string; desc: string }[] = [
   { value: "Showcase", label: "Showcase", desc: "Not available" },
@@ -105,32 +131,7 @@ export default function ItemConfigForm({ config, onChange, category }: ItemConfi
       : Math.floor(Math.random() * 90) + 20
   );
 
-  const getConditionList = () => {
-    switch (category) {
-        case "Pokémon TCG":
-        case "Sports Cards":
-        case "Other TCG":
-            return CARD_CONDITIONS;
-        case "Funko Pop":
-            return FUNKO_CONDITIONS;
-        case "Lego":
-            return LEGO_CONDITIONS;
-        case "Video Games":
-            return GAME_CONDITIONS;
-        case "Sneakers":
-            return SNEAKER_CONDITIONS;
-        case "Comics":
-            return COMIC_CONDITIONS;
-        case "Watches":
-            return WATCH_CONDITIONS;
-        case "Coins":
-            return COIN_CONDITIONS;
-        default:
-            return GENERIC_CONDITIONS;
-    }
-  };
-
-  const conditions = getConditionList();
+  const conditions = getConditionsForCategory(category);
   
   const supportsGrading = category === "Pokémon TCG" || category === "Sports Cards" || category === "Coins" || category === "Other TCG"; 
 

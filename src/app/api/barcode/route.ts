@@ -18,7 +18,10 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    const data = await res.json();
+    let data;
+    try { data = await res.json(); } catch {
+      return NextResponse.json({ error: "Failed to parse barcode API response" }, { status: 502 });
+    }
 
     if (data.items && data.items.length > 0) {
         const item = data.items[0];

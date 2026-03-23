@@ -326,6 +326,8 @@ async function fetchRawEbay(
   limit: number,
   offset: number,
   categoryId?: string,
+  minPrice?: number,
+  maxPrice?: number,
 ): Promise<{ summaries: EbayItemSummary[]; total: number }> {
   // Append wildcard so partial inputs (e.g. "chari") prefix-match full words
   // ("charizard", "charity" …). eBay Browse API does not fuzzy-match by default.
@@ -342,7 +344,11 @@ async function fetchRawEbay(
   // Native price floor + descending price sort — eBay applies these before
   // returning results, so our 50-item payload is already premium-biased and
   // we no longer need a local sort or a local price-floor filter.
-  url.searchParams.set("filter", "buyingOptions:{FIXED_PRICE},price:[15..],priceCurrency:USD");
+  const priceMin = minPrice ?? 15;
+  const priceFilter = maxPrice
+    ? `price:[${priceMin}..${maxPrice}]`
+    : `price:[${priceMin}..]`;
+  url.searchParams.set("filter", `buyingOptions:{FIXED_PRICE},${priceFilter},priceCurrency:USD`);
   url.searchParams.set("sort", "-price");
   if (categoryId) url.searchParams.set("category_ids", categoryId);
 
@@ -410,9 +416,9 @@ export function getSmartCategory(query: string): string | null {
 
 export async function searchEbayItems(
   query: string,
-  options: { limit?: number; offset?: number; categoryIds?: string } = {},
+  options: { limit?: number; offset?: number; categoryIds?: string; minPrice?: number; maxPrice?: number } = {},
 ): Promise<CatalogSearchResult> {
-  const { limit = 20, offset = 0, categoryIds } = options;
+  const { limit = 20, offset = 0, categoryIds, minPrice, maxPrice } = options;
   const empty: CatalogSearchResult = {
     items: [], total: 0, page: 1, pageSize: limit, totalPages: 0, query,
   };
@@ -439,7 +445,7 @@ export async function searchEbayItems(
     if (smartCat) {
       // Semantic routing: one precisely targeted request, zero contamination.
       // e.g. "rolex" → Wristwatches (31387) only — no wallets, no accessories.
-      const result = await fetchRawEbay(token, apiUrl, query, rawFetchLimit, offset, smartCat);
+      const result = await fetchRawEbay(token, apiUrl, query, rawFetchLimit, offset, smartCat, minPrice, maxPrice);
       summaries = result.summaries;
       total     = result.total;
     } else if (categoryIds && categoryIds.includes(",")) {
@@ -447,7 +453,7 @@ export async function searchEbayItems(
       const ids = categoryIds.split(",").map((s) => s.trim()).filter(Boolean);
 
       const settled = await Promise.allSettled(
-        ids.map((id) => fetchRawEbay(token, apiUrl, query, rawFetchLimit, offset, id)),
+        ids.map((id) => fetchRawEbay(token, apiUrl, query, rawFetchLimit, offset, id, minPrice, maxPrice)),
       );
 
       const successful = settled.filter(
@@ -467,7 +473,7 @@ export async function searchEbayItems(
       total     = dominantResponse.value.total;
     } else {
       // Single explicit category or no restriction
-      const result = await fetchRawEbay(token, apiUrl, query, rawFetchLimit, offset, categoryIds);
+      const result = await fetchRawEbay(token, apiUrl, query, rawFetchLimit, offset, categoryIds, minPrice, maxPrice);
       summaries = result.summaries;
       total     = result.total;
     }

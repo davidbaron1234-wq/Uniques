@@ -1,30 +1,40 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Check, X, Zap, TrendingUp, ScanLine, Package, Star, ArrowLeft, Sparkles } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Check, X, Zap, TrendingUp, ScanLine, Package, Star, ArrowLeft, Sparkles, Crown, Trophy } from "lucide-react";
 import Logo from "@/components/Logo";
 const FREE_FEATURES = [
-  { label: "Up to 10 items",        ok: true  },
-  { label: "Manual item search",    ok: true  },
-  { label: "Basic profile page",    ok: true  },
-  { label: "Trade messaging",       ok: true  },
-  { label: "Unlimited items",       ok: false },
-  { label: "AI Auto-Scanner",       ok: false },
-  { label: "Market Analytics",      ok: false },
-  { label: "Pro Badge",             ok: false },
+  { label: "Up to 10 vault pieces",  ok: true  },
+  { label: "Manual catalog search",  ok: true  },
+  { label: "Collector profile page", ok: true  },
+  { label: "Trade messaging",        ok: true  },
+  { label: "Unlimited vault",        ok: false },
+  { label: "AI Auto-Scanner",        ok: false },
+  { label: "Market Analytics",       ok: false },
+  { label: "Verified Collector Badge", ok: false },
 ];
 
 const PRO_FEATURES = [
-  { label: "Unlimited items",                 icon: Package    },
-  { label: "AI Auto-Scanner (Vision + OCR)",  icon: ScanLine   },
-  { label: "Wall-Street Market Analytics",    icon: TrendingUp },
-  { label: "Pro Badge on your profile",       icon: Star       },
-  { label: "Priority trade matching",         icon: Zap        },
-  { label: "Everything in Free",              icon: Check      },
+  { label: "Unlimited vault capacity",           icon: Package    },
+  { label: "Unlimited Grail Slots",              icon: Crown      },
+  { label: "Full Trophy Room Gallery",           icon: Trophy     },
+  { label: "AI Auto-Scanner (Vision + OCR)",     icon: ScanLine   },
+  { label: "Institutional Market Analytics",     icon: TrendingUp },
+  { label: "Verified Collector Pro Badge",       icon: Star       },
+  { label: "Priority trade matching",            icon: Zap        },
+  { label: "Everything in Free",                 icon: Check      },
 ];
 
 export default function UpgradePage() {
   const router = useRouter();
+  const { status } = useSession();
+
+  if (status === "unauthenticated") {
+    router.replace("/api/auth/signin");
+    return null;
+  }
+  if (status === "loading") return null;
 
   const handleUpgrade = () => {
     router.push("/checkout");
@@ -35,7 +45,7 @@ export default function UpgradePage() {
       {/* Background glows */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 blur-[140px] rounded-full" />
-        <div className="absolute bottom-0 right-0 w-[350px] h-[350px] bg-purple-500/8 blur-[120px] rounded-full" />
+        <div className="absolute bottom-0 right-0 w-[350px] h-[350px] bg-surface/8 blur-[120px] rounded-full" />
       </div>
 
       {/* Header */}
@@ -62,14 +72,14 @@ export default function UpgradePage() {
             Collect smarter.<br />Trade faster.
           </h1>
           <p className="text-sm text-cream/40 max-w-xs mx-auto">
-            Unlock the full power of the Uniques platform for less than a coffee a month.
+            Unlock the full Uniques experience for less than a coffee a month.
           </p>
         </div>
 
         {/* Price card */}
         <div className="relative rounded-3xl overflow-hidden">
           {/* Glow border */}
-          <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary/30 via-purple-500/20 to-primary/10 blur-[2px]" />
+          <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary/30 via-surface/20 to-primary/10 blur-[2px]" />
           <div className="relative bg-charcoal-dark rounded-3xl p-6 border border-primary/25 shadow-2xl">
             <div className="flex items-start justify-between mb-5">
               <div>
@@ -160,7 +170,7 @@ export default function UpgradePage() {
             ))}
           </div>
           <p className="text-xs text-cream/30">
-            Join <span className="text-cream/60 font-semibold">2,400+ Pro collectors</span> already on the platform
+            Join <span className="text-cream/60 font-semibold">2,400+ Verified Collectors</span> already in the vault
           </p>
         </div>
       </div>

@@ -44,10 +44,16 @@ export async function GET(request: NextRequest) {
 
   const q           = searchParams.get("q") || "";
   const catParam    = searchParams.get("category") || "";
-  const page        = Math.max(1, parseInt(searchParams.get("page")     || "1",  10));
-  const pageSize    = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20", 10)));
+  const rawPage     = parseInt(searchParams.get("page")     || "1",  10);
+  const rawPageSize = parseInt(searchParams.get("pageSize") || "20", 10);
+  const page        = Math.max(1, isNaN(rawPage) ? 1 : rawPage);
+  const pageSize    = Math.min(100, Math.max(1, isNaN(rawPageSize) ? 20 : rawPageSize));
   const category    = catParam as CatalogCategory | undefined;
   const categoryIds = searchParams.get("categoryIds") || undefined;
+  const rawMinPrice = parseFloat(searchParams.get("minPrice") || "");
+  const rawMaxPrice = parseFloat(searchParams.get("maxPrice") || "");
+  const minPrice    = isNaN(rawMinPrice) ? undefined : rawMinPrice;
+  const maxPrice    = isNaN(rawMaxPrice) ? undefined : rawMaxPrice;
 
   // ── Category-only browse (no text query) ────────────────────────────────
   if ((!q || q.length < 2) && catParam) {
@@ -58,6 +64,8 @@ export async function GET(request: NextRequest) {
           limit: pageSize,
           offset: (page - 1) * pageSize,
           categoryIds,
+          minPrice,
+          maxPrice,
         });
         if (ebayResult.items.length > 0) return NextResponse.json(ebayResult);
       } catch (err) {
@@ -81,6 +89,8 @@ export async function GET(request: NextRequest) {
       limit:  pageSize,
       offset: (page - 1) * pageSize,
       categoryIds,
+      minPrice,
+      maxPrice,
     });
     if (ebayResult.items.length > 0) return NextResponse.json(ebayResult);
   } catch (err) {

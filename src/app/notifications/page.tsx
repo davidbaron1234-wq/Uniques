@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowLeftRight, Bell, Star, TrendingDown } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { ArrowLeft, ArrowLeftRight, Bell, Star, TrendingDown, Trophy } from "lucide-react";
 import { useNotifications } from "@/lib/NotificationContext";
 import type { NotifType } from "@/lib/NotificationContext";
 import BottomNav from "@/components/BottomNav";
@@ -27,26 +28,40 @@ const TYPE_META: Record<
   },
   match: {
     Icon: Star,
-    chipBg:    "bg-yellow-400/10",
-    iconClass: "text-yellow-400",
-    unreadDot: "bg-yellow-400",
+    chipBg:    "bg-violet-500/10",
+    iconClass: "text-violet-400",
+    unreadDot: "bg-violet-400",
     label:     "Match",
   },
   alert: {
     Icon: TrendingDown,
-    chipBg:    "bg-blue-400/10",
-    iconClass: "text-blue-400",
-    unreadDot: "bg-blue-400",
+    chipBg:    "bg-surface/10",
+    iconClass: "text-surface-light",
+    unreadDot: "bg-surface",
     label:     "Alert",
+  },
+  achievement: {
+    Icon:      Trophy,
+    chipBg:    "bg-[#D4AF37]/10",
+    iconClass: "text-[#D4AF37]",
+    unreadDot: "bg-[#D4AF37]",
+    label:     "Achievement",
   },
 };
 
 export default function NotificationsPage() {
   const { notifications, unreadCount, markAllAsRead, markAsRead } = useNotifications();
   const router = useRouter();
+  const { status } = useSession();
+
+  if (status === "unauthenticated") {
+    router.replace("/api/auth/signin");
+    return null;
+  }
+  if (status === "loading") return null;
 
   return (
-    <div className="min-h-screen pb-24 bg-charcoal-dark">
+    <div className="min-h-screen pb-24 bg-background">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-40 glass">
@@ -86,9 +101,9 @@ export default function NotificationsPage() {
             <div className="w-16 h-16 rounded-full bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mb-4">
               <Bell className="w-7 h-7 text-cream/20" />
             </div>
-            <p className="text-cream/40 font-semibold text-sm">No notifications yet</p>
+            <p className="text-cream/40 font-semibold text-sm">All quiet in the vault</p>
             <p className="text-cream/25 text-xs mt-1 max-w-[200px] leading-relaxed">
-              Trade offers, Radar matches, and market alerts will appear here.
+              Trade offers, Radar matches, and market alerts will show up here.
             </p>
           </div>
         ) : (

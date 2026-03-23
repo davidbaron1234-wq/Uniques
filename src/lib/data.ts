@@ -9,6 +9,7 @@ export const currentUser: User = {
   trustScore: 4.8,
   totalTrades: 47,
   memberSince: "2024-03-15",
+  tier: "free",
   deliveryPreference: "Tracked shipping with insurance",
   paymentPreference: "PayPal / Venmo",
 };
@@ -85,6 +86,7 @@ export const socialUsers: SocialUser[] = [
       trustScore: 4.9,
       totalTrades: 63,
       memberSince: "2023-05-12",
+      tier: "pro",
     },
     inventory: [
       { id: "d-1", masterId: "ptcg-sv3pt5-183", name: "Charizard ex SAR (151)", category: "Pokémon TCG", imageUrl: "https://images.pokemontcg.io/sv3pt5/183.png", upForTrade: false, estimatedValue: 380, graded: true, grader: "PSA", gradeNum: "10" },
@@ -97,6 +99,23 @@ export const socialUsers: SocialUser[] = [
       { id: "d-8",                              name: "Gengar (Team Rocket Returns) Rev Holo", category: "Pokémon TCG", imageUrl: cardImg(33), upForTrade: true, estimatedValue: 95 },
     ],
     grailIds: ["d-1", "d-5", "d-4"],
+  },
+
+  // ── Newbie — empty account for PM testing ─────────────────────────────
+  {
+    user: {
+      id: "user-newbie",
+      name: "Newbie",
+      handle: "newbie",
+      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Newbie&backgroundColor=B0E0E6",
+      bio: "Just getting started!",
+      trustScore: 0.0,
+      totalTrades: 0,
+      memberSince: "2026-03-17",
+      tier: "free",
+    },
+    inventory: [],
+    grailIds: [],
   },
 
   // ── Ethan — sports cards & premium Funko ──────────────────────────────

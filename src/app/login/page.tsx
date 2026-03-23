@@ -44,7 +44,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center gap-3">
           <Logo />
-          <p className="text-sm text-cream/40">Sign in to your collection</p>
+          <p className="text-sm text-cream/40">Sign in to your vault</p>
         </div>
 
         {/* Card */}

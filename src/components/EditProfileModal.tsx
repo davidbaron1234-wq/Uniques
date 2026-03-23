@@ -168,15 +168,15 @@ export default function EditProfileModal({
     onClose();
   };
 
-  const isValid = name.trim().length > 0;
+  const isValid = name.trim().length > 0 && name.trim().length <= 16;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 animate-fade-in" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in" onClick={onClose} />
 
-      <div className="relative w-full max-w-md mx-4 mb-0 sm:mb-0 bg-charcoal-dark rounded-t-3xl sm:rounded-3xl shadow-soft-xl animate-slide-up overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl shadow-2xl border border-white/10 animate-slide-up overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-none">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-charcoal-light/20">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <h2 className="text-lg font-bold text-cream">Edit Profile</h2>
           <button
             onClick={onClose}
@@ -247,19 +247,26 @@ export default function EditProfileModal({
                 </span>
               )}
             </div>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => !nameLocked && setName(e.target.value)}
-              readOnly={nameLocked}
-              placeholder="Your name"
-              maxLength={40}
-              className={`w-full px-4 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none transition-all ${
-                nameLocked
-                  ? "opacity-50 cursor-not-allowed select-none"
-                  : "focus:ring-2 focus:ring-surface/30"
-              }`}
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => !nameLocked && setName(e.target.value)}
+                readOnly={nameLocked}
+                placeholder="Your name"
+                maxLength={16}
+                className={`w-full px-4 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none transition-all ${
+                  nameLocked
+                    ? "opacity-50 cursor-not-allowed select-none"
+                    : "focus:ring-2 focus:ring-surface/30"
+                }`}
+              />
+              {!nameLocked && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-cream/25 pointer-events-none tabular-nums">
+                  {name.length}/16
+                </span>
+              )}
+            </div>
             {nameLocked ? (
               <div className="flex items-start gap-1.5 mt-2 px-1">
                 <span className="text-[10px] text-red-400/80 font-semibold leading-relaxed">

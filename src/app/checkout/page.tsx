@@ -10,10 +10,10 @@ import Logo from "@/components/Logo";
 import confetti from "canvas-confetti";
 
 const PRO_ITEMS = [
-  { icon: Package,    label: "Unlimited collection items" },
+  { icon: Package,    label: "Unlimited vault capacity" },
   { icon: ScanLine,   label: "AI Auto-Scanner (Vision + OCR)" },
-  { icon: TrendingUp, label: "Wall-Street Market Analytics" },
-  { icon: Star,       label: "Pro Badge on your profile" },
+  { icon: TrendingUp, label: "Institutional Market Analytics" },
+  { icon: Star,       label: "Verified Collector Pro Badge" },
   { icon: Zap,        label: "Priority trade matching" },
 ];
 
@@ -77,7 +77,7 @@ export default function CheckoutPage() {
       {/* Background glows */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-primary/8 blur-[130px] rounded-full" />
-        <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-purple-500/8 blur-[100px] rounded-full" />
+        <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-surface/8 blur-[100px] rounded-full" />
       </div>
 
       {/* Header */}
@@ -145,16 +145,16 @@ export default function CheckoutPage() {
           {/* Card number */}
           <div className="space-y-1.5">
             <label className="text-[11px] font-semibold text-cream/40 uppercase tracking-wider">Card Number</label>
-            <div className="relative">
+            <div className="flex items-center gap-2.5 rounded-2xl bg-background-light focus-within:ring-2 focus-within:ring-surface/30 transition-all">
+              <CreditCard className="ml-3.5 w-4.5 h-4.5 text-cream/25 flex-shrink-0" />
               <input
                 type="text"
                 inputMode="numeric"
                 value={cardNumber}
                 onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
                 placeholder="1234 5678 9012 3456"
-                className="w-full pl-11 pr-4 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/20 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all font-mono tracking-widest text-sm"
+                className="w-full pr-4 py-3 bg-transparent text-cream placeholder:text-cream/20 focus:outline-none font-mono tracking-widest text-sm"
               />
-              <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-cream/25" />
             </div>
           </div>
 

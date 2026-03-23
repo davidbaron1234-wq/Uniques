@@ -10,6 +10,7 @@ import { tradeHistory as staticHistory, tradeOffers } from "@/lib/data";
 import { useInventory } from "@/lib/InventoryContext";
 import { History, Search } from "lucide-react";
 import type { CollectibleItem, TradeHistoryEntry } from "@/lib/types";
+import type { Category } from "@/lib/constants";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -37,9 +38,9 @@ function offerToEntry(o: typeof tradeOffers[number]): TradeHistoryEntry {
     id:        o.id,
     from:      { name: o.from.name, avatar: o.from.avatar },
     to:        { name: o.to.name,   avatar: o.to.avatar   },
-    fromItems: o.fromItems.map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+    fromItems: o.fromItems.map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue, category: i.category })),
     fromCash:  o.fromCash,
-    toItems:   o.toItems.map((i)   => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+    toItems:   o.toItems.map((i)   => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue, category: i.category })),
     toCash:    o.toCash,
     status:    "pending",
     createdAt: o.createdAt,
@@ -92,20 +93,22 @@ export default function HistoryPage() {
   // Ref-based guard prevents double-execution even within the same render cycle
   const completingIds = useRef(new Set<string>());
 
-  // ── Build unified entry list ─────────────────────────────────────────────
-  const seen = new Set<string>();
-  const allEntries: TradeHistoryEntry[] = [
-    ...tradeHistoryEntries,
-    ...tradeOffers.map(offerToEntry),   // pending offers shown as "Action Required"
-    ...staticHistory.map(toEntry),
-  ]
-    .filter((t) => {
-      if (seen.has(t.id) || cancelledIds.has(t.id)) return false;
-      seen.add(t.id);
-      return true;
-    })
-    .map((t) => completedAtMap[t.id] ? { ...t, completedAt: completedAtMap[t.id] } : t)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // ── Build unified entry list (memoized to avoid rebuilding on every render) ──
+  const allEntries = useMemo(() => {
+    const seen = new Set<string>();
+    return [
+      ...tradeHistoryEntries,
+      ...tradeOffers.map(offerToEntry),
+      ...staticHistory.map(toEntry),
+    ]
+      .filter((t) => {
+        if (seen.has(t.id) || cancelledIds.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      })
+      .map((t) => completedAtMap[t.id] ? { ...t, completedAt: completedAtMap[t.id] } : t)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [tradeHistoryEntries, cancelledIds, completedAtMap]);
 
   // ── Tab filtering ────────────────────────────────────────────────────────
   const filteredEntries = allEntries.filter((t) => {
@@ -149,7 +152,7 @@ export default function HistoryPage() {
       targetItem:     targetRaw ? ({
         id:             targetRaw.id,
         name:           targetRaw.name,
-        category:       "Other",
+        category:       (targetRaw.category ?? "Other") as Category,
         imageUrl:       targetRaw.imageUrl,
         estimatedValue: targetRaw.estimatedValue,
       } as CollectibleItem) : undefined,
@@ -180,7 +183,7 @@ export default function HistoryPage() {
       lockItems(realIds, "Deal accepted · Awaiting fulfillment", "accepted");
     }
     dismiss(entry.id);
-    showToast("Trade accepted! Complete the trade when items are exchanged.");
+    showToast("Trade accepted! Mark as complete once pieces have been exchanged.");
   };
 
   // ── Bulletproof, atomic, idempotent trade completion ────────────────────
@@ -209,7 +212,7 @@ export default function HistoryPage() {
       const newItem: CollectibleItem = {
         id:             item.id,
         name:           item.name,
-        category:       "Other",
+        category:       (item.category ?? "Other") as Category,
         imageUrl:       item.imageUrl,
         estimatedValue: item.estimatedValue,
         upForTrade:     false,
@@ -222,7 +225,7 @@ export default function HistoryPage() {
     try { localStorage.setItem(`trade_completed_${trade.id}`, now); } catch { /* quota */ }
     setCompletedAtMap((prev) => ({ ...prev, [trade.id]: now }));
 
-    showToast("🎉 Trade completed! Your collection has been updated.");
+    showToast("🎉 Trade completed! Your vault has been updated.");
   };
 
   const dismiss = (id: string) =>
@@ -256,7 +259,7 @@ export default function HistoryPage() {
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search trades, items or people…"
+              placeholder="Search trades, pieces, or Collectors…"
               className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-background-light border border-white/[0.06] text-sm text-cream/80 placeholder:text-cream/20 focus:outline-none focus:border-primary/30 transition-colors"
             />
           </div>
@@ -308,7 +311,7 @@ export default function HistoryPage() {
                 }
                 onCancel={
                   trade.status === "pending"
-                    ? () => dismiss(trade.id)
+                    ? () => { addTradeHistory({ ...trade, status: "declined" }); dismiss(trade.id); }
                     : undefined
                 }
                 onCounter={
@@ -350,7 +353,7 @@ export default function HistoryPage() {
             <p className="text-cream/25 text-sm mt-1">
               {searchQuery.trim()
                 ? "Try a different name or item"
-                : activeTab === "All" ? "Your completed trades will appear here" : `No "${activeTab}" trades`
+                : activeTab === "All" ? "Your deal history will appear here" : `No "${activeTab}" trades`
               }
             </p>
           </div>

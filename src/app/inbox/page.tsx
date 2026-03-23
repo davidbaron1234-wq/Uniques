@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { driver } from "driver.js";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import { AlertTriangle, Edit, MessageSquare, Search, X, Pin, PinOff, BellDot, Trash2, UserX, ShieldOff, Shield } from "lucide-react";
@@ -20,6 +22,7 @@ type Conv = {
   online: boolean;
   pinned: boolean;
   sortTs: number;  // unix ms — used for stable sort within non-pinned group
+  messages: string[];  // full message text for deep search
 };
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
@@ -38,6 +41,15 @@ const SEED: Omit<Conv, "pinned" | "hasDot">[] = [
     unread: 2,
     online: true,
     sortTs: _now - 2 * 60 * 1000,
+    messages: [
+      "Hey! I saw your Umbreon VMAX Alt Art 👀 That thing is stunning.",
+      "Haha yeah it's one of my absolute favourites. Not sure I wanna let it go.",
+      "What if I offered my PSA 10 Charizard ex SAR from 151? Straight swap?",
+      "PSA 10 is serious… that's actually very tempting 👀",
+      "I can sweeten it a bit too — happy to add $50 cash on top 🤝",
+      "Let me think on it tonight and check recent sales. I'll get back to you!",
+      "PSA 10 Charizard for your Alt Art? I can add cash! 🔥",
+    ],
   },
   {
     id: "ethan",
@@ -49,6 +61,15 @@ const SEED: Omit<Conv, "pinned" | "hasDot">[] = [
     unread: 1,
     online: true,
     sortTs: _now - 60 * 60 * 1000,
+    messages: [
+      "Yo! Your Umbreon VMAX Alt Art is an absolute 🔥 piece. Still available?",
+      "Hey! Yeah still have it. What are you thinking?",
+      "I've got a PSA 10 Shohei Ohtani 2018 Topps Update RC and a few LeBron cards I'd move.",
+      "Ooh interesting. What's the Ohtani going for these days?",
+      "PSA 10 copies are moving for $1400+ on eBay right now. It's had a big run lately.",
+      "That's solid. What else would you want in return, or is the Ohtani a straight-up trade?",
+      "I can add $50 cash if that helps close the deal 🤝",
+    ],
   },
   {
     id: "sam",
@@ -60,6 +81,13 @@ const SEED: Omit<Conv, "pinned" | "hasDot">[] = [
     unread: 0,
     online: false,
     sortTs: _now - 24 * 60 * 60 * 1000,
+    messages: [
+      "Hi! Love your collection, especially the vintage grails section 😍",
+      "Thanks so much! I've been collecting for years. You into vintage too?",
+      "Big time. Mainly Base Set and Neo era. I sent you a trade offer — take a look!",
+      "Just checked it, looks really fair actually!",
+      "That trade offer looks fair to me 👍 Let's do it",
+    ],
   },
   {
     id: "alex",
@@ -71,6 +99,12 @@ const SEED: Omit<Conv, "pinned" | "hasDot">[] = [
     unread: 0,
     online: false,
     sortTs: _now - 3 * 24 * 60 * 60 * 1000,
+    messages: [
+      "Hey Alex! Got any Freddy Funko variants? Especially looking for metallics.",
+      "Yes! I have the Freddy Funko as Ghost Rider metallic from SDCC 2013. One of the rarest ever made!",
+      "No way, that's exactly what I've been hunting. What would you want for it?",
+      "Open to offers! What do you have that's Funko Pop or high-grade Pokémon?",
+    ],
   },
   {
     id: "jordan",
@@ -82,6 +116,12 @@ const SEED: Omit<Conv, "pinned" | "hasDot">[] = [
     unread: 0,
     online: false,
     sortTs: _now - 38 * 24 * 60 * 60 * 1000,
+    messages: [
+      "Interested in your Nike Dunk Low Panda 👟 What size?",
+      "It's a US 10. You looking to buy or trade?",
+      "Trade ideally! I have a DS Air Jordan 1 Retro High OG 'Chicago' in size 10.",
+      "OG Chicago in my size?? That's a big one. Let me look up the current value 👀",
+    ],
   },
 ];
 
@@ -199,10 +239,15 @@ function BlockedUsersSheet({
   onUnblock: (id: string) => void;
   onClose: () => void;
 }) {
-  // Read blocked IDs from localStorage on render
-  const blockedIds = seed
-    .map((c) => c.id)
-    .filter((id) => typeof window !== "undefined" && !!localStorage.getItem(`inbox_block_${id}`));
+  // Read blocked IDs from localStorage in an effect to avoid SSR render-time reads
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      setBlockedIds(
+        seed.map((c) => c.id).filter((id) => !!localStorage.getItem(`inbox_block_${id}`))
+      );
+    } catch { /* localStorage unavailable */ }
+  }, [seed]);
 
   const blockedUsers = seed.filter((c) => blockedIds.includes(c.id));
 
@@ -323,12 +368,14 @@ function ConfirmModal({
 function ConversationRow({
   conv,
   index,
+  matchSnippet,
   onClick,
   onContextMenu,
   onLongPress,
 }: {
   conv: Conv;
   index: number;
+  matchSnippet?: string | null;
   onClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onLongPress: (e: React.PointerEvent) => void;
@@ -389,8 +436,8 @@ function ConversationRow({
             </span>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <p className={`text-xs truncate ${hasActivity ? "text-cream/60 font-medium" : "text-cream/35"}`}>
-              {conv.lastMessage}
+            <p className={`text-xs truncate ${matchSnippet ? "text-primary/70 italic" : hasActivity ? "text-cream/60 font-medium" : "text-cream/35"}`}>
+              {matchSnippet ?? conv.lastMessage}
             </p>
             {/* Number badge for seed unread counts */}
             {conv.unread > 0 && (
@@ -413,6 +460,64 @@ function ConversationRow({
 
 export default function InboxPage() {
   const router = useRouter();
+  const { status } = useSession();
+
+  if (status === "unauthenticated") {
+    router.replace("/api/auth/signin");
+    return null;
+  }
+  if (status === "loading") return null;
+
+  // ── Tour step 6 of 7 — baton passed from /search via tourStep=messages ──
+  useEffect(() => {
+    if (localStorage.getItem("tourStep") !== "messages") return;
+
+    const t = setTimeout(() => {
+      if (localStorage.getItem("tourStep") !== "messages") return;
+      localStorage.removeItem("tourStep");
+
+      const shouldNavToProfileRef = { current: false };
+
+      const driverObj = driver({
+        showProgress: true,
+        allowClose: true,
+        stagePadding: 8,
+        disableActiveInteraction: true,
+        onDestroyStarted: () => {
+          const nav = shouldNavToProfileRef.current;
+          driverObj.destroy();
+          if (nav) {
+            localStorage.setItem("tourStep", "profile");
+            localStorage.setItem("tourStep_ts", String(Date.now()));
+            setTimeout(() => router.push("/inventory"), 150);
+          }
+        },
+        onCloseClick: () => {
+          shouldNavToProfileRef.current = false;
+          driverObj.destroy();
+        },
+        steps: [
+          {
+            element: "[data-tour='profile-tab']",
+            onHighlightStarted: () => { shouldNavToProfileRef.current = true; },
+            popover: {
+              title: "🛡️ Your Digital Vault",
+              description: "Flex your heavy hitters. Catalog your PC and track your portfolio's real-time market value.",
+              side: "top" as const,
+              align: "center" as const,
+              nextBtnText: "Next →",
+              progressText: "6 of 7",
+            },
+          },
+        ],
+      });
+      driverObj.drive();
+    }, 2000);
+
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [query,       setQuery]       = useState("");
   const [showNew,     setShowNew]     = useState(false);
   const [showBlocked, setShowBlocked] = useState(false);
@@ -444,17 +549,23 @@ export default function InboxPage() {
   });
 
   // Re-sync read state when page regains focus (chat room sets inbox_read_*)
+  // Debounced to prevent race conditions on rapid tab switches
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
     const sync = () => {
-      setConvs((prev) =>
-        prev.map((c) =>
-          localStorage.getItem(`inbox_read_${c.id}`) ? { ...c, unread: 0 } : c
-        )
-      );
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setConvs((prev) =>
+          prev.map((c) =>
+            localStorage.getItem(`inbox_read_${c.id}`) ? { ...c, unread: 0 } : c
+          )
+        );
+      }, 80);
     };
     document.addEventListener("visibilitychange", sync);
     window.addEventListener("focus", sync);
     return () => {
+      clearTimeout(timer);
       document.removeEventListener("visibilitychange", sync);
       window.removeEventListener("focus", sync);
     };
@@ -528,13 +639,32 @@ export default function InboxPage() {
     return b.sortTs - a.sortTs;  // most-recent first within unpinned group
   });
 
-  const filtered = query.trim()
-    ? sorted.filter(
-        (c) =>
-          c.name.toLowerCase().includes(query.toLowerCase()) ||
-          c.handle.toLowerCase().includes(query.toLowerCase()),
-      )
-    : sorted;
+  // Deep search: match on name/handle OR inside message content
+  const filtered: { conv: Conv; matchSnippet: string | null }[] = query.trim()
+    ? (() => {
+        const q = query.trim().toLowerCase();
+        return sorted
+          .map((c) => {
+            // Name / handle match — no snippet needed
+            if (c.name.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q)) {
+              return { conv: c, matchSnippet: null };
+            }
+            // Deep message search — surface the matched line as the subtitle
+            const matched = c.messages.find((m) => m.toLowerCase().includes(q));
+            if (matched) {
+              const idx = matched.toLowerCase().indexOf(q);
+              const start = Math.max(0, idx - 18);
+              const snippet =
+                (start > 0 ? "…" : "") +
+                matched.slice(start, idx + q.length + 35) +
+                (idx + q.length + 35 < matched.length ? "…" : "");
+              return { conv: c, matchSnippet: snippet };
+            }
+            return null;
+          })
+          .filter((item): item is { conv: Conv; matchSnippet: string | null } => item !== null);
+      })()
+    : sorted.map((c) => ({ conv: c, matchSnippet: null }));
 
   const onlineConvs = sorted.filter((c) => c.online);
 
@@ -626,11 +756,12 @@ export default function InboxPage() {
               <p className="text-sm text-cream/30">No conversations found</p>
             </div>
           ) : (
-            filtered.map((conv, i) => (
+            filtered.map(({ conv, matchSnippet }, i) => (
               <ConversationRow
                 key={conv.id}
                 conv={conv}
                 index={i}
+                matchSnippet={matchSnippet}
                 onClick={() => {
                   markAsRead(conv.id);
                   router.push(`/inbox/${conv.id}`);

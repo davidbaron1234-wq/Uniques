@@ -262,7 +262,7 @@ function conditionColor(c: string): string {
       return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
     case "Near Mint": case "Near Mint Box": case "VNDS": case "CIB":
     case "Box & Papers": case "Very Fine": case "Uncirculated":
-      return "text-blue-400 bg-blue-500/10 border-blue-500/20";
+      return "text-surface bg-surface/10 border-surface/20";
     case "Lightly Played": case "Used": case "Built (Complete)": case "No Manual":
     case "Fine": case "Watch Only": case "Raw":
       return "text-cyan-400 bg-cyan-500/10 border-cyan-500/20";
@@ -751,7 +751,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
           {activeTab === "buy" ? (
             <>
               <p className="text-[11px] text-cream/25 font-semibold uppercase tracking-wider mb-1">
-                Users who have this item ({filteredSellers.length})
+                Collectors with this piece ({filteredSellers.length})
               </p>
               {filteredSellers.length === 0 ? (
                 <div className="py-8 text-center">
@@ -763,7 +763,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
           ) : (
             <>
               <p className="text-[11px] text-cream/25 font-semibold uppercase tracking-wider mb-1">
-                Users who want this item ({filteredBuyers.length})
+                Collectors hunting this piece ({filteredBuyers.length})
               </p>
               {filteredBuyers.length === 0 ? (
                 <div className="py-8 text-center">
@@ -795,7 +795,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                 <button
                   onClick={() => { setShowBidForm(false); setBidPrice(""); }}
                   className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all"
-                >Cancel</button>
+                >Close</button>
                 <button
                   onClick={handleSubmitBid}
                   disabled={!bidPrice || bidSubmitted}
@@ -843,7 +843,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
               </div>
               <h3 className="text-base font-bold text-cream mb-2">Deal Accepted!</h3>
               <p className="text-sm text-cream/40 leading-relaxed">
-                The item is now in your{" "}
+                The piece is now in your{" "}
                 <span className="text-amber-400 font-semibold">In Trade</span> section.
                 Once you and{" "}
                 <span className="text-cream/60 font-semibold">{acceptTarget.name}</span>{" "}
@@ -874,7 +874,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-cream truncate">{item.name}</p>
                   <p className="text-[10px] text-cream/30 mt-0.5">
-                    Your item · asking {formatValue(item.marketPrice)}
+                    Your piece · asking {formatValue(item.marketPrice)}
                   </p>
                 </div>
               </div>
@@ -952,7 +952,7 @@ export default function MarketplaceModal({ isOpen, onClose, item }: MarketplaceM
                   onClick={() => { setAcceptTarget(null); setAcceptError(null); }}
                   className="px-4 py-3 rounded-2xl bg-white/[0.05] text-cream/40 font-bold text-sm hover:bg-white/10 active:scale-[0.97] transition-all"
                 >
-                  Cancel
+                  Close
                 </button>
                 <button
                   onClick={handleAcceptConfirm}

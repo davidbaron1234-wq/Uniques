@@ -61,17 +61,17 @@ const RARITY_STYLES: Record<RarityTier, { chip: string; icon: string; glow: stri
   rare: {
     chip: "bg-blue-500/15 border-blue-400/30",
     icon: "text-blue-400",
-    glow: "shadow-[0_0_20px_rgba(59,130,246,0.15)]",
+    glow: "shadow-[0_0_20px] shadow-blue-500/15",
   },
   ultra: {
     chip: "bg-purple-500/15 border-purple-400/30",
     icon: "text-purple-400",
-    glow: "shadow-[0_0_30px_rgba(168,85,247,0.2)]",
+    glow: "shadow-[0_0_30px] shadow-purple-500/20",
   },
   secret: {
     chip: "bg-yellow-400/15 border-yellow-400/30",
     icon: "text-yellow-400",
-    glow: "shadow-[0_0_40px_rgba(250,204,21,0.2)]",
+    glow: "shadow-[0_0_40px] shadow-yellow-400/20",
   },
 };
 
@@ -145,7 +145,7 @@ function MarketTabContent({
           <div className="text-center px-4">
             <p className="text-sm font-bold text-cream mb-1">Pro Analytics</p>
             <p className="text-xs text-cream/40 leading-relaxed">
-              Unlock Wall-Street style price charts &amp; market data with Uniques Pro.
+              Unlock institutional-grade price charts &amp; market intel with Uniques Pro.
             </p>
           </div>
           <button
@@ -290,7 +290,13 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
 
   return (
     <>
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Item details"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      onKeyDown={(e) => e.key === "Escape" && handleClose()}
+    >
       {/* Backdrop with blur */}
       <div
         className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
@@ -406,7 +412,7 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
             {/* ── Trade tab ── */}
             {activeTab === "trade" && (
               <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
-                <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider mb-3">Collectors who want this</p>
+                <p className="text-[11px] text-cream/30 font-semibold uppercase tracking-wider mb-3">Collectors on the hunt</p>
                 <div className="flex items-center gap-3">
                   <div className="flex -space-x-2.5">
                     {MOCK_COLLECTORS.map((c) => (
@@ -421,7 +427,7 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
                       <span className="text-[10px] text-cream/40 font-bold">+12</span>
                     </div>
                   </div>
-                  <p className="text-xs text-cream/25">16 collectors interested</p>
+                  <p className="text-xs text-cream/25">16 Collectors watching</p>
                 </div>
               </div>
             )}
@@ -476,7 +482,7 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
                 });
               }, 4000);
             }}
-            className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-blue-500/10 text-blue-400 font-bold text-sm hover:bg-blue-500/20 active:scale-[0.97] transition-all border border-blue-500/20"
+            className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-surface/10 text-surface font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all border border-surface/20"
           >
             <Bell className="w-4 h-4" />
             Radar
@@ -486,7 +492,7 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
           >
             <Plus className="w-4 h-4" />
-            Add
+            Add to Vault
           </button>
         </div>
       </div>

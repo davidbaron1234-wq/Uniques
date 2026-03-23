@@ -42,7 +42,7 @@ export default function EquityBar({ offered, asking }: EquityBarProps) {
       >
         {/* Moving marker */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white shadow-lg border-[3px] border-charcoal-dark transition-[left] duration-300"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white shadow-lg border-2 border-charcoal-dark transition-[left] duration-300"
           style={{ left: `${markerPos}%` }}
         />
       </div>

@@ -17,7 +17,7 @@ const handler = NextAuth({
 
         // Read mock_pro_status cookie to determine tier
         const cookieHeader = req?.headers?.cookie ?? "";
-        const isPro = cookieHeader.split(";").some((c) => c.trim() === "mock_pro_status=true");
+        const isPro = cookieHeader.split(";").some((c: string) => c.trim() === "mock_pro_status=true");
 
         return {
           id:    "dev-1",

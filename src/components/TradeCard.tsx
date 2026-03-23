@@ -147,12 +147,12 @@ export default function TradeCard({
   const statusColour = isPending   ? "text-amber-400"
                      : isDeclined  ? "text-red-400"
                      : isCompleted ? "text-primary"
-                     : "text-sky-400";            // awaiting = sky blue
+                     : "text-surface";            // awaiting = lilac
 
   const statusBg     = isPending   ? "bg-amber-500/[0.08]"
                      : isDeclined  ? "bg-red-400/[0.08]"
                      : isCompleted ? "bg-primary/[0.08]"
-                     : "bg-sky-500/[0.06]";        // awaiting
+                     : "bg-surface/[0.06]";         // awaiting
 
   const StatusIcon   = isPending   ? Clock
                      : isCompleted ? Check
@@ -191,12 +191,12 @@ export default function TradeCard({
       onClick={onClick}
     >
       {/* ── Status bar — Message icon lives here ── */}
-      <div className={`px-4 py-2.5 flex items-center justify-between ${statusBg}`}>
-        <div className="flex items-center gap-2">
-          <StatusIcon className={`w-4 h-4 ${statusColour}`} />
-          <span className={`text-sm font-bold ${statusColour}`}>{statusLabel}</span>
+      <div className={`px-4 py-2.5 flex items-center justify-between gap-2 ${statusBg}`}>
+        <div className="flex items-center gap-2 min-w-0">
+          <StatusIcon className={`w-4 h-4 flex-shrink-0 ${statusColour}`} />
+          <span className={`text-sm font-bold truncate ${statusColour}`}>{statusLabel}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {/* Subtle message icon — only for pending trades, removed from button row */}
           {onMessage && isPending && (
             <button
@@ -208,7 +208,7 @@ export default function TradeCard({
               <MessageSquare className="w-3.5 h-3.5 text-cream/50" />
             </button>
           )}
-          <span className="text-xs text-cream/30">{formattedDate}</span>
+          <span className="text-xs text-cream/30 whitespace-nowrap">{formattedDate}</span>
         </div>
       </div>
 
@@ -257,7 +257,7 @@ export default function TradeCard({
         <div className="px-5 pb-5 space-y-2">
           {itemsMissing && (
             <p className="text-[11px] text-red-400/90 font-semibold text-center">
-              ⚠ Item no longer in your inventory
+              ⚠ Piece no longer in your vault
             </p>
           )}
 
@@ -284,21 +284,22 @@ export default function TradeCard({
               </div>
             </div>
           ) : (
-            <div className="flex gap-2.5">
+            <div className="flex gap-2">
               {onAccept && (
                 <button
                   onClick={(e) => { e.stopPropagation(); if (!itemsMissing) onAccept(); }}
                   disabled={itemsMissing}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-primary/15 text-primary text-sm font-bold hover:bg-primary/25 active:scale-[0.97] transition-all border border-primary/20 ${itemsMissing ? "opacity-40 cursor-not-allowed" : ""}`}
+                  aria-disabled={itemsMissing || undefined}
+                  className={`flex-1 min-w-0 flex items-center justify-center gap-1 py-2.5 rounded-2xl bg-primary/15 text-primary text-xs font-bold hover:bg-primary/25 active:scale-[0.97] transition-all border border-primary/20 ${itemsMissing ? "opacity-40 cursor-not-allowed" : ""}`}
                 >
-                  <Check className="w-3.5 h-3.5" />
-                  Accept
+                  <Check className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">Accept</span>
                 </button>
               )}
               {onCancel && (
                 <button
                   onClick={(e) => { e.stopPropagation(); handleCancelClick(); }}
-                  className="flex-1 py-2.5 rounded-2xl bg-red-400/10 text-red-400 text-sm font-bold hover:bg-red-400/20 active:scale-[0.97] transition-all border border-red-400/20"
+                  className="flex-1 min-w-0 py-2.5 rounded-2xl bg-red-400/10 text-red-400 text-xs font-bold hover:bg-red-400/20 active:scale-[0.97] transition-all border border-red-400/20 truncate"
                 >
                   {cancelLabel}
                 </button>
@@ -307,10 +308,11 @@ export default function TradeCard({
                 <button
                   onClick={(e) => { e.stopPropagation(); if (!itemsMissing) onCounter(); }}
                   disabled={itemsMissing}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-white/[0.06] text-cream/50 text-sm font-bold hover:bg-white/10 active:scale-[0.97] transition-all border border-white/[0.08] ${itemsMissing ? "opacity-40 cursor-not-allowed" : ""}`}
+                  aria-disabled={itemsMissing || undefined}
+                  className={`flex-1 min-w-0 flex items-center justify-center gap-1 py-2.5 rounded-2xl bg-white/[0.06] text-cream/50 text-xs font-bold hover:bg-white/10 active:scale-[0.97] transition-all border border-white/[0.08] ${itemsMissing ? "opacity-40 cursor-not-allowed" : ""}`}
                 >
-                  <Pencil className="w-3.5 h-3.5" />
-                  {counterLabel}
+                  <Pencil className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">{counterLabel}</span>
                 </button>
               )}
             </div>
@@ -323,20 +325,21 @@ export default function TradeCard({
         <div className="px-5 pb-5">
           {itemsMissing && (
             <p className="text-[11px] text-red-400/90 font-semibold text-center mb-2">
-              ⚠ Item no longer in your inventory
+              ⚠ Piece no longer in your vault
             </p>
           )}
           <button
             onClick={(e) => { e.stopPropagation(); if (!itemsMissing) onComplete(); }}
             disabled={itemsMissing}
-            className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-sky-500/15 text-sky-400 font-bold text-sm hover:bg-sky-500/25 active:scale-[0.97] transition-all border border-sky-500/25 ${itemsMissing ? "opacity-40 cursor-not-allowed" : ""}`}
+            aria-disabled={itemsMissing || undefined}
+            className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-surface/15 text-surface font-bold text-sm hover:bg-surface/25 active:scale-[0.97] transition-all border border-surface/25 ${itemsMissing ? "opacity-40 cursor-not-allowed" : ""}`}
           >
             <PackageCheck className="w-4 h-4" />
             Complete Trade
           </button>
           {!itemsMissing && (
             <p className="text-center text-[10px] text-cream/25 mt-2">
-              This will update your inventory with the exchanged items.
+              This will update your vault with the exchanged pieces.
             </p>
           )}
         </div>

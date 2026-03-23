@@ -60,7 +60,7 @@ function CategoryBadge({ item }: { item: CollectibleItem }) {
       : c.includes("open")                                        ? "Open Box"
       : c.includes("built") || c.includes("complet")             ? "Built"
       : "Sealed";
-    const colorCls = label === "Sealed"   ? "bg-blue-500/15 border-blue-500/20 text-blue-400"
+    const colorCls = label === "Sealed"   ? "bg-primary/15 border-primary/20 text-primary"
       : label === "Open Box"              ? "bg-amber-500/15 border-amber-500/20 text-amber-400"
       :                                     "bg-red-500/15 border-red-500/20 text-red-400";
     return (
@@ -82,7 +82,7 @@ function CategoryBadge({ item }: { item: CollectibleItem }) {
   }
   if (condition) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-500/15 border border-blue-500/20 text-[10px] font-bold text-blue-400">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface/15 border border-surface/20 text-[10px] font-bold text-surface-light">
         <Shield className="w-2.5 h-2.5" />
         {condition}
       </span>
@@ -268,7 +268,13 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Propose a trade"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      onKeyDown={(e) => e.key === "Escape" && onClose()}
+    >
       <div className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in" onClick={onClose} />
 
       <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl overflow-hidden max-h-[90vh] flex flex-col animate-slide-up border border-white/10 shadow-2xl">
@@ -291,12 +297,12 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
             </div>
 
             {/* Picker grid — PowerPicker in single-select mode */}
-            <div className="flex-1 overflow-y-auto px-5 pb-5 pt-3">
+            <div className="flex-1 overflow-y-auto scrollbar-none px-5 pb-5 pt-3">
               {pickerItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <p className="text-cream/30 text-sm font-medium">No items listed</p>
+                  <p className="text-cream/30 text-sm font-medium">No pieces listed</p>
                   <p className="text-cream/20 text-xs mt-1">
-                    {targetUser.name} hasn&apos;t listed any items for trade yet.
+                    {targetUser.name} hasn&apos;t listed any pieces for trade yet.
                   </p>
                 </div>
               ) : (
@@ -336,21 +342,21 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
             <div>
               <p className="text-lg font-bold text-cream mb-1">Offer Sent!</p>
               <p className="text-sm text-cream/40 leading-relaxed">
-                Your trade offer has been sent to{" "}
+                Your offer has been sent to{" "}
                 <span className="text-cream/70 font-semibold">{targetUser.name}</span>.
-                Your items are now locked while awaiting their response.
+                Your pieces are locked while awaiting their response.
               </p>
             </div>
             <button
               onClick={onClose}
               className="mt-1 px-8 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-95 transition-all"
             >
-              Done
+              Got it
             </button>
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div className="flex-1 overflow-y-auto scrollbar-none overscroll-contain">
 
               {/* ── YOU WANT section ── */}
               <div className="px-5 pt-5 pb-4 border-b border-white/[0.05]">
@@ -495,14 +501,14 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
               {/* ── YOUR OFFER section ── */}
               <div className="px-5 pt-4 pb-5">
                 <p className="text-[10px] text-cream/30 font-bold uppercase tracking-wider mb-3">
-                  Your offer · select items to trade
+                  Your offer · select pieces to trade
                 </p>
 
                 {myTradeable.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <p className="text-cream/30 text-sm font-medium">No items available</p>
+                    <p className="text-cream/30 text-sm font-medium">Your vault is empty</p>
                     <p className="text-cream/20 text-xs mt-1 max-w-[200px] leading-relaxed">
-                      Add items to your inventory to start trading.
+                      Curate pieces to your vault to start trading.
                     </p>
                   </div>
                 ) : (
@@ -517,7 +523,7 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
                 {/* ── Add Cash to offer (from me) ── */}
                 <div className="mt-4">
                   <p className="text-[9px] text-cream/20 font-bold uppercase tracking-wider mb-1.5">
-                    + Add cash to sweeten
+                    + Sweeten with cash
                   </p>
                   <div className="relative">
                     <DollarSign className="absolute top-1/2 -translate-y-1/2 left-3 w-3.5 h-3.5 text-green-400/40 pointer-events-none" />
@@ -592,7 +598,7 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
                   onClick={onClose}
                   className="px-5 py-3 rounded-2xl bg-white/[0.06] text-cream/40 font-bold text-sm hover:bg-white/10 active:scale-[0.97] transition-all"
                 >
-                  Cancel
+                  Close
                 </button>
                 <button
                   onClick={handleSend}

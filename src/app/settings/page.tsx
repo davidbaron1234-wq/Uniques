@@ -290,7 +290,7 @@ export default function SettingsPage() {
               />
               <NotifRow
                 label="Market Alerts"
-                description={isPro ? "Price change alerts for your watchlist" : "Pro feature — upgrade to enable"}
+                description={isPro ? "Price change alerts for your Radar" : "Pro feature — upgrade to enable"}
                 enabled={notifMarket}
                 onToggle={() => {
                   if (!isPro) { setActiveTab("subscription"); return; }
@@ -308,7 +308,7 @@ export default function SettingsPage() {
             {isPro ? (
               /* ── Pro active card ── */
               <div className="relative rounded-3xl overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-purple-500/15 to-primary/10" />
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-surface/15 to-primary/10" />
                 <div className="relative bg-charcoal-dark/80 border border-primary/30 rounded-3xl p-6 space-y-5">
                   <div className="flex items-start justify-between">
                     <div>
@@ -344,9 +344,9 @@ export default function SettingsPage() {
                     <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/[0.06] border border-white/[0.08] text-cream/40">Free</span>
                   </div>
                   {[
-                    "Up to 10 items",
-                    "Manual item search",
-                    "Basic profile page",
+                    "Up to 10 pieces in your vault",
+                    "Manual catalog search",
+                    "Collector profile page",
                     "Trade messaging",
                   ].map((f) => (
                     <div key={f} className="flex items-center gap-2.5">
@@ -357,17 +357,17 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="relative rounded-3xl overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-purple-500/10 to-primary/5 blur-[2px]" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-surface/10 to-primary/5 blur-[2px]" />
                   <div className="relative bg-charcoal-dark rounded-3xl p-6 border border-primary/25 space-y-4">
                     <div className="flex items-center gap-2">
                       <Zap className="w-5 h-5 text-primary" />
                       <p className="text-base font-extrabold text-cream">Upgrade to Pro</p>
                     </div>
                     {[
-                      "Unlimited items",
+                      "Unlimited vault capacity",
                       "AI Auto-Scanner",
-                      "Wall-Street Market Analytics",
-                      "Pro Badge on your profile",
+                      "Institutional Market Analytics",
+                      "Verified Collector Pro Badge",
                       "Priority trade matching",
                     ].map((f) => (
                       <div key={f} className="flex items-center gap-2.5">

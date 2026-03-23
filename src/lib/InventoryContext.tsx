@@ -127,7 +127,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* quota */ }
         return next;
       });
-      setToast(`Added ${master.name} to your collection!`);
+      setToast(`Added ${master.name} to your vault!`);
     },
     [hasItem]
   );
@@ -187,15 +187,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* quota */ }
       return next;
     });
-    setToast(`Added ${item.name} to your collection!`);
+    setToast(`Added ${item.name} to your vault!`);
   }, []);
 
   const showToast = useCallback((msg: string) => setToast(msg), []);
 
   const clearToast = useCallback(() => setToast(null), []);
 
-  // Block server render — children render only after client-side mount
-  if (!isMounted) return null;
+  // During hydration, render children but provide seed values so layout doesn't shift.
+  // The context values will update once isMounted flips to true.
 
   return (
     <InventoryContext.Provider

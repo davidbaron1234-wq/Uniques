@@ -1,15 +1,49 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Menu, X, User, Settings, HelpCircle, LogOut, History, Search, Loader2 } from "lucide-react";
+import { useTypewriter } from "@/hooks/useTypewriter";
+import { X, User, Settings, HelpCircle, LogOut, History, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import Logo from "./Logo";
 import NotificationDropdown from "./NotificationDropdown";
-import { useTypewriter } from "@/hooks/useTypewriter";
-import { socialUsers } from "@/lib/data";
+import { socialUsers, currentUser } from "@/lib/data";
 import { MasterItem } from "@/lib/catalog/types";
+
+// ── Custom SVG Icons ──────────────────────────────────────────────────────────
+
+function HamburgerIcon({ className }: { className?: string }) {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden>
+      <path d="M4 18C3.71667 18 3.47934 17.904 3.288 17.712C3.09667 17.52 3.00067 17.2827 3 17C2.99934 16.7173 3.09534 16.48 3.288 16.288C3.48067 16.096 3.718 16 4 16H20C20.2833 16 20.521 16.096 20.713 16.288C20.905 16.48 21.0007 16.7173 21 17C20.9993 17.2827 20.9033 17.5203 20.712 17.713C20.5207 17.9057 20.2833 18.0013 20 18H4ZM4 13C3.71667 13 3.47934 12.904 3.288 12.712C3.09667 12.52 3.00067 12.2827 3 12C2.99934 11.7173 3.09534 11.48 3.288 11.288C3.48067 11.096 3.718 11 4 11H20C20.2833 11 20.521 11.096 20.713 11.288C20.905 11.48 21.0007 11.7173 21 12C20.9993 12.2827 20.9033 12.5203 20.712 12.713C20.5207 12.9057 20.2833 13.0013 20 13H4ZM4 8C3.71667 8 3.47934 7.904 3.288 7.712C3.09667 7.52 3.00067 7.28267 3 7C2.99934 6.71733 3.09534 6.48 3.288 6.288C3.48067 6.096 3.718 6 4 6H20C20.2833 6 20.521 6.096 20.713 6.288C20.905 6.48 21.0007 6.71733 21 7C20.9993 7.28267 20.9033 7.52033 20.712 7.713C20.5207 7.90567 20.2833 8.00133 20 8H4Z" fill="currentColor"/>
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden>
+      <path d="M13.6199 14.5927L9.2421 10.2149C8.89465 10.4929 8.49509 10.7129 8.04341 10.875C7.59173 11.0372 7.1111 11.1183 6.60151 11.1183C5.33912 11.1183 4.27084 10.6809 3.39667 9.80631C2.5225 8.93167 2.08518 7.86339 2.08472 6.60147C2.08425 5.33954 2.52157 4.27126 3.39667 3.39663C4.27177 2.52199 5.34005 2.08467 6.60151 2.08467C7.86297 2.08467 8.93148 2.52199 9.80704 3.39663C10.6826 4.27126 11.1197 5.33954 11.1183 6.60147C11.1183 7.11105 11.0372 7.59169 10.8751 8.04337C10.7129 8.49505 10.4929 8.89461 10.2149 9.24205L14.5928 13.6199L13.6199 14.5927ZM6.60151 9.72848C7.47012 9.72848 8.20856 9.42458 8.81682 8.81678C9.42508 8.20898 9.72898 7.47054 9.72852 6.60147C9.72806 5.73239 9.42416 4.99418 8.81682 4.38685C8.20949 3.77951 7.47105 3.47538 6.60151 3.47446C5.73197 3.47353 4.99376 3.77766 4.38689 4.38685C3.78002 4.99604 3.47589 5.73424 3.4745 6.60147C3.47311 7.46869 3.77724 8.20713 4.38689 8.81678C4.99654 9.42643 5.73475 9.73033 6.60151 9.72848Z" fill="currentColor"/>
+    </svg>
+  );
+}
+
+function LogoIcon({ className }: { className?: string }) {
+  return (
+    <svg width="32" height="29" viewBox="0 0 32 29" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden>
+      <path d="M16.2933 0.373009H2.61109C1.37505 0.373009 0.373047 1.37502 0.373047 2.61106V20.3029C0.373047 21.5389 1.37505 22.5409 2.61109 22.5409H16.2933C17.5293 22.5409 18.5314 21.5389 18.5314 20.3029V2.61106C18.5314 1.37502 17.5293 0.373009 16.2933 0.373009Z" fill="#CAE6CE" stroke="#221F1F" strokeWidth="0.746016" strokeMiterlimit="10"/>
+      <path d="M16.0196 3.43778H2.8551V18.118H16.0196V3.43778Z" fill="#FCF9D5"/>
+      <path d="M15.443 17.7794H3.43387C2.77073 17.7794 2.23315 18.317 2.23315 18.9801V18.9821C2.23315 19.6452 2.77073 20.1828 3.43387 20.1828H15.443C16.1061 20.1828 16.6437 19.6452 16.6437 18.9821V18.9801C16.6437 18.317 16.1061 17.7794 15.443 17.7794Z" fill="#AA95C5"/>
+      <path d="M29.2689 7.3705L16.4044 2.71111C15.2423 2.29019 13.9589 2.89108 13.538 4.05324L7.51319 20.6876C7.09226 21.8497 7.69315 23.1331 8.85531 23.554L21.7197 28.2134C22.8819 28.6343 24.1652 28.0334 24.5861 26.8713L30.611 10.2369C31.0319 9.07477 30.431 7.79143 29.2689 7.3705Z" fill="#CAE6CE" stroke="#221F1F" strokeWidth="0.746016" strokeMiterlimit="10"/>
+      <path d="M27.9669 10.159L15.5892 5.67591L10.59 19.4786L22.9677 23.9617L27.9669 10.159Z" fill="#FCF9D5"/>
+      <path d="M22.54 23.4476L11.2487 19.358C10.6252 19.1322 9.93668 19.4546 9.71086 20.0781L9.71019 20.0799C9.48436 20.7034 9.80674 21.3919 10.4302 21.6178L21.7215 25.7074C22.345 25.9332 23.0335 25.6108 23.2594 24.9873L23.26 24.9855C23.4859 24.362 23.1635 23.6735 22.54 23.4476Z" fill="#AA95C5"/>
+      <path d="M12.4038 16.3917C14.6182 16.3917 16.4133 14.5966 16.4133 12.3821C16.4133 10.1677 14.6182 8.37254 12.4038 8.37254C10.1893 8.37254 8.39417 10.1677 8.39417 12.3821C8.39417 14.5966 10.1893 16.3917 12.4038 16.3917Z" fill="#CAE6CE" stroke="#221F1F" strokeWidth="0.807036" strokeMiterlimit="10"/>
+      <path d="M13.705 12.697L12.8074 11.142H12.2346L13.705 13.6891L15.1754 11.142H14.6026L13.705 12.697Z" fill="#221F1F" stroke="#221F1F" strokeWidth="0.147629" strokeMiterlimit="10"/>
+      <path d="M11.0968 12.0672L10.2032 13.6242L9.63037 13.6261L11.0948 11.0751L12.5711 13.6183H11.9983L11.0968 12.0672Z" fill="#221F1F" stroke="#221F1F" strokeWidth="0.147629" strokeMiterlimit="10"/>
+    </svg>
+  );
+}
 
 // ── Accent-insensitive matching (local util) ──────────────────────────────────
 const normalize = (s: string) =>
@@ -21,10 +55,23 @@ const ALL_COLLECTORS = socialUsers.map((s) => s.user);
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Header() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [headerQuery, setHeaderQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
+
+  // ── Drawer profile: read same localStorage key as inventory/page.tsx ─────
+  const [drawerProfile, setDrawerProfile] = useState<{ name: string; avatar: string } | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("uniques_profile");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.name) setDrawerProfile({ name: parsed.name, avatar: parsed.avatar ?? currentUser.avatar });
+      }
+    } catch { /* ignore */ }
+  }, [menuOpen]); // re-read every time the drawer opens
 
   // ── Catalog quick-search state ────────────────────────────────────────────
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -64,6 +111,7 @@ export default function Header() {
         setQuickSearchItems(data.items ?? []);
       } catch (err: unknown) {
         if (!(err instanceof Error && err.name === "AbortError")) {
+          console.error("Header quick-search failed:", err);
           setQuickSearchItems([]);
         }
       } finally {
@@ -81,9 +129,6 @@ export default function Header() {
     return ALL_COLLECTORS.filter((u) => normalize(u.name).includes(nq)).slice(0, 2);
   }, [q]);
 
-  // Navigate to full Explore results and close overlay.
-  // If already on /search, use replace+scroll:false for seamless in-place update
-  // (no remount, no scroll-to-top, just the URL + searchParams update).
   const navigateSearch = () => {
     if (!q) return;
     setIsFocused(false);
@@ -103,25 +148,29 @@ export default function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 glass">
+      <header className="sticky top-0 z-50 h-[58px] bg-background shadow-[0_2px_12px_rgba(0,0,0,0.4)]">
         {/* `relative` so the overlay can be absolutely positioned beneath */}
-        <div className="relative flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
+        <div className="relative flex items-center h-full px-[13px] gap-[9px] max-w-lg mx-auto">
 
           {/* ── Hamburger ────────────────────────────────────────────────── */}
           <button
             onClick={() => setMenuOpen(true)}
-            className="flex-shrink-0 p-2 rounded-xl hover:bg-charcoal-light/50 transition-colors active:scale-95"
+            className="flex-shrink-0 rounded-xl hover:bg-charcoal-light/50 transition-colors active:scale-95"
             aria-label="Open menu"
           >
-            <Menu className="w-6 h-6 text-cream" />
+            <HamburgerIcon className="w-6 h-6 text-cream" />
           </button>
 
-          {/* ── Real search pill ─────────────────────────────────────────── */}
+          {/* ── Bell ─────────────────────────────────────────────────────── */}
+          <NotificationDropdown />
+
+          {/* ── Search pill (fills remaining space) ──────────────────────── */}
           <form
+            data-tour="header-search"
             onSubmit={handleSubmit}
-            className="flex flex-1 items-center gap-2.5 px-4 py-2 rounded-full bg-white/[0.07] focus-within:bg-white/[0.11] transition-all"
+            className="flex-1 flex items-center gap-2 h-[30px] px-3 mr-[4px] rounded-full bg-background-light focus-within:bg-charcoal-light transition-colors"
           >
-            <Search className="w-4 h-4 flex-shrink-0 text-cream/35 pointer-events-none" />
+            <SearchIcon className="w-[14px] h-[14px] flex-shrink-0 text-cream/35 pointer-events-none" />
             <input
               type="search"
               name="q"
@@ -131,49 +180,13 @@ export default function Header() {
               onBlur={() => setTimeout(() => setIsFocused(false), 200)}
               placeholder={typewriterText}
               autoComplete="off"
-              className="flex-1 min-w-0 bg-transparent text-sm text-cream placeholder:text-cream/35 focus:outline-none"
+              className="flex-1 min-w-0 bg-transparent text-[10px] leading-none py-0 text-cream placeholder:text-cream/35 focus:outline-none"
               aria-label="Search Uniques"
             />
           </form>
 
-          {/* ── Notification bell ────────────────────────────────────────── */}
-          <NotificationDropdown />
-
-          {/* ── Auth state indicator ─────────────────────────────────────── */}
-          {status === "authenticated" && session?.user ? (
-            <button
-              onClick={() => setMenuOpen(true)}
-              className="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden border-2 border-primary/40 hover:border-primary/70 transition-colors active:scale-95"
-              aria-label="Open menu"
-            >
-              {session.user.image ? (
-                <img src={session.user.image} alt={session.user.name ?? "User"} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-primary/20 flex items-center justify-center">
-                  <User className="w-4 h-4 text-primary" />
-                </div>
-              )}
-            </button>
-          ) : status === "unauthenticated" ? (
-            <Link
-              href="/login"
-              className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-primary/15 text-primary text-xs font-bold hover:bg-primary/25 active:scale-95 transition-all border border-primary/25"
-            >
-              Sign In
-            </Link>
-          ) : null}
-
-          {/* ── Logo icon mark ───────────────────────────────────────────── */}
-          <div className="flex-shrink-0">
-            <svg width="32" height="32" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="10" y="4" width="18" height="24" rx="3" fill="#AA95C5" opacity="0.7" />
-              <rect x="8" y="8" width="18" height="24" rx="3" fill="#CAE6CE" />
-              <path d="M20 16L24 18L20 20" stroke="#221F1F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M16 20L12 18L16 16" stroke="#221F1F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <line x1="12" y1="13" x2="22" y2="13" stroke="#221F1F" strokeWidth="1" opacity="0.3" />
-              <line x1="12" y1="24" x2="22" y2="24" stroke="#221F1F" strokeWidth="1" opacity="0.3" />
-            </svg>
-          </div>
+          {/* ── Logo (far right) ─────────────────────────────────────────── */}
+          <LogoIcon className="flex-shrink-0 w-8 h-8" />
 
           {/* ── Quick search overlay ──────────────────────────────────────── */}
           {showOverlay && (
@@ -263,85 +276,85 @@ export default function Header() {
       {menuOpen && (
         <div className="fixed inset-0 z-[100] flex">
           <div className="absolute inset-0 bg-black/60 animate-fade-in" onClick={() => setMenuOpen(false)} />
-          <div className="relative w-72 bg-charcoal-dark h-full shadow-soft-xl animate-slide-up flex flex-col">
-            <div className="flex items-center justify-between p-5">
-              <Logo />
-              <button
-                onClick={() => setMenuOpen(false)}
-                className="p-2 rounded-xl hover:bg-charcoal-light/50 transition-colors"
-                aria-label="Close menu"
-              >
-                <X className="w-5 h-5 text-cream" />
-              </button>
-            </div>
+          <div className="relative w-64 bg-[#1A1818] border-r border-white/[0.06] h-full shadow-2xl animate-slide-up flex flex-col">
 
-            <div className="px-5 pb-5">
+            {/* Single top row: LogoIcon | avatar+name (link to profile) | X */}
+            <div className="flex items-center gap-2 px-3 pt-5 pb-4 border-b border-white/[0.05]">
+              <LogoIcon className="w-7 h-7 flex-shrink-0" />
+
               {session?.user ? (
-                <div className="flex items-center gap-3 p-3 rounded-2xl bg-background-light">
-                  <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-primary/20 flex items-center justify-center">
-                    {session.user.image ? (
-                      <img src={session.user.image} alt={session.user.name ?? "User"} className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-6 h-6 text-primary" />
-                    )}
+                <Link
+                  href="/inventory"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-1.5 flex-1 min-w-0 active:opacity-70 transition-opacity"
+                >
+                  <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 bg-primary/20">
+                    <img
+                      src={drawerProfile?.avatar ?? session.user.image ?? currentUser.avatar}
+                      alt={drawerProfile?.name ?? session.user.name ?? "Collector"}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-cream text-sm truncate">{session.user.name ?? "Collector"}</p>
-                    <p className="text-xs text-cream/40 truncate">{session.user.email}</p>
-                  </div>
-                </div>
+                  <span className="font-semibold text-cream text-[13px] tracking-tight truncate leading-tight">
+                    {drawerProfile?.name ?? session.user.name ?? "Collector"}
+                  </span>
+                </Link>
               ) : (
                 <Link
                   href="/login"
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl bg-primary/15 text-primary text-sm font-bold border border-primary/25 hover:bg-primary/25 transition-all"
+                  className="flex-1 text-sm font-semibold text-primary active:opacity-70 transition-opacity"
                 >
-                  Sign In to your account
+                  Sign In
                 </Link>
               )}
+
+              <button
+                onClick={() => setMenuOpen(false)}
+                className="p-1.5 rounded-xl active:bg-white/10 transition-colors flex-shrink-0"
+                aria-label="Close menu"
+              >
+                <X className="w-5 h-5 text-cream/60" />
+              </button>
             </div>
 
-            <nav className="flex-1 px-3 space-y-0.5">
-              <button
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-cream/60 hover:bg-background-light hover:text-cream transition-colors"
-                onClick={() => { setMenuOpen(false); router.push("/history"); }}
-              >
-                <History className="w-5 h-5" />
-                <span className="font-medium text-sm flex-1 text-left">Trade History</span>
-              </button>
-
+            {/* Nav items — iOS-style with dividers */}
+            <nav className="flex-1 px-3">
               {[
-                { icon: User,        label: "My Profile",     href: "/inventory" },
-                { icon: Settings,    label: "Settings",       href: "/settings"  },
-                { icon: HelpCircle,  label: "Help & Support", href: null         },
-              ].map((item) => (
+                { icon: History,    label: "Trade History",  href: "/history"  },
+                { icon: Settings,   label: "Settings",       href: "/settings" },
+                { icon: HelpCircle, label: "Help & Support", href: null        },
+              ].map((item, idx, arr) => (
                 <button
                   key={item.label}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-cream/60 hover:bg-background-light hover:text-cream transition-colors"
+                  className={`w-full flex items-center gap-3 px-3 py-3.5 text-cream/60 active:bg-white/10 active:scale-[0.98] active:text-cream transition-all ${
+                    idx < arr.length - 1 ? "border-b border-white/[0.05]" : ""
+                  }`}
                   onClick={() => { setMenuOpen(false); if (item.href) router.push(item.href); }}
                 >
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium text-sm">{item.label}</span>
+                  <item.icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="font-semibold text-sm tracking-wide">{item.label}</span>
                 </button>
               ))}
             </nav>
 
-            <div className="p-3 border-t border-charcoal-light/20">
+            {/* Sign out */}
+            <div className="border-t border-white/[0.06] p-3">
               {session?.user ? (
                 <button
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-red-400/70 hover:bg-red-400/10 hover:text-red-400 transition-colors"
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-white/40 active:bg-white/[0.06] active:text-white/70 transition-colors"
                   onClick={() => { setMenuOpen(false); signOut({ callbackUrl: "/login" }); }}
                 >
-                  <LogOut className="w-5 h-5" />
-                  <span className="font-medium text-sm">Sign Out</span>
+                  <LogOut className="w-4 h-4" />
+                  <span className="font-semibold text-sm tracking-wide">Sign Out</span>
                 </button>
               ) : (
                 <Link
                   href="/register"
                   onClick={() => setMenuOpen(false)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-cream/50 hover:bg-background-light hover:text-cream transition-colors"
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-cream/40 active:bg-white/[0.06] active:text-cream transition-colors"
                 >
-                  <User className="w-5 h-5" />
+                  <User className="w-4 h-4" />
                   <span className="font-medium text-sm">Create Account</span>
                 </Link>
               )}

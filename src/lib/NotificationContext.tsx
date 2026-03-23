@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useCallback, ReactNode } from "rea
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type NotifType = "trade" | "match" | "alert";
+export type NotifType = "trade" | "match" | "alert" | "achievement";
 
 export interface Notification {
   id: string;
@@ -26,6 +26,14 @@ interface NotificationContextValue {
 // ── Seed data ─────────────────────────────────────────────────────────────────
 
 const INITIAL_NOTIFICATIONS: Notification[] = [
+  {
+    id:      "n0",
+    type:    "achievement",
+    message: "Achievement Unlocked: Dealmaker! You've completed 10 successful trades.",
+    time:    "Just now",
+    isRead:  false,
+    href:    "/inventory",
+  },
   {
     id:      "n1",
     type:    "trade",

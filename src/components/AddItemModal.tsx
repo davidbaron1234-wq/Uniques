@@ -433,7 +433,13 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add item to vault"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      onKeyDown={(e) => e.key === "Escape" && handleClose()}
+    >
       <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={handleClose} />
 
       {/* Floating condition-error toast */}
@@ -441,7 +447,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         <div className="absolute bottom-8 inset-x-0 flex justify-center z-10 pointer-events-none px-6">
           <div className="animate-slide-up flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-red-500/90 backdrop-blur-sm shadow-2xl border border-red-400/30">
             <AlertCircle className="w-4 h-4 text-white flex-shrink-0" />
-            <span className="text-sm font-semibold text-white whitespace-nowrap">Please select a condition before saving</span>
+            <span className="text-sm font-semibold text-white whitespace-nowrap">Please select a condition to continue</span>
           </div>
         </div>
       )}
@@ -454,9 +460,9 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         {step === "search" && (
           <>
             <div className="px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
-              <h2 className="text-lg font-bold text-cream">Add New Item</h2>
+              <h2 className="text-lg font-bold text-cream">Curate a Piece</h2>
             </div>
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="flex-1 overflow-y-auto scrollbar-none p-5 space-y-4">
               {/* Two action buttons: upload (free) + AI scan (pro) */}
               <div className="grid grid-cols-2 gap-3">
                 {/* ── Upload Photo — everyone ── */}
@@ -532,8 +538,8 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   scanError ? 'bg-red-500/10 border-red-500/20 text-red-300' :
                   priceStatus?.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-300' :
                   priceStatus?.type === 'error' ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' :
-                  priceStatus?.type === 'manual' ? 'bg-blue-500/10 border-blue-500/20 text-blue-300' : // 🔥 עיצוב כחול ונעים
-                  'bg-blue-500/10 border-blue-500/20 text-blue-300'
+                  priceStatus?.type === 'manual' ? 'bg-primary/10 border-primary/20 text-primary' :
+                  'bg-primary/10 border-primary/20 text-primary'
                 }`}>
                   {scanError ? <AlertCircle className="w-4 h-4" /> : 
                    priceStatus?.type === 'success' ? <DollarSign className="w-4 h-4" /> : 
@@ -552,7 +558,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               )}
 
               <div className="relative">
-                <input type="text" value={name} onChange={(e) => { setName(e.target.value); searchCatalog(e.target.value); }} onFocus={() => setShowSuggestions(true)} placeholder="Search Master Catalog..."
+                <input type="text" value={name} onChange={(e) => { setName(e.target.value); searchCatalog(e.target.value); }} onFocus={() => setShowSuggestions(true)} placeholder="Search the catalog…"
                   className="w-full pl-10 pr-10 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all" />
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/30" />
                 {showSuggestions && suggestions.length > 0 && (
@@ -603,7 +609,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             </div>
 
             <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
-              <button onClick={handleClose} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Cancel</button>
+              <button onClick={handleClose} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Close</button>
               <button onClick={handleNextStep} disabled={!isStepOneValid} className={`flex-1 py-3 rounded-2xl font-bold text-sm active:scale-[0.97] transition-all ${isStepOneValid ? "bg-primary/20 text-primary hover:bg-primary/30" : "bg-background-light text-cream/20 cursor-not-allowed"}`}>Next</button>
             </div>
           </>
@@ -617,10 +623,10 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </button>
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <img src={config.customImage || scannedImage || catalogImage || ""} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
-                <div className="min-w-0"><p className="text-sm font-bold text-cream truncate">Configure</p><p className="text-xs text-cream/35 truncate">{name}</p></div>
+                <div className="min-w-0"><p className="text-sm font-bold text-cream truncate">Details</p><p className="text-xs text-cream/35 truncate">{name}</p></div>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto scrollbar-none p-5">
               <ItemConfigForm config={config} onChange={handleConfigChange} category={category as string} />
             </div>
             <div className="px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
@@ -631,7 +637,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
                 >
                   <Save className="w-4 h-4" />
-                  Save to Collection
+                  Add to Vault
                 </button>
               </div>
             </div>
