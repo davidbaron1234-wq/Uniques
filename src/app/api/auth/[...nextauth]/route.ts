@@ -1,7 +1,6 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 const handler = NextAuth({
   providers: [
@@ -14,20 +13,22 @@ const handler = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+        // Verify credentials against Supabase Auth (HTTPS — works from Vercel).
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: credentials.email,
+          password: credentials.password,
         });
-        if (!user) return null;
 
-        const valid = await bcrypt.compare(credentials.password, user.hashedPassword);
-        if (!valid) return null;
+        if (error || !data.user) return null;
+
+        const name = (data.user.user_metadata?.name as string | undefined) ?? data.user.email ?? "User";
 
         return {
-          id:    user.id,
-          name:  user.name,
-          email: user.email,
-          image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}&backgroundColor=b6e3f4`,
-          tier:  user.tier as "free" | "pro",
+          id:    data.user.id,
+          name,
+          email: data.user.email ?? credentials.email,
+          image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(credentials.email)}&backgroundColor=b6e3f4`,
+          tier:  "free" as const,
         };
       },
     }),
