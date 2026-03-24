@@ -554,6 +554,289 @@ const ALL_EVENTS: NetworkEvent[] = [
 
 const PAGE_SIZE = 5;
 
+// ── Feed sub-components ───────────────────────────────────────────────────────
+
+/** Renders a single FY/Following static feed card (same shape as before). */
+function FeedCard({
+  event, index, likedIds, toggleLike, setActiveCommentPost, postedComments, setFeedOfferTarget,
+}: {
+  event: NetworkEvent;
+  index: number;
+  likedIds: Set<string>;
+  toggleLike: (id: string, e: React.MouseEvent) => void;
+  setActiveCommentPost: (id: string) => void;
+  postedComments: Record<string, unknown[]>;
+  setFeedOfferTarget: (t: { user: { name: string; avatar: string }; item?: import("@/lib/types").CollectibleItem }) => void;
+}) {
+  const meta        = EVENT_META[event.type];
+  const isLiked     = likedIds.has(event.id);
+  const likes       = (DUMMY_LIKES[event.id] ?? 0) + (isLiked ? 1 : 0);
+  const commCount   = (DUMMY_FEED_COMMENTS[event.id]?.length ?? 0) + (postedComments[event.id]?.length ?? 0);
+  const isMilestone = event.type === "milestone";
+  const isRadar     = event.type === "updated_radar";
+
+  return (
+    <div
+      className={`rounded-2xl border overflow-hidden animate-slide-up ${
+        isMilestone ? "bg-gradient-to-br from-[#D4AF37]/5 to-[#2C2929] border-[#D4AF37]/20" : "bg-[#2C2929] border-white/[0.05]"
+      }`}
+      style={{ animationDelay: `${index * 0.06}s`, animationFillMode: "both" }}
+    >
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+        <Link href={`/u/${event.user.handle}`} className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 block hover:opacity-80 transition-opacity">
+          <img src={event.user.avatar} alt={event.user.name} className="w-full h-full object-cover" />
+        </Link>
+        <div className="flex-1 min-w-0">
+          {event.suggested && (
+            <div className="flex items-center gap-1 text-[9px] text-[#AA95C5] font-bold uppercase tracking-wider mb-0.5">
+              <Sparkles className="w-2.5 h-2.5" />Suggested for you
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Link href={`/u/${event.user.handle}`} className="text-sm font-bold text-cream hover:text-primary transition-colors">{event.user.name}</Link>
+            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${meta.cls}`}>
+              {isRadar && <Bell className="w-2.5 h-2.5" />}{meta.label}
+            </span>
+          </div>
+          <p className="text-[11px] text-cream/40 mt-0.5 leading-snug">{event.action}</p>
+        </div>
+        <span className="text-[10px] text-cream/25 font-medium flex-shrink-0">{event.timestamp}</span>
+      </div>
+
+      {isMilestone && (
+        <div className="mx-4 h-48 rounded-xl overflow-hidden relative flex flex-col items-center justify-center bg-[#1A1608]"
+          style={{ background: "radial-gradient(ellipse at 50% 60%, rgba(212,175,55,0.18) 0%, rgba(26,22,8,0.95) 70%)" }}>
+          <Trophy className="w-14 h-14 text-[#D4AF37] mb-3 drop-shadow-[0_0_20px_rgba(212,175,55,0.5)]" />
+          <p className="text-[#FDE047] text-lg font-black tracking-tight drop-shadow-[0_0_12px_rgba(253,224,71,0.4)]">Hit $10K Value</p>
+          <p className="text-[#D4AF37]/50 text-[10px] font-semibold mt-1 uppercase tracking-widest">Vault Milestone</p>
+        </div>
+      )}
+      {isRadar && (
+        <div className="overflow-x-auto flex gap-3 pb-2 no-scrollbar px-4 mt-1">
+          {RADAR_IMAGES.map((src, idx) => (
+            <div key={idx} className="flex-shrink-0 w-24 rounded-xl bg-white/[0.05] overflow-hidden border border-white/[0.06]">
+              <div className="h-20 overflow-hidden"><img src={src} alt="Want" className="w-full h-full object-cover" loading="lazy" /></div>
+              <p className="text-[9px] text-cream/50 font-medium px-2 py-1.5 truncate">Grail #{idx + 1}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {!isMilestone && !isRadar && event.item && (
+        <>
+          <button
+            onClick={() => event.item && setFeedOfferTarget({
+              user: { name: event.user.name, avatar: event.user.avatar },
+              item: { id: event.id, name: event.item.name, category: "Other" as import("@/lib/constants").Category, imageUrl: event.item.imageUrl, estimatedValue: event.item.estimatedValue, upForTrade: true },
+            })}
+            className="mx-4 rounded-xl overflow-hidden bg-white/[0.04] h-48 w-[calc(100%-2rem)] block active:brightness-90 transition-all"
+          >
+            <img src={event.item.imageUrl} alt={event.item.name} className="w-full h-full object-cover" loading="lazy" />
+          </button>
+          <div className="px-4 pt-3">
+            <p className="text-sm font-bold text-cream leading-tight truncate">{event.item.name}</p>
+            {event.item.estimatedValue && <p className="text-xs text-[#CAE6CE] font-bold mt-0.5">{formatValue(event.item.estimatedValue)}</p>}
+          </div>
+        </>
+      )}
+
+      <div className="flex items-center gap-1 px-3 py-3 mt-1">
+        <button onClick={(e) => toggleLike(event.id, e)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95">
+          <Heart className={`w-4 h-4 transition-all duration-150 ${isLiked ? "fill-red-500 text-red-500" : "text-cream/30"}`} />
+          <span className="text-[11px] text-cream/40 font-medium">{likes}</span>
+        </button>
+        <button onClick={() => setActiveCommentPost(event.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
+          <MessageCircle className="w-4 h-4" />
+          <span className="text-[11px] text-cream/40 font-medium">{commCount}</span>
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
+          <Share className="w-4 h-4" />
+        </button>
+        {(event.item || isRadar) && (
+          <button
+            onClick={() => setFeedOfferTarget({
+              user: { name: event.user.name, avatar: event.user.avatar },
+              item: event.item ? { id: event.id, name: event.item.name, category: "Other" as import("@/lib/constants").Category, imageUrl: event.item.imageUrl, estimatedValue: event.item.estimatedValue, upForTrade: true } : undefined,
+            })}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#CAE6CE]/10 border border-[#CAE6CE]/20 text-[#CAE6CE] text-[11px] font-semibold hover:bg-[#CAE6CE]/20 transition-colors active:scale-95"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            {isRadar ? "Propose Trade" : "Make Offer"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Card for DB-backed following feed items (activities from followed users). */
+function FollowingFeedCard({
+  item, index, dbLikedIds, dbLikeCounts, onLike, setFeedOfferTarget,
+}: {
+  item: { id: string; userName: string; userAvatar: string; userHandle: string; type: string; title: string; imageUrl: string; createdAt: string; likes: number; isLiked: boolean };
+  index: number;
+  dbLikedIds: Set<string>;
+  dbLikeCounts: Record<string, number>;
+  onLike: (id: string, liked: boolean) => void;
+  setFeedOfferTarget: (t: { user: { name: string; avatar: string }; item?: import("@/lib/types").CollectibleItem }) => void;
+}) {
+  const isLiked = dbLikedIds.has(item.id) ?? item.isLiked;
+  const likes   = dbLikeCounts[item.id] ?? item.likes;
+  const typeLabel = item.type === "grail_published" ? "New Grail"
+    : item.type === "achievement_unlocked" ? "Achievement"
+    : item.type === "radar_added" ? "Radar"
+    : "Activity";
+  const typeCls = item.type === "grail_published" ? "bg-yellow-400/15 text-yellow-400"
+    : item.type === "achievement_unlocked" ? "bg-amber-400/15 text-amber-400"
+    : "bg-primary/15 text-primary";
+  const timeAgo = (() => {
+    const d = Date.now() - new Date(item.createdAt).getTime();
+    const m = Math.floor(d / 60000);
+    if (m < 1) return "Just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  })();
+
+  return (
+    <div
+      className="rounded-2xl border bg-[#2C2929] border-white/[0.05] overflow-hidden animate-slide-up"
+      style={{ animationDelay: `${index * 0.06}s`, animationFillMode: "both" }}
+    >
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+        <Link href={`/u/${item.userHandle}`} className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 block hover:opacity-80 transition-opacity">
+          <img src={item.userAvatar} alt={item.userName} className="w-full h-full object-cover" />
+        </Link>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Link href={`/u/${item.userHandle}`} className="text-sm font-bold text-cream hover:text-primary transition-colors">{item.userName}</Link>
+            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${typeCls}`}>{typeLabel}</span>
+          </div>
+          <p className="text-[11px] text-cream/40 mt-0.5 truncate leading-snug">{item.title}</p>
+        </div>
+        <span className="text-[10px] text-cream/25 font-medium flex-shrink-0">{timeAgo}</span>
+      </div>
+
+      {item.imageUrl && (
+        <>
+          <button
+            onClick={() => setFeedOfferTarget({
+              user: { name: item.userName, avatar: item.userAvatar },
+              item: { id: item.id, name: item.title, category: "Other" as import("@/lib/constants").Category, imageUrl: item.imageUrl, estimatedValue: undefined, upForTrade: true },
+            })}
+            className="mx-4 rounded-xl overflow-hidden bg-white/[0.04] h-48 w-[calc(100%-2rem)] block active:brightness-90 transition-all"
+          >
+            <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+          </button>
+          <div className="px-4 pt-3">
+            <p className="text-sm font-bold text-cream leading-tight truncate">{item.title}</p>
+          </div>
+        </>
+      )}
+
+      <div className="flex items-center gap-1 px-3 py-3 mt-1">
+        <button onClick={() => onLike(item.id, isLiked)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95">
+          <Heart className={`w-4 h-4 transition-all duration-150 ${isLiked ? "fill-red-500 text-red-500" : "text-cream/30"}`} />
+          <span className="text-[11px] text-cream/40 font-medium">{likes}</span>
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
+          <Share className="w-4 h-4" />
+        </button>
+        {item.imageUrl && (
+          <button
+            onClick={() => setFeedOfferTarget({
+              user: { name: item.userName, avatar: item.userAvatar },
+              item: { id: item.id, name: item.title, category: "Other" as import("@/lib/constants").Category, imageUrl: item.imageUrl, estimatedValue: undefined, upForTrade: true },
+            })}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#CAE6CE]/10 border border-[#CAE6CE]/20 text-[#CAE6CE] text-[11px] font-semibold hover:bg-[#CAE6CE]/20 transition-colors active:scale-95"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />Make Offer
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Card for the "My Activity" tab — current user&apos;s own DB activity entries. */
+function ActivityCard({
+  item, index, firstName, dbLikedIds, dbLikeCounts, onLike,
+}: {
+  item: { id: string; type: string; title: string; imageUrl: string; createdAt: string; metadata?: Record<string, unknown> | null };
+  index: number;
+  firstName: string;
+  dbLikedIds: Set<string>;
+  dbLikeCounts: Record<string, number>;
+  onLike: (id: string, liked: boolean) => void;
+}) {
+  const isLiked = dbLikedIds.has(item.id);
+  const likes   = dbLikeCounts[item.id] ?? 0;
+
+  const typeLabel = item.type === "grail_published"      ? "New Grail"
+    : item.type === "achievement_unlocked" ? "Achievement"
+    : item.type === "radar_added"          ? "Radar Update"
+    : "Activity";
+  const typeCls = item.type === "grail_published"      ? "bg-yellow-400/15 text-yellow-400"
+    : item.type === "achievement_unlocked" ? "bg-amber-400/15 text-amber-400"
+    : "bg-primary/15 text-primary";
+  const action = item.type === "grail_published"      ? "added a new grail to their vault"
+    : item.type === "achievement_unlocked" ? "unlocked an achievement"
+    : item.type === "radar_added"          ? "added an item to their Radar"
+    : "posted an update";
+  const timeAgo = (() => {
+    const d = Date.now() - new Date(item.createdAt).getTime();
+    const m = Math.floor(d / 60000);
+    if (m < 1) return "Just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  })();
+
+  return (
+    <div
+      className="rounded-2xl border bg-[#2C2929] border-white/[0.05] overflow-hidden animate-slide-up"
+      style={{ animationDelay: `${index * 0.06}s`, animationFillMode: "both" }}
+    >
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <span className="text-primary text-xs font-black">{firstName[0]?.toUpperCase() ?? "U"}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-bold text-cream">{firstName}</span>
+            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${typeCls}`}>{typeLabel}</span>
+          </div>
+          <p className="text-[11px] text-cream/40 mt-0.5 leading-snug">{action}</p>
+        </div>
+        <span className="text-[10px] text-cream/25 font-medium flex-shrink-0">{timeAgo}</span>
+      </div>
+
+      {item.imageUrl && (
+        <>
+          <div className="mx-4 rounded-xl overflow-hidden bg-white/[0.04] h-48 w-[calc(100%-2rem)]">
+            <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+          </div>
+          <div className="px-4 pt-3">
+            <p className="text-sm font-bold text-cream leading-tight truncate">{item.title}</p>
+          </div>
+        </>
+      )}
+
+      {/* Zero mock engagement: likes always start from 0 */}
+      <div className="flex items-center gap-1 px-3 py-3 mt-1">
+        <button onClick={() => onLike(item.id, isLiked)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95">
+          <Heart className={`w-4 h-4 transition-all duration-150 ${isLiked ? "fill-red-500 text-red-500" : "text-cream/30"}`} />
+          <span className="text-[11px] text-cream/40 font-medium">{likes}</span>
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
+          <Share className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Compact activity row ─────────────────────────────────────────────────────
 
 function ActivityRow({
@@ -909,40 +1192,140 @@ export default function HomePage() {
   } | null>(null);
 
   // Feed tab + infinite scroll
-  const [feedTab,          setFeedTab]          = useState<"foryou" | "following">("foryou");
+  const [feedTab,          setFeedTab]          = useState<"foryou" | "following" | "activity">("foryou");
   const [visibleCount,     setVisibleCount]     = useState(PAGE_SIZE);
   const [isInfiniteLoading, setIsInfiniteLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // ── My Activity tab state ─────────────────────────────────────────────────
+  type ActivityFeedItem = {
+    id: string; type: string; title: string; imageUrl: string;
+    createdAt: string; metadata?: Record<string, unknown> | null;
+  };
+  const [activityFeed,    setActivityFeed]    = useState<ActivityFeedItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const activityLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (feedTab !== "activity" || isDemo || activityLoadedRef.current) return;
+    activityLoadedRef.current = true;
+    setActivityLoading(true);
+    fetch("/api/activities")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { activities?: ActivityFeedItem[] } | null) => {
+        if (data?.activities) setActivityFeed(data.activities);
+      })
+      .catch(() => {})
+      .finally(() => setActivityLoading(false));
+  }, [feedTab, isDemo]);
+
+  // ── Following tab — real DB feed ─────────────────────────────────────────
+  type FollowingFeedItem = {
+    id: string; userId: string; userName: string; userAvatar: string; userHandle: string;
+    type: string; title: string; imageUrl: string; createdAt: string;
+    likes: number; isLiked: boolean; metadata?: Record<string, unknown> | null;
+  };
+  const [followingFeed,    setFollowingFeed]    = useState<FollowingFeedItem[]>([]);
+  const [followingLoading, setFollowingLoading] = useState(false);
+  const [followingCount,   setFollowingCount]   = useState<number | null>(null);
+  const followingLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (feedTab !== "following" || isDemo || followingLoadedRef.current) return;
+    followingLoadedRef.current = true;
+    setFollowingLoading(true);
+    fetch("/api/feed/following")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { events?: FollowingFeedItem[]; followingCount?: number } | null) => {
+        if (data) {
+          setFollowingFeed(data.events ?? []);
+          setFollowingCount(data.followingCount ?? 0);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setFollowingLoading(false));
+  }, [feedTab, isDemo]);
+
+  // ── FY tab — real eBay discover events (real users only) ─────────────────
+  type DiscoverEvent = {
+    id: string; type: string; title: string; imageUrl: string;
+    price: number; category: string; suggested: true;
+  };
+  const [fyDiscovered,     setFyDiscovered]     = useState<NetworkEvent[]>([]);
+  const fyLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (isDemo || fyLoadedRef.current) return;
+    fyLoadedRef.current = true;
+    const interests = preferences.favoriteCategories;
+    const cats = interests.length > 0 ? interests : ["Pokémon TCG", "Sports Cards", "Watches", "Sneakers"];
+    fetch(`/api/feed/discover?categories=${encodeURIComponent(cats.join(","))}&count=15`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { events?: DiscoverEvent[] } | null) => {
+        if (!data?.events?.length) return;
+        const events: NetworkEvent[] = data.events.map((e) => ({
+          id:         e.id,
+          user:       { name: "Market", handle: "market", avatar: "" },
+          type:       "new_listing" as EventType,
+          action:     "listed a grail for trade on eBay",
+          item:       { name: e.title, imageUrl: e.imageUrl, estimatedValue: e.price },
+          timestamp:  "Live",
+          suggested:  true,
+          categories: [e.category],
+        }));
+        setFyDiscovered(events);
+      })
+      .catch(() => {});
+  }, [isDemo, preferences.favoriteCategories]);
+
+  // ── DB-backed likes for following/activity tab posts ─────────────────────
+  const [dbLikedIds, setDbLikedIds] = useState<Set<string>>(new Set());
+  const [dbLikeCounts, setDbLikeCounts] = useState<Record<string, number>>({});
+
+  const handleDbLike = async (targetId: string, currentlyLiked: boolean) => {
+    const prev = dbLikedIds;
+    // Optimistic update
+    setDbLikedIds((s) => { const n = new Set(s); currentlyLiked ? n.delete(targetId) : n.add(targetId); return n; });
+    setDbLikeCounts((c) => ({ ...c, [targetId]: (c[targetId] ?? 0) + (currentlyLiked ? -1 : 1) }));
+    try {
+      const res = await fetch(
+        currentlyLiked ? `/api/likes?targetId=${targetId}` : "/api/likes",
+        currentlyLiked
+          ? { method: "DELETE" }
+          : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetId }) },
+      );
+      const data = await res.json() as { count: number };
+      setDbLikeCounts((c) => ({ ...c, [targetId]: data.count }));
+    } catch {
+      // Revert optimistic update
+      setDbLikedIds(prev);
+    }
+  };
 
   // Build the active feed pool, filtered by user interests where set
   const pool = useMemo(() => {
     const interests = preferences.favoriteCategories;
 
-    if (feedTab === "following") {
-      return isDemo ? FOLLOWING_POOL : [];
-    }
+    if (feedTab === "following" || feedTab === "activity") return [];
 
     // "For You" base: demo uses curated static pool; real users get all-suggested
     const base: NetworkEvent[] = isDemo
       ? FY_POOL
       : FY_POOL.map((e) => ({ ...e, suggested: true }));
 
-    // For real users with interests: augment base with generated events and filter
-    if (!isDemo && interests.length > 0) {
-      const generated = generateFeedEvents(interests, 25, 42) as NetworkEvent[];
-      const combined  = [...base, ...generated];
-      // Keep events that have no category tag (milestones etc) OR match user interests
-      return combined.filter((e) =>
-        !e.categories?.length || e.categories.some((c) => interests.includes(c))
-      );
+    // Real users: augment with real eBay discovered items + generated if interests set
+    if (!isDemo) {
+      const generated = interests.length > 0
+        ? (generateFeedEvents(interests, 25, 42) as NetworkEvent[])
+        : [];
+      const combined = [...base, ...fyDiscovered, ...generated];
+      return interests.length > 0
+        ? combined.filter((e) => !e.categories?.length || e.categories.some((c) => interests.includes(c)))
+        : combined;
     }
 
-    // For real users with no interests, keep full suggested base
-    if (!isDemo) return base;
-
-    // Demo with interests filter (optional — demo always shows full feed)
     return base;
-  }, [feedTab, isDemo, preferences.favoriteCategories]);
+  }, [feedTab, isDemo, preferences.favoriteCategories, fyDiscovered]);
 
   const visiblePosts = pool.slice(0, visibleCount);
   const hasMore      = visibleCount < pool.length;
@@ -1288,155 +1671,119 @@ export default function HomePage() {
               <Users className="w-3.5 h-3.5" />
               Following
             </button>
+            <button
+              onClick={() => setFeedTab("activity")}
+              className={`text-sm font-bold pb-3 pt-4 px-1 border-b-2 transition-colors flex items-center gap-1.5 ${
+                feedTab === "activity"
+                  ? "text-[#CAE6CE] border-[#CAE6CE]"
+                  : "text-[#787569] border-transparent hover:text-[#FCF9D5]"
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              My Activity
+            </button>
           </div>
 
           <div className="px-5 pt-4 space-y-4">
-            {pool.length === 0 && feedTab === "following" && (
-              <div className="flex flex-col items-center text-center py-12 animate-slide-up">
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-4">
-                  <Users className="w-6 h-6 text-cream/20" />
-                </div>
-                <p className="text-sm font-bold text-cream/60 mb-1">No one in your feed yet</p>
-                <p className="text-xs text-cream/30 mb-4 max-w-[220px]">Discover collectors to follow and see their latest grails here.</p>
-                <button
-                  onClick={() => router.push("/search")}
-                  className="px-5 py-2.5 rounded-2xl bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 active:scale-[0.97] transition-all"
-                >
-                  Discover Collectors
-                </button>
-              </div>
+            {/* ── Following tab content ──────────────────────────────────── */}
+            {feedTab === "following" && (
+              <>
+                {/* Demo: render static pool */}
+                {isDemo && FOLLOWING_POOL.slice(0, visibleCount).map((event, i) => (
+                  <FeedCard key={event.id} event={event} index={i}
+                    likedIds={likedIds} toggleLike={toggleLike}
+                    setActiveCommentPost={setActiveCommentPost}
+                    postedComments={postedComments}
+                    setFeedOfferTarget={setFeedOfferTarget}
+                  />
+                ))}
+
+                {/* Real users: loading */}
+                {!isDemo && followingLoading && (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="w-5 h-5 text-primary/40 animate-spin" />
+                  </div>
+                )}
+
+                {/* Real users: no follows yet */}
+                {!isDemo && !followingLoading && followingCount === 0 && (
+                  <div className="flex flex-col items-center text-center py-12 animate-slide-up">
+                    <div className="w-14 h-14 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-4">
+                      <Users className="w-6 h-6 text-cream/20" />
+                    </div>
+                    <p className="text-sm font-bold text-cream/60 mb-1">No one in your feed yet</p>
+                    <p className="text-xs text-cream/30 mb-4 max-w-[220px]">Follow collectors on their profile pages to see their latest grails here.</p>
+                    <button
+                      onClick={() => router.push("/search")}
+                      className="px-5 py-2.5 rounded-2xl bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 active:scale-[0.97] transition-all"
+                    >
+                      Discover Collectors
+                    </button>
+                  </div>
+                )}
+
+                {/* Real users: following feed */}
+                {!isDemo && !followingLoading && followingFeed.length > 0 && followingFeed.map((item, i) => (
+                  <FollowingFeedCard key={item.id} item={item} index={i}
+                    dbLikedIds={dbLikedIds} dbLikeCounts={dbLikeCounts}
+                    onLike={handleDbLike}
+                    setFeedOfferTarget={setFeedOfferTarget}
+                  />
+                ))}
+
+                {/* Real users: following but no posts yet */}
+                {!isDemo && !followingLoading && (followingCount ?? 0) > 0 && followingFeed.length === 0 && (
+                  <div className="flex flex-col items-center text-center py-12 animate-slide-up">
+                    <p className="text-sm font-bold text-cream/60 mb-1">Feed is quiet</p>
+                    <p className="text-xs text-cream/30 max-w-[220px]">The {followingCount} collector{followingCount !== 1 ? "s" : ""} you follow haven&apos;t posted yet.</p>
+                  </div>
+                )}
+              </>
             )}
-            {visiblePosts.map((event, i) => {
-              const meta          = EVENT_META[event.type];
-              const isLiked       = likedIds.has(event.id);
-              const likes         = (DUMMY_LIKES[event.id] ?? 0) + (isLiked ? 1 : 0);
-              const commentsCount = DUMMY_FEED_COMMENTS[event.id]?.length ?? 0;
-              const isMilestone   = event.type === "milestone";
-              const isRadar       = event.type === "updated_radar";
 
-              return (
-                <div
-                  key={event.id}
-                  className={`rounded-2xl border overflow-hidden animate-slide-up ${
-                    isMilestone
-                      ? "bg-gradient-to-br from-[#D4AF37]/5 to-[#2C2929] border-[#D4AF37]/20"
-                      : "bg-[#2C2929] border-white/[0.05]"
-                  }`}
-                  style={{ animationDelay: `${i * 0.06}s`, animationFillMode: "both" }}
-                >
-                  {/* Header */}
-                  <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-                    <Link href={`/u/${event.user.handle}`} className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 block hover:opacity-80 transition-opacity">
-                      <img src={event.user.avatar} alt={event.user.name} className="w-full h-full object-cover" />
-                    </Link>
-                    <div className="flex-1 min-w-0">
-                      {event.suggested && (
-                        <div className="flex items-center gap-1 text-[9px] text-[#AA95C5] font-bold uppercase tracking-wider mb-0.5">
-                          <Sparkles className="w-2.5 h-2.5" />
-                          Suggested for you
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Link href={`/u/${event.user.handle}`} className="text-sm font-bold text-cream hover:text-primary transition-colors">
-                          {event.user.name}
-                        </Link>
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${meta.cls}`}>
-                          {isRadar && <Bell className="w-2.5 h-2.5" />}
-                          {meta.label}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-cream/40 mt-0.5 leading-snug">{event.action}</p>
-                    </div>
-                    <span className="text-[10px] text-cream/25 font-medium flex-shrink-0">{event.timestamp}</span>
+            {/* ── My Activity tab content ───────────────────────────────── */}
+            {feedTab === "activity" && (
+              <>
+                {activityLoading && (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="w-5 h-5 text-primary/40 animate-spin" />
                   </div>
+                )}
 
-                  {/* Media — milestone achievement card */}
-                  {isMilestone && (
-                    <div className="mx-4 h-48 rounded-xl overflow-hidden relative flex flex-col items-center justify-center bg-[#1A1608]"
-                      style={{ background: "radial-gradient(ellipse at 50% 60%, rgba(212,175,55,0.18) 0%, rgba(26,22,8,0.95) 70%)" }}
-                    >
-                      <Trophy className="w-14 h-14 text-[#D4AF37] mb-3 drop-shadow-[0_0_20px_rgba(212,175,55,0.5)]" />
-                      <p className="text-[#FDE047] text-lg font-black tracking-tight drop-shadow-[0_0_12px_rgba(253,224,71,0.4)]">
-                        Hit $10K Value
-                      </p>
-                      <p className="text-[#D4AF37]/50 text-[10px] font-semibold mt-1 uppercase tracking-widest">Vault Milestone</p>
+                {!activityLoading && activityFeed.length === 0 && (
+                  <div className="flex flex-col items-center text-center py-12 animate-slide-up">
+                    <div className="w-14 h-14 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-4">
+                      <Trophy className="w-6 h-6 text-cream/20" />
                     </div>
-                  )}
-
-                  {/* Media — Radar horizontal scroll */}
-                  {isRadar && (
-                    <div className="overflow-x-auto flex gap-3 pb-2 no-scrollbar px-4 mt-1">
-                      {RADAR_IMAGES.map((src, idx) => (
-                        <div key={idx} className="flex-shrink-0 w-24 rounded-xl bg-white/[0.05] overflow-hidden border border-white/[0.06]">
-                          <div className="h-20 overflow-hidden">
-                            <img src={src} alt="Want" className="w-full h-full object-cover" loading="lazy" />
-                          </div>
-                          <p className="text-[9px] text-cream/50 font-medium px-2 py-1.5 truncate">Grail #{idx + 1}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Media — standard item image (click opens offer modal) */}
-                  {!isMilestone && !isRadar && event.item && (
-                    <>
-                      <button
-                        onClick={() => event.item && setFeedOfferTarget({
-                          user: { name: event.user.name, avatar: event.user.avatar },
-                          item: { id: event.id, name: event.item.name, category: "Other", imageUrl: event.item.imageUrl, estimatedValue: event.item.estimatedValue, upForTrade: true },
-                        })}
-                        className="mx-4 rounded-xl overflow-hidden bg-white/[0.04] h-48 w-[calc(100%-2rem)] block active:brightness-90 transition-all"
-                      >
-                        <img src={event.item.imageUrl} alt={event.item.name} className="w-full h-full object-cover" loading="lazy" />
-                      </button>
-                      <div className="px-4 pt-3">
-                        <p className="text-sm font-bold text-cream leading-tight truncate">{event.item.name}</p>
-                        {event.item.estimatedValue && (
-                          <p className="text-xs text-[#CAE6CE] font-bold mt-0.5">{formatValue(event.item.estimatedValue)}</p>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {/* Engagement bar */}
-                  <div className="flex items-center gap-1 px-3 py-3 mt-1">
+                    <p className="text-sm font-bold text-cream/60 mb-1">Your story starts here</p>
+                    <p className="text-xs text-cream/30 mb-4 max-w-[240px]">Add a grail to your vault and it will appear here for the community to see.</p>
                     <button
-                      onClick={(e) => toggleLike(event.id, e)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95"
+                      onClick={() => router.push("/inventory")}
+                      className="px-5 py-2.5 rounded-2xl bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 active:scale-[0.97] transition-all"
                     >
-                      <Heart className={`w-4 h-4 transition-all duration-150 ${isLiked ? "fill-red-500 text-red-500" : "text-cream/30"}`} />
-                      <span className="text-[11px] text-cream/40 font-medium">{likes}</span>
+                      Add Your First Grail
                     </button>
-                    <button
-                      onClick={() => setActiveCommentPost(event.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span className="text-[11px] text-cream/40 font-medium">
-                        {commentsCount + (postedComments[event.id]?.length ?? 0)}
-                      </span>
-                    </button>
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
-                      <Share className="w-4 h-4" />
-                    </button>
-                    {(event.item || isRadar) && (
-                      <button
-                        onClick={() => setFeedOfferTarget({
-                          user: { name: event.user.name, avatar: event.user.avatar },
-                          item: event.item
-                            ? { id: event.id, name: event.item.name, category: "Other", imageUrl: event.item.imageUrl, estimatedValue: event.item.estimatedValue, upForTrade: true }
-                            : undefined,
-                        })}
-                        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#CAE6CE]/10 border border-[#CAE6CE]/20 text-[#CAE6CE] text-[11px] font-semibold hover:bg-[#CAE6CE]/20 transition-colors active:scale-95"
-                      >
-                        <ArrowLeftRight className="w-3.5 h-3.5" />
-                        {isRadar ? "Propose Trade" : "Make Offer"}
-                      </button>
-                    )}
                   </div>
-                </div>
-              );
-            })}
+                )}
+
+                {!activityLoading && activityFeed.map((item, i) => (
+                  <ActivityCard key={item.id} item={item} index={i}
+                    firstName={firstName}
+                    dbLikedIds={dbLikedIds} dbLikeCounts={dbLikeCounts}
+                    onLike={handleDbLike}
+                  />
+                ))}
+              </>
+            )}
+            {/* ── For You tab content ──────────────────────────────────── */}
+            {feedTab === "foryou" && visiblePosts.map((event, i) => (
+              <FeedCard key={event.id} event={event} index={i}
+                likedIds={likedIds} toggleLike={toggleLike}
+                setActiveCommentPost={setActiveCommentPost}
+                postedComments={postedComments}
+                setFeedOfferTarget={setFeedOfferTarget}
+              />
+            ))}
           </div>
 
           {/* Sentinel + feed footer */}

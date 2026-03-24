@@ -64,6 +64,57 @@ model Notification {
   @@index([userId, isRead])
 }
 
+// ── Social Graph ──────────────────────────────────────────────────────────────
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Like {
+  id         String   @id @default(cuid())
+  userId     String
+  targetId   String
+  targetType String   @default("activity")  // "activity"
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, targetId])
+  @@index([targetId])
+}
+
+model Comment {
+  id           String   @id @default(cuid())
+  userId       String
+  targetId     String
+  targetType   String   @default("activity")
+  text         String
+  authorName   String
+  authorAvatar String   @default("")
+  createdAt    DateTime @default(now())
+
+  @@index([targetId])
+  @@index([userId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "grail_published" | "radar_added" | "achievement_unlocked"
+  title     String   @default("")
+  imageUrl  String   @default("")
+  itemId    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 // ── Messaging ─────────────────────────────────────────────────────────────────
 model Conversation {
   id           String                    @id @default(cuid())

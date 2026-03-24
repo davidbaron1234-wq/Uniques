@@ -71,6 +71,8 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
   const { addNotification } = useNotifications();
   const addNotificationRef = useRef(addNotification);
   useEffect(() => { addNotificationRef.current = addNotification; }, [addNotification]);
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
 
   // Re-hydrate on mount in case localStorage was updated elsewhere
   useEffect(() => {
@@ -130,6 +132,21 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
             href:    "/inventory",
           });
         }, 0);
+
+        // Record activity for real users (fire-and-forget, non-blocking)
+        const s = sessionRef.current;
+        if (!isDemoUser(s?.user?.email) && s?.user?.id) {
+          fetch("/api/activities", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({
+              type:     "achievement_unlocked",
+              title:    target.title,
+              imageUrl: catalystItem?.imageUrl ?? "",
+              metadata: { achievementId: id, description: target.description },
+            }),
+          }).catch(() => {});
+        }
 
         return updated;
       });

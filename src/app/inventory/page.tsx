@@ -933,18 +933,32 @@ export default function ProfilePage() {
 
     // Persist to DB for real users (fire-and-forget)
     if (!isDemo) {
+      const finalImageUrl = newItem.imagePreview ?? newItem.customImage ?? "";
       fetch("/api/items", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           title:          newItem.name,
           category:       newItem.category,
-          imageUrl:       newItem.imagePreview ?? newItem.customImage ?? "",
+          imageUrl:       finalImageUrl,
           estimatedValue: newItem.estimatedValue ?? null,
           upForTrade:     newItem.upForTrade ?? false,
         }),
       })
-        .then((r) => r.ok ? setDbItemCount((c) => (c ?? 0) + 1) : undefined)
+        .then((r) => {
+          if (!r.ok) return;
+          setDbItemCount((c) => (c ?? 0) + 1);
+          // Record activity so it appears in "My Activity" feed
+          fetch("/api/activities", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({
+              type:     "grail_published",
+              title:    newItem.name,
+              imageUrl: finalImageUrl,
+            }),
+          }).catch(() => {});
+        })
         .catch(() => {});
     }
   };

@@ -1,7 +1,9 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { isDemoUser } from "@/lib/demo";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import ProposeTradeModal from "@/components/ProposeTradeModal";
@@ -183,12 +185,27 @@ export default function PublicProfilePage() {
     [handle],
   );
 
+  const { data: session } = useSession();
+  const isDemo = isDemoUser(session?.user?.email);
+
   const { items: myItems } = useInventory();
 
   const [targetItem, setTargetItem]   = useState<CollectibleItem | null>(null);
   const [msgToast, setMsgToast]       = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const [following, setFollowing]     = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  // Load follow status from DB for real users
+  useEffect(() => {
+    if (isDemo || !session?.user?.id || !handle) return;
+    fetch(`/api/follow?userId=${encodeURIComponent(handle)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { isFollowing?: boolean } | null) => {
+        if (data?.isFollowing != null) setFollowing(data.isFollowing);
+      })
+      .catch(() => {});
+  }, [isDemo, session?.user?.id, handle]);
   const [profileTab, setProfileTab]   = useState<"collection" | "radar">("collection");
   const [showAddModal, setShowAddModal] = useState(false);
   const [tradePrefill, setTradePrefill] = useState<{ selectedIds: Set<string> } | undefined>(undefined);
@@ -349,7 +366,25 @@ export default function PublicProfilePage() {
               Message
             </button>
             <button
-              onClick={() => setFollowing((f) => !f)}
+              disabled={followLoading}
+              onClick={async () => {
+                if (isDemo) { setFollowing((f) => !f); return; }
+                setFollowLoading(true);
+                try {
+                  if (following) {
+                    await fetch(`/api/follow?userId=${encodeURIComponent(handle)}`, { method: "DELETE" });
+                    setFollowing(false);
+                  } else {
+                    await fetch("/api/follow", {
+                      method:  "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body:    JSON.stringify({ followingId: handle }),
+                    });
+                    setFollowing(true);
+                  }
+                } catch { /* ignore */ }
+                setFollowLoading(false);
+              }}
               className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors active:scale-[0.98] ${
                 following
                   ? "bg-[#CAE6CE]/20 border border-[#CAE6CE]/30 text-[#CAE6CE] hover:bg-[#CAE6CE]/30"
