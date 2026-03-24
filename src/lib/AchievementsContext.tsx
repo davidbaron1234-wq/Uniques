@@ -4,7 +4,7 @@ import {
   createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode,
 } from "react";
 import { useSession } from "next-auth/react";
-import { ACHIEVEMENTS, type Achievement } from "@/lib/achievements";
+import { ACHIEVEMENTS, DEMO_UNLOCKED_IDS, type Achievement } from "@/lib/achievements";
 import { useNotifications } from "@/lib/NotificationContext";
 import { isDemoUser } from "@/lib/demo";
 
@@ -77,21 +77,26 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
     setAchievements(loadAchievements());
   }, []);
 
-  // Once auth resolves: real users start with only "early-adopter" unlocked
-  // (only applied when there's no saved localStorage state — respects earned achievements)
+  // Once auth resolves: seed achievements if no localStorage state exists yet.
+  // Demo account → unlock the showcase set; real users → only "early-adopter".
+  // If localStorage already has data it is respected (earned achievements survive).
   useEffect(() => {
     if (authStatus === "loading") return;
-    if (isDemoUser(session?.user?.email)) return; // demo keeps all unlocked achievements
     if (typeof window === "undefined") return;
-    if (localStorage.getItem(STORAGE_KEY)) return; // user already has saved achievements
-    const cleanSlate = ACHIEVEMENTS.map((a) => ({
-      ...a,
-      status: (a.id === "early-adopter" ? "unlocked" : "locked") as Achievement["status"],
-      unlockedAt: a.id === "early-adopter" ? a.unlockedAt : undefined,
-      catalystItem: a.id === "early-adopter" ? a.catalystItem : undefined,
-    }));
-    setAchievements(cleanSlate);
-    saveAchievements(cleanSlate);
+    if (localStorage.getItem(STORAGE_KEY)) return; // respect previously-earned state
+
+    const demo = isDemoUser(session?.user?.email);
+    const seeded = ACHIEVEMENTS.map((a) => {
+      const shouldUnlock = demo ? DEMO_UNLOCKED_IDS.has(a.id) : a.id === "early-adopter";
+      return {
+        ...a,
+        status:      (shouldUnlock ? "unlocked" : "locked") as Achievement["status"],
+        unlockedAt:  shouldUnlock ? a.unlockedAt  : undefined,
+        catalystItem: shouldUnlock ? a.catalystItem : undefined,
+      };
+    });
+    setAchievements(seeded);
+    saveAchievements(seeded);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
 

@@ -18,14 +18,19 @@ export type Achievement = {
   catalystItem?: { name: string; imageUrl: string };
 };
 
+// IDs that are pre-unlocked for the demo/investor account
+export const DEMO_UNLOCKED_IDS = new Set([
+  "heavyweight", "dealmaker", "first-blood", "high-roller", "early-adopter",
+]);
+
 export const ACHIEVEMENTS: Achievement[] = [
-  // ── Unlocked ──────────────────────────────────────────────────────────
+  // ── Demo showcase achievements (unlocked for demo account, locked for real users) ──
   {
     id:          "heavyweight",
     title:       "The Heavyweight",
     description: "Surpass $50,000 in total collection value",
     icon:        Crown,
-    status:      "unlocked",
+    status:      "locked",
     color:       "text-[#D4AF37]",
     glow:        "rgba(212,175,55,0.35)",
     unlockedAt:  "Feb 12, 2026",
@@ -39,7 +44,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title:       "Dealmaker",
     description: "Complete 10 successful trades",
     icon:        Zap,
-    status:      "unlocked",
+    status:      "locked",
     color:       "text-primary",
     glow:        "rgba(202,230,206,0.3)",
     unlockedAt:  "Jan 3, 2026",
@@ -53,7 +58,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title:       "First Blood",
     description: "Complete your very first trade",
     icon:        Flame,
-    status:      "unlocked",
+    status:      "locked",
     color:       "text-orange-400",
     glow:        "rgba(251,146,60,0.35)",
     unlockedAt:  "Sep 14, 2024",
@@ -67,7 +72,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title:       "High Roller",
     description: "Propose a trade with a total value over $10,000",
     icon:        TrendingUp,
-    status:      "unlocked",
+    status:      "locked",
     color:       "text-emerald-400",
     glow:        "rgba(52,211,153,0.3)",
     unlockedAt:  "Dec 1, 2025",
@@ -76,6 +81,7 @@ export const ACHIEVEMENTS: Achievement[] = [
       imageUrl: "https://cdn.rebrickable.com/media/sets/75192-1.jpg",
     },
   },
+  // ── Always unlocked for every user ──────────────────────────────────────
   {
     id:          "early-adopter",
     title:       "Early Adopter",
