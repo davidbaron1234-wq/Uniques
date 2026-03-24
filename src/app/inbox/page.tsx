@@ -462,11 +462,9 @@ export default function InboxPage() {
   const router = useRouter();
   const { status } = useSession();
 
-  if (status === "unauthenticated") {
-    router.replace("/api/auth/signin");
-    return null;
-  }
-  if (status === "loading") return null;
+  useEffect(() => {
+    if (status === "unauthenticated") router.replace("/api/auth/signin");
+  }, [status, router]);
 
   // ── Tour step 6 of 7 — baton passed from /search via tourStep=messages ──
   useEffect(() => {
@@ -570,6 +568,8 @@ export default function InboxPage() {
       window.removeEventListener("focus", sync);
     };
   }, []);
+
+  if (status === "loading" || status === "unauthenticated") return null;
 
   // ── Conversation mutations ────────────────────────────────────────────────
 

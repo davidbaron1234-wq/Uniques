@@ -214,28 +214,14 @@ export default function PublicProfilePage() {
     router.push(`/inbox/${handle}`);
   };
 
-  // ── Not found ────────────────────────────────────────────────────────────
-  if (!socialUser) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-8">
-        <p className="text-5xl">🔍</p>
-        <p className="text-lg font-bold text-cream">Profile not found</p>
-        <p className="text-sm text-cream/40">
-          No collector with the handle <span className="text-cream/60 font-mono">@{handle}</span> exists.
-        </p>
-        <button
-          onClick={() => router.back()}
-          className="mt-2 px-6 py-2.5 rounded-2xl bg-background-light text-cream/60 text-sm font-semibold hover:bg-charcoal-light/50 transition-colors"
-        >
-          Go Back
-        </button>
-      </div>
-    );
-  }
-
-  const { user, inventory, grailIds } = socialUser;
+  // Null-safe destructure — hooks must run unconditionally on every render,
+  // so we extract with fallbacks here and guard with the early return below.
+  const user      = socialUser?.user;
+  const inventory = socialUser?.inventory ?? [];
+  const grailIds  = socialUser?.grailIds  ?? [];
 
   const grails = useMemo(() => {
+    if (!user) return [];
     // Free users: always auto Top 3 by value, ignore manual grailIds
     if (user.tier !== 'pro') {
       return [...inventory]
@@ -251,17 +237,12 @@ export default function PublicProfilePage() {
       .filter((i) => !set.has(i.id))
       .sort((a, b) => (b.estimatedValue ?? 0) - (a.estimatedValue ?? 0));
     return [...pinned, ...rest].slice(0, 3);
-  }, [inventory, grailIds, user.tier]);
+  }, [inventory, grailIds, user?.tier]);
 
   const totalValue = useMemo(
     () => inventory.reduce((s, i) => s + (i.estimatedValue ?? 0), 0),
     [inventory],
   );
-
-  const memberYear = new Date(user.memberSince).getFullYear().toString().slice(-2);
-  const memberDateFull = new Date(user.memberSince).toLocaleDateString("en-US", {
-    month: "short", year: "numeric",
-  });
 
   const [activeFilter, setActiveFilter] = useState("All");
 
@@ -282,6 +263,30 @@ export default function PublicProfilePage() {
     if (activeFilter === "In Trade") return inventory.filter((i) => i.upForTrade);
     return inventory.filter((i) => i.category === activeFilter);
   }, [inventory, activeFilter]);
+
+  // ── Not found — MUST come after all hooks ────────────────────────────────
+  if (!socialUser || !user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-8">
+        <p className="text-5xl">🔍</p>
+        <p className="text-lg font-bold text-cream">Profile not found</p>
+        <p className="text-sm text-cream/40">
+          No collector with the handle <span className="text-cream/60 font-mono">@{handle}</span> exists.
+        </p>
+        <button
+          onClick={() => router.back()}
+          className="mt-2 px-6 py-2.5 rounded-2xl bg-background-light text-cream/60 text-sm font-semibold hover:bg-charcoal-light/50 transition-colors"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  const memberYear = new Date(user.memberSince).getFullYear().toString().slice(-2);
+  const memberDateFull = new Date(user.memberSince).toLocaleDateString("en-US", {
+    month: "short", year: "numeric",
+  });
 
   // Gold / Silver / Bronze theme lookup (same as private profile)
   const grailThemes = [
