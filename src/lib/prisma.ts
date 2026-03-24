@@ -6,7 +6,24 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+  const rawUrl = process.env.DATABASE_URL!;
+
+  // Strip Prisma-specific query params that the pg driver doesn't understand.
+  // These are valid for Prisma CLI / migrations but cause "unrecognized
+  // configuration parameter" errors when forwarded directly to PostgreSQL.
+  const url = new URL(rawUrl);
+  url.searchParams.delete("connection_limit");
+  url.searchParams.delete("schema");
+  url.searchParams.delete("pgbouncer");
+  url.searchParams.delete("connect_timeout");
+
+  const adapter = new PrismaPg({
+    connectionString: url.toString(),
+    // Supabase requires SSL for all external connections. Setting
+    // rejectUnauthorized: false accepts Supabase's self-signed cert chain.
+    ssl: { rejectUnauthorized: false },
+  });
+
   return new PrismaClient({ adapter });
 }
 
