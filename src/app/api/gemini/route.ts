@@ -1,11 +1,16 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-const apiKey = process.env.GEMINI_API_KEY?.trim();
-if (!apiKey) throw new Error("GEMINI_API_KEY is not set in environment variables.");
-const genAI = new GoogleGenerativeAI(apiKey);
+// Prevent Next.js from statically pre-rendering this route at build time
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    return NextResponse.json({ error: "GEMINI_API_KEY is not configured." }, { status: 500 });
+  }
+  const genAI = new GoogleGenerativeAI(apiKey);
+
   try {
     const { image } = await req.json();
     if (!image) return NextResponse.json({ error: "No image" }, { status: 400 });
