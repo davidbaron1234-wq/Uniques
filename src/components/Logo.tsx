@@ -2,18 +2,19 @@
 
 export default function Logo({ className = "" }: { className?: string }) {
   return (
-    <div className={`flex items-center gap-2.5 ${className}`}>
-      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="10" y="4" width="18" height="24" rx="3" fill="#AA95C5" opacity="0.7" />
-        <rect x="8" y="8" width="18" height="24" rx="3" fill="#CAE6CE" />
-        <path d="M20 16L24 18L20 20" stroke="#221F1F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M16 20L12 18L16 16" stroke="#221F1F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <line x1="12" y1="13" x2="22" y2="13" stroke="#221F1F" strokeWidth="1" opacity="0.3" />
-        <line x1="12" y1="24" x2="22" y2="24" stroke="#221F1F" strokeWidth="1" opacity="0.3" />
+    <div className={`flex items-center gap-3 ${className}`}>
+      <svg width="40" height="36" viewBox="0 0 32 29" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+        <path d="M16.2933 0.373009H2.61109C1.37505 0.373009 0.373047 1.37502 0.373047 2.61106V20.3029C0.373047 21.5389 1.37505 22.5409 2.61109 22.5409H16.2933C17.5293 22.5409 18.5314 21.5389 18.5314 20.3029V2.61106C18.5314 1.37502 17.5293 0.373009 16.2933 0.373009Z" fill="#CAE6CE" stroke="#221F1F" strokeWidth="0.746016" strokeMiterlimit="10"/>
+        <path d="M16.0196 3.43778H2.8551V18.118H16.0196V3.43778Z" fill="#FCF9D5"/>
+        <path d="M15.443 17.7794H3.43387C2.77073 17.7794 2.23315 18.317 2.23315 18.9801V18.9821C2.23315 19.6452 2.77073 20.1828 3.43387 20.1828H15.443C16.1061 20.1828 16.6437 19.6452 16.6437 18.9821V18.9801C16.6437 18.317 16.1061 17.7794 15.443 17.7794Z" fill="#AA95C5"/>
+        <path d="M29.2689 7.3705L16.4044 2.71111C15.2423 2.29019 13.9589 2.89108 13.538 4.05324L7.51319 20.6876C7.09226 21.8497 7.69315 23.1331 8.85531 23.554L21.7197 28.2134C22.8819 28.6343 24.1652 28.0334 24.5861 26.8713L30.611 10.2369C31.0319 9.07477 30.431 7.79143 29.2689 7.3705Z" fill="#CAE6CE" stroke="#221F1F" strokeWidth="0.746016" strokeMiterlimit="10"/>
+        <path d="M27.9669 10.159L15.5892 5.67591L10.59 19.4786L22.9677 23.9617L27.9669 10.159Z" fill="#FCF9D5"/>
+        <path d="M22.54 23.4476L11.2487 19.358C10.6252 19.1322 9.93668 19.4546 9.71086 20.0781L9.71019 20.0799C9.48436 20.7034 9.80674 21.3919 10.4302 21.6178L21.7215 25.7074C22.345 25.9332 23.0335 25.6108 23.2594 24.9873L23.26 24.9855C23.4859 24.362 23.1635 23.6735 22.54 23.4476Z" fill="#AA95C5"/>
+        <path d="M12.4038 16.3917C14.6182 16.3917 16.4133 14.5966 16.4133 12.3821C16.4133 10.1677 14.6182 8.37254 12.4038 8.37254C10.1893 8.37254 8.39417 10.1677 8.39417 12.3821C8.39417 14.5966 10.1893 16.3917 12.4038 16.3917Z" fill="#CAE6CE" stroke="#221F1F" strokeWidth="0.807036" strokeMiterlimit="10"/>
+        <path d="M13.705 12.697L12.8074 11.142H12.2346L13.705 13.6891L15.1754 11.142H14.6026L13.705 12.697Z" fill="#221F1F" stroke="#221F1F" strokeWidth="0.147629" strokeMiterlimit="10"/>
+        <path d="M11.0968 12.0672L10.2032 13.6242L9.63037 13.6261L11.0948 11.0751L12.5711 13.6183H11.9983L11.0968 12.0672Z" fill="#221F1F" stroke="#221F1F" strokeWidth="0.147629" strokeMiterlimit="10"/>
       </svg>
-      <span className="text-xl font-extrabold tracking-tight text-cream">
-        Uniques
-      </span>
+      <span className="text-xl font-extrabold tracking-tight text-cream">Uniques</span>
     </div>
   );
 }
