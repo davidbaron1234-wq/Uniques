@@ -33,10 +33,10 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
     console.error("[register] error:", message);
     return NextResponse.json(
-      { error: "Internal server error.", detail: process.env.NODE_ENV !== "production" ? message : undefined },
+      { error: "Internal server error.", detail: message },
       { status: 500 }
     );
   }
