@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { ArrowLeft, ArrowLeftRight, Check, CheckCheck, RefreshCw, Send, Smile, X } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useInventory } from "@/lib/InventoryContext";
 import { useNotifications } from "@/lib/NotificationContext";
+import { isDemoUser } from "@/lib/demo";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import ProposeTradeModal from "@/components/ProposeTradeModal";
@@ -287,12 +289,18 @@ export default function ChatPage() {
   const params   = useParams();
   const router   = useRouter();
   const username = (params.username as string)?.toLowerCase();
+  const { data: session } = useSession();
   const { showToast } = useInventory();
   const { addNotification } = useNotifications();
 
-  const conv = CHAT_DATA[username];
+  // Demo mode: username matches a seed key; real mode: username is a conversationId
+  const demoConv = CHAT_DATA[username];
+  const isDemo   = isDemoUser(session?.user?.email);
+  const isRealConversation = !demoConv && !!username;
+  // conversationId is the URL param when in real mode
+  const conversationId = isRealConversation ? username : null;
 
-  const [messages,        setMessages]        = useState<Msg[]>(conv?.messages ?? []);
+  const [messages,        setMessages]        = useState<Msg[]>(demoConv?.messages ?? []);
   const [draft,           setDraft]           = useState("");
   const [showEmoji,       setShowEmoji]       = useState(false);
   const [emojiSearch,     setEmojiSearch]     = useState("");
@@ -302,6 +310,8 @@ export default function ChatPage() {
   const [tradeStatuses,   setTradeStatuses]   = useState<Record<string, TradeStatus>>({});
   // The trade-offer message the user wants to counter; drives the counter ProposeTradeModal
   const [counterMsg,      setCounterMsg]      = useState<Msg | null>(null);
+  // For real conversations: the other participant's metadata
+  const [convMeta,        setConvMeta]        = useState<{ name: string; avatar: string } | null>(null);
 
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -314,6 +324,39 @@ export default function ChatPage() {
     if (!username) return;
     try { localStorage.setItem(`inbox_read_${username}`, "1"); } catch { /* noop */ }
   }, [username]);
+
+  // Load real messages + conversation metadata from DB for non-demo conversations
+  useEffect(() => {
+    if (!isRealConversation || !conversationId) return;
+    // Fetch messages
+    fetch(`/api/messages?conversationId=${conversationId}`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Array<{
+        id: string; senderId: string; senderName: string;
+        content: string; type: string; metadata: unknown; createdAt: string;
+      }>) => {
+        setMessages(
+          data.map((m) => ({
+            id:   m.id,
+            from: m.senderId === session?.user?.id ? "me" : "them" as "me" | "them",
+            time: new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            text: m.type === "text" ? m.content : undefined,
+            tradeOffer: m.type === "trade-offer" ? (m.metadata as EmbeddedTradeOffer) : undefined,
+            system: m.type === "system",
+          }))
+        );
+      })
+      .catch(() => { /* offline — empty chat */ });
+    // Fetch conversation metadata for the header
+    fetch(`/api/conversations`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Array<{ id: string; name: string; avatarUrl: string }>) => {
+        const found = data.find((c) => c.id === conversationId);
+        if (found) setConvMeta({ name: found.name, avatar: found.avatarUrl });
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRealConversation, conversationId, session?.user?.id]);
 
   // ── Chat catcher: pick up trade payload injected via sessionStorage ──────────
   useEffect(() => {
@@ -410,19 +453,29 @@ export default function ChatPage() {
   const handleSend = () => {
     const text = draft.trim();
     if (!text) return;
+    const optimisticId = Date.now().toString();
     setMessages((prev) => [
       ...prev,
-      { id: Date.now().toString(), text, from: "me", time: "Just now" },
+      { id: optimisticId, text, from: "me", time: "Just now" },
     ]);
     setDraft("");
     setShowEmoji(false);
     setEmojiSearch("");
     inputRef.current?.focus();
 
-    // Simulate the other user typing a reply for 3 seconds
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    setIsTyping(true);
-    typingTimerRef.current = setTimeout(() => setIsTyping(false), 3000);
+    // Persist to DB for real (non-demo) conversations
+    if (isRealConversation && conversationId) {
+      fetch("/api/messages", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ conversationId, content: text, type: "text" }),
+      }).catch((err) => console.error("[send message]", err));
+    } else {
+      // Demo: simulate the other user typing a reply
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      setIsTyping(true);
+      typingTimerRef.current = setTimeout(() => setIsTyping(false), 3000);
+    }
   };
 
   const appendEmoji = (emoji: string) => {
@@ -473,8 +526,8 @@ export default function ChatPage() {
     setIsTradeModalOpen(false);
   };
 
-  // ── Not found ──────────────────────────────────────────────────────────────
-  if (!conv) {
+  // ── Not found — only applies to demo key lookups, real conv IDs are valid ──────
+  if (!demoConv && !isRealConversation) {
     return (
       <div className="flex flex-col h-screen bg-background pb-16">
         <Header />
@@ -495,6 +548,14 @@ export default function ChatPage() {
       </div>
     );
   }
+
+  // Unified conversation metadata (works for both demo and real conversations)
+  const conv = demoConv ?? {
+    name:   convMeta?.name   ?? "...",
+    handle: "",
+    avatar: convMeta?.avatar ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}&backgroundColor=b6e3f4`,
+    online: false,
+  };
 
   return (
     <div className="flex flex-col h-screen bg-background pb-16">

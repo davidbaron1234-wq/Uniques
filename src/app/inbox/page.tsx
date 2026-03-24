@@ -462,6 +462,7 @@ function ConversationRow({
 export default function InboxPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const isDemo = isDemoUser(session?.user?.email);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/api/auth/signin");
@@ -523,33 +524,62 @@ export default function InboxPage() {
   const [ctxMenu,     setCtxMenu]     = useState<CtxMenu | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: "block" | "delete"; id: string } | null>(null);
 
-  // Convs start empty; demo users get SEED after auth resolves
+  // Convs start empty; seeded after auth resolves
   const [convs, setConvs] = useState<Conv[]>([]);
   const convSeeded = useRef(false);
 
   useEffect(() => {
     if (status === "loading" || convSeeded.current) return;
     convSeeded.current = true;
-    if (!isDemoUser(session?.user?.email)) return; // real users keep empty inbox
-    if (typeof window === "undefined") return;
-    setConvs(
-      SEED
-        .filter((c) =>
-          !localStorage.getItem(`inbox_del_${c.id}`) &&
-          !localStorage.getItem(`inbox_block_${c.id}`)
-        )
-        .map((c) => {
-          const hasDot = !!localStorage.getItem(`inbox_dot_${c.id}`);
-          const isRead = !!localStorage.getItem(`inbox_read_${c.id}`);
-          return {
-            ...c,
-            pinned: !!localStorage.getItem(`inbox_pin_${c.id}`),
-            hasDot,
-            unread: hasDot || isRead ? 0 : c.unread,
-          };
+
+    if (isDemo) {
+      // Demo account: restore seed conversations from localStorage state
+      if (typeof window === "undefined") return;
+      setConvs(
+        SEED
+          .filter((c) =>
+            !localStorage.getItem(`inbox_del_${c.id}`) &&
+            !localStorage.getItem(`inbox_block_${c.id}`)
+          )
+          .map((c) => {
+            const hasDot = !!localStorage.getItem(`inbox_dot_${c.id}`);
+            const isRead = !!localStorage.getItem(`inbox_read_${c.id}`);
+            return {
+              ...c,
+              pinned: !!localStorage.getItem(`inbox_pin_${c.id}`),
+              hasDot,
+              unread: hasDot || isRead ? 0 : c.unread,
+            };
+          })
+      );
+    } else {
+      // Real users: load conversations from DB
+      fetch("/api/conversations")
+        .then((r) => r.ok ? r.json() : [])
+        .then((data: Array<{
+          id: string; name: string; avatarUrl: string;
+          lastMessage: string; lastMessageAt: string;
+        }>) => {
+          setConvs(
+            data.map((c) => ({
+              id:          c.id,
+              name:        c.name,
+              handle:      `@${c.name.toLowerCase()}`,
+              avatar:      c.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.name}&backgroundColor=b6e3f4`,
+              lastMessage: c.lastMessage,
+              time:        c.lastMessage ? new Date(c.lastMessageAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
+              unread:      0,
+              hasDot:      false,
+              online:      false,
+              pinned:      false,
+              sortTs:      new Date(c.lastMessageAt).getTime(),
+              messages:    [c.lastMessage].filter(Boolean),
+            }))
+          );
         })
-    );
-  }, [status, session?.user?.email]);
+        .catch(() => { /* network offline — stays empty */ });
+    }
+  }, [status, isDemo]);
 
   // Re-sync read state when page regains focus (chat room sets inbox_read_*)
   // Debounced to prevent race conditions on rapid tab switches

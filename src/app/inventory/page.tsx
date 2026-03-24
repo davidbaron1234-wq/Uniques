@@ -772,19 +772,39 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    if (authStatus === "loading") return; // wait for session before computing fallback
+    if (authStatus === "loading") return;
     const sessionFallback: UserProfile = {
       name: session?.user?.name ?? "Collector",
       bio: "",
       avatar: session?.user?.image ?? "",
       joinDate: new Date().toISOString().split("T")[0],
     };
+
+    // Immediately show cached localStorage data to avoid flash
     setProfile(loadProfile(sessionFallback));
     setPinnedGrailIds(loadPinnedGrails());
-    // Demo account gets the full mock radar; real users start with an empty radar
-    if (isDemoUser(session?.user?.email)) {
-      setRadarItems(RADAR_SEED);
+    if (isDemoUser(session?.user?.email)) setRadarItems(RADAR_SEED);
+
+    // Then hydrate from the real DB (non-demo users)
+    if (!isDemoUser(session?.user?.email)) {
+      fetch("/api/profile")
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (!data) return;
+          setProfile((prev) => ({
+            ...prev,
+            name:                data.name                || prev.name,
+            bio:                 data.bio                 ?? prev.bio,
+            avatar:              data.avatar              || prev.avatar,
+            paymentMethods:      data.paymentMethods      ?? prev.paymentMethods,
+            shippingPreferences: data.shippingPreferences ?? prev.shippingPreferences,
+          }));
+          // Keep localStorage in sync so instant hydration on next visit
+          try { localStorage.setItem(STORAGE_PROFILE, JSON.stringify(data)); } catch { /* quota */ }
+        })
+        .catch(() => { /* network offline — cached data stays */ });
     }
+
     setHydrated(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
@@ -1836,7 +1856,29 @@ export default function ProfilePage() {
         />
       )}
       <AddItemModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAdd={handleAddItem} />
-      <EditProfileModal isOpen={showEditProfile} onClose={() => setShowEditProfile(false)} profile={profile} onSave={setProfile} isPro={!isFree} />
+      <EditProfileModal
+        isOpen={showEditProfile}
+        onClose={() => setShowEditProfile(false)}
+        profile={profile}
+        onSave={(updated) => {
+          setProfile(updated);
+          // Persist to DB (non-demo users); localStorage is updated by the existing effect
+          if (!isDemoUser(session?.user?.email)) {
+            fetch("/api/profile", {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({
+                name:                updated.name,
+                bio:                 updated.bio,
+                avatar:              updated.avatar,
+                paymentMethods:      updated.paymentMethods      ?? [],
+                shippingPreferences: updated.shippingPreferences ?? [],
+              }),
+            }).catch((err) => console.error("[profile save]", err));
+          }
+        }}
+        isPro={!isFree}
+      />
       <GrailsPickerModal isOpen={showGrailsPicker} onClose={() => setShowGrailsPicker(false)} items={items} pinnedIds={pinnedGrailIds} onSave={setPinnedGrailIds} userTier={isFree ? "free" : "pro"} />
       <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={isDemo ? 4.8 : 0} />
 

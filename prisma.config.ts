@@ -9,6 +9,10 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Use DIRECT_DATABASE_URL for CLI (migrations, db push) if set,
+    // otherwise fall back to DATABASE_URL (direct connection URL).
+    // Rationale: in production the runtime DATABASE_URL may be the pooler
+    // (port 6543 / pgbouncer mode) which doesn't support DDL/schema commands.
+    url: process.env["DIRECT_DATABASE_URL"] ?? process.env["DATABASE_URL"],
   },
 });

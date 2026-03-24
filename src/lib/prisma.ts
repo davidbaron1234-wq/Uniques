@@ -6,11 +6,13 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  const rawUrl = process.env.DATABASE_URL!;
+  // On Vercel, Supabase's IPv4 direct connection (port 5432 on db.*) is blocked.
+  // Set POOLER_DATABASE_URL in Vercel env vars to the Supabase Transaction Pooler URL:
+  //   postgresql://postgres.PROJECT-REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
+  // Found at: Supabase Dashboard → Project Settings → Database → Connection Pooling
+  const rawUrl = process.env.POOLER_DATABASE_URL ?? process.env.DATABASE_URL!;
 
-  // Strip Prisma-specific query params that the pg driver doesn't understand.
-  // These are valid for Prisma CLI / migrations but cause "unrecognized
-  // configuration parameter" errors when forwarded directly to PostgreSQL.
+  // Strip Prisma CLI params that the pg driver doesn't understand
   const url = new URL(rawUrl);
   url.searchParams.delete("connection_limit");
   url.searchParams.delete("schema");
@@ -19,8 +21,6 @@ function createPrismaClient() {
 
   const adapter = new PrismaPg({
     connectionString: url.toString(),
-    // Supabase requires SSL for all external connections. Setting
-    // rejectUnauthorized: false accepts Supabase's self-signed cert chain.
     ssl: { rejectUnauthorized: false },
   });
 
