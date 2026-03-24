@@ -17,7 +17,45 @@ export async function GET(req: NextRequest) {
     take: 50,
   });
 
-  return NextResponse.json({ activities });
+  // Hydrate poster's profile (real name + avatar from DB)
+  const profile = await prisma.profile.findUnique({
+    where:  { userId },
+    select: { name: true, avatar: true },
+  });
+
+  // Like counts + whether the requesting user liked each post
+  const ids = activities.map((a) => a.id);
+  const [likeCounts, userLikes] = await Promise.all([
+    prisma.like.groupBy({
+      by:    ["targetId"],
+      where: { targetId: { in: ids } },
+      _count: { id: true },
+    }),
+    prisma.like.findMany({
+      where:  { userId: session.user.id, targetId: { in: ids } },
+      select: { targetId: true },
+    }),
+  ]);
+
+  const likeMap  = Object.fromEntries(likeCounts.map((lc) => [lc.targetId, lc._count.id]));
+  const likedSet = new Set(userLikes.map((l) => l.targetId));
+
+  const enriched = activities.map((a) => ({
+    id:          a.id,
+    type:        a.type,
+    title:       a.title,
+    imageUrl:    a.imageUrl,
+    createdAt:   a.createdAt,
+    metadata:    a.metadata,
+    // Poster profile
+    userName:    profile?.name   || session.user.name || "Collector",
+    userAvatar:  profile?.avatar || "",
+    // Social counts (always fresh from DB — no stale state on refresh)
+    likes:       likeMap[a.id] ?? 0,
+    isLiked:     likedSet.has(a.id),
+  }));
+
+  return NextResponse.json({ activities: enriched });
 }
 
 export async function POST(req: NextRequest) {

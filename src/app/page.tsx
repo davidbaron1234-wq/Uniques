@@ -760,17 +760,16 @@ function FollowingFeedCard({
 
 /** Card for the "My Activity" tab — current user&apos;s own DB activity entries. */
 function ActivityCard({
-  item, index, firstName, dbLikedIds, dbLikeCounts, onLike,
+  item, index, dbLikedIds, dbLikeCounts, onLike,
 }: {
-  item: { id: string; type: string; title: string; imageUrl: string; createdAt: string; metadata?: Record<string, unknown> | null };
+  item: { id: string; type: string; title: string; imageUrl: string; createdAt: string; metadata?: Record<string, unknown> | null; userName: string; userAvatar: string; likes: number; isLiked: boolean };
   index: number;
-  firstName: string;
   dbLikedIds: Set<string>;
   dbLikeCounts: Record<string, number>;
   onLike: (id: string, liked: boolean) => void;
 }) {
   const isLiked = dbLikedIds.has(item.id);
-  const likes   = dbLikeCounts[item.id] ?? 0;
+  const likes   = dbLikeCounts[item.id] ?? item.likes ?? 0;
 
   const typeLabel = item.type === "grail_published"      ? "New Grail"
     : item.type === "achievement_unlocked" ? "Achievement"
@@ -799,12 +798,15 @@ function ActivityCard({
       style={{ animationDelay: `${index * 0.06}s`, animationFillMode: "both" }}
     >
       <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <span className="text-primary text-xs font-black">{firstName[0]?.toUpperCase() ?? "U"}</span>
+        <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-primary/10">
+          {item.userAvatar
+            ? <img src={item.userAvatar} alt={item.userName} className="w-full h-full object-cover" />
+            : <span className="w-full h-full flex items-center justify-center text-primary text-xs font-black">{item.userName[0]?.toUpperCase() ?? "U"}</span>
+          }
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-bold text-cream">{firstName}</span>
+            <span className="text-sm font-bold text-cream">{item.userName}</span>
             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${typeCls}`}>{typeLabel}</span>
           </div>
           <p className="text-[11px] text-cream/40 mt-0.5 leading-snug">{action}</p>
@@ -823,11 +825,15 @@ function ActivityCard({
         </>
       )}
 
-      {/* Zero mock engagement: likes always start from 0 */}
+      {/* Zero mock engagement: likes seeded from DB */}
       <div className="flex items-center gap-1 px-3 py-3 mt-1">
         <button onClick={() => onLike(item.id, isLiked)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95">
           <Heart className={`w-4 h-4 transition-all duration-150 ${isLiked ? "fill-red-500 text-red-500" : "text-cream/30"}`} />
           <span className="text-[11px] text-cream/40 font-medium">{likes}</span>
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
+          <MessageCircle className="w-4 h-4" />
+          <span className="text-[11px] text-cream/40 font-medium">0</span>
         </button>
         <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
           <Share className="w-4 h-4" />
@@ -924,7 +930,6 @@ export default function HomePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const isDemo = isDemoUser(session?.user?.email);
-  const firstName = session?.user?.name?.split(" ")[0] ?? "Collector";
   const { preferences } = usePreferences();
 
   useEffect(() => {
@@ -1201,6 +1206,7 @@ export default function HomePage() {
   type ActivityFeedItem = {
     id: string; type: string; title: string; imageUrl: string;
     createdAt: string; metadata?: Record<string, unknown> | null;
+    userName: string; userAvatar: string; likes: number; isLiked: boolean;
   };
   const [activityFeed,    setActivityFeed]    = useState<ActivityFeedItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
@@ -1213,7 +1219,15 @@ export default function HomePage() {
     fetch("/api/activities")
       .then((r) => r.ok ? r.json() : null)
       .then((data: { activities?: ActivityFeedItem[] } | null) => {
-        if (data?.activities) setActivityFeed(data.activities);
+        if (data?.activities) {
+          setActivityFeed(data.activities);
+          // Seed likes state from DB — ensures persistence across refresh
+          const likedSet = new Set<string>(data.activities.filter((a) => a.isLiked).map((a) => a.id));
+          const countMap: Record<string, number> = {};
+          data.activities.forEach((a) => { countMap[a.id] = a.likes; });
+          setDbLikedIds(likedSet);
+          setDbLikeCounts(countMap);
+        }
       })
       .catch(() => {})
       .finally(() => setActivityLoading(false));
@@ -1240,6 +1254,14 @@ export default function HomePage() {
         if (data) {
           setFollowingFeed(data.events ?? []);
           setFollowingCount(data.followingCount ?? 0);
+          // Seed likes state from DB — ensures persistence across refresh
+          if (data.events?.length) {
+            const likedSet = new Set<string>(data.events.filter((e) => e.isLiked).map((e) => e.id));
+            const countMap: Record<string, number> = {};
+            data.events.forEach((e) => { countMap[e.id] = e.likes; });
+            setDbLikedIds(likedSet);
+            setDbLikeCounts(countMap);
+          }
         }
       })
       .catch(() => {})
@@ -1251,18 +1273,22 @@ export default function HomePage() {
     id: string; type: string; title: string; imageUrl: string;
     price: number; category: string; suggested: true;
   };
-  const [fyDiscovered,     setFyDiscovered]     = useState<NetworkEvent[]>([]);
-  const fyLoadedRef = useRef(false);
+  const [fyDiscovered, setFyDiscovered] = useState<NetworkEvent[]>([]);
+  const [fyLoading,    setFyLoading]    = useState(false);
+  const prevCatsRef = useRef<string>("");
 
   useEffect(() => {
-    if (isDemo || fyLoadedRef.current) return;
-    fyLoadedRef.current = true;
+    if (isDemo) return;
     const interests = preferences.favoriteCategories;
     const cats = interests.length > 0 ? interests : ["Pokémon TCG", "Sports Cards", "Watches", "Sneakers"];
-    fetch(`/api/feed/discover?categories=${encodeURIComponent(cats.join(","))}&count=15`)
+    const catsKey = cats.join(",");
+    if (catsKey === prevCatsRef.current) return; // same categories — skip
+    prevCatsRef.current = catsKey;
+    setFyLoading(true);
+    fetch(`/api/feed/discover?categories=${encodeURIComponent(catsKey)}&count=15`)
       .then((r) => r.ok ? r.json() : null)
       .then((data: { events?: DiscoverEvent[] } | null) => {
-        if (!data?.events?.length) return;
+        if (!data?.events?.length) { setFyDiscovered([]); return; }
         const events: NetworkEvent[] = data.events.map((e) => ({
           id:         e.id,
           user:       { name: "Market", handle: "market", avatar: "" },
@@ -1275,7 +1301,8 @@ export default function HomePage() {
         }));
         setFyDiscovered(events);
       })
-      .catch(() => {});
+      .catch(() => { setFyDiscovered([]); })
+      .finally(() => setFyLoading(false));
   }, [isDemo, preferences.favoriteCategories]);
 
   // ── DB-backed likes for following/activity tab posts ─────────────────────
@@ -1308,23 +1335,18 @@ export default function HomePage() {
 
     if (feedTab === "following" || feedTab === "activity") return [];
 
-    // "For You" base: demo uses curated static pool; real users get all-suggested
-    const base: NetworkEvent[] = isDemo
-      ? FY_POOL
-      : FY_POOL.map((e) => ({ ...e, suggested: true }));
+    // Demo: use curated static pool (Unsplash images are fine for mock data)
+    if (isDemo) return FY_POOL;
 
-    // Real users: augment with real eBay discovered items + generated if interests set
-    if (!isDemo) {
-      const generated = interests.length > 0
-        ? (generateFeedEvents(interests, 25, 42) as NetworkEvent[])
-        : [];
-      const combined = [...base, ...fyDiscovered, ...generated];
-      return interests.length > 0
-        ? combined.filter((e) => !e.categories?.length || e.categories.some((c) => interests.includes(c)))
-        : combined;
-    }
-
-    return base;
+    // Real users: ONLY real eBay discovered items + interest-based generated events.
+    // Never include Unsplash-sourced FY_POOL items for real users.
+    const generated = interests.length > 0
+      ? (generateFeedEvents(interests, 25, 42) as NetworkEvent[])
+      : [];
+    const combined = [...fyDiscovered, ...generated];
+    return interests.length > 0
+      ? combined.filter((e) => !e.categories?.length || e.categories.some((c) => interests.includes(c)))
+      : combined;
   }, [feedTab, isDemo, preferences.favoriteCategories, fyDiscovered]);
 
   const visiblePosts = pool.slice(0, visibleCount);
@@ -1768,7 +1790,6 @@ export default function HomePage() {
 
                 {!activityLoading && activityFeed.map((item, i) => (
                   <ActivityCard key={item.id} item={item} index={i}
-                    firstName={firstName}
                     dbLikedIds={dbLikedIds} dbLikeCounts={dbLikeCounts}
                     onLike={handleDbLike}
                   />
@@ -1786,6 +1807,23 @@ export default function HomePage() {
             ))}
           </div>
 
+          {/* FY tab loading skeleton */}
+          {feedTab === "foryou" && !isDemo && fyLoading && fyDiscovered.length === 0 && (
+            <div className="px-5 space-y-4 pt-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="rounded-2xl border bg-[#2C2929] border-white/[0.05] overflow-hidden h-64 animate-pulse" />
+              ))}
+            </div>
+          )}
+
+          {/* FY tab empty state when eBay returned nothing */}
+          {feedTab === "foryou" && !isDemo && !fyLoading && fyDiscovered.length === 0 && pool.length === 0 && (
+            <div className="px-5 py-12 flex flex-col items-center text-center animate-slide-up">
+              <p className="text-sm font-bold text-cream/60 mb-1">Market data loading…</p>
+              <p className="text-xs text-cream/30 max-w-[220px]">Real listings will appear here shortly. Pull down to refresh.</p>
+            </div>
+          )}
+
           {/* Sentinel + feed footer */}
           <div ref={sentinelRef} className="px-5">
             {hasMore ? (
@@ -1795,12 +1833,12 @@ export default function HomePage() {
                   {isInfiniteLoading ? "Loading more grails…" : "Scroll for more"}
                 </span>
               </div>
-            ) : (
+            ) : feedTab === "foryou" && pool.length > 0 ? (
               <div className="py-10 text-center">
                 <p className="text-[11px] text-[#787569]">You&apos;re all caught up.</p>
                 <p className="text-[10px] text-[#787569]/50 mt-1">Check back later for new drops.</p>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 

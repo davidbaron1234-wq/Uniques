@@ -933,7 +933,7 @@ export default function ProfilePage() {
 
     // Persist to DB for real users (fire-and-forget)
     if (!isDemo) {
-      const finalImageUrl = newItem.imagePreview ?? newItem.customImage ?? "";
+      const finalImageUrl = newItem.customImage ?? newItem.imagePreview ?? "";
       fetch("/api/items", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -1208,12 +1208,6 @@ export default function ProfilePage() {
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#2C2929] border border-white/[0.08] text-[#FCF9D5] text-[10px] font-semibold shadow-sm whitespace-nowrap">
                       <Calendar className="w-3 h-3 text-[#AA95C5]" />
                       Joined &apos;{memberDate.slice(-2)}
-                    </div>
-                  )}
-                  {!isDemo && dbItemCount !== null && dbItemCount > 0 && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#2C2929] border border-white/[0.08] text-[#FCF9D5] text-[10px] font-semibold shadow-sm whitespace-nowrap">
-                      <Cloud className="w-3 h-3 text-[#CAE6CE]" />
-                      {dbItemCount} Synced
                     </div>
                   )}
                 </div>
