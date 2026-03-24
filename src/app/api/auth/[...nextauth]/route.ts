@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import type { RequestInternal } from "next-auth";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
 
 const handler = NextAuth({
   providers: [
@@ -10,21 +11,23 @@ const handler = NextAuth({
         email:    { label: "Email",    type: "email"    },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials, req: Pick<RequestInternal, "body" | "query" | "headers" | "method">) {
-        // Dev mock: always return a valid user so protected routes are testable on refresh
-        const email = credentials?.email || "admin@uniques.com";
-        const name  = "David (Dev)";
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
 
-        // Read mock_pro_status cookie to determine tier
-        const cookieHeader = req?.headers?.cookie ?? "";
-        const isPro = cookieHeader.split(";").some((c: string) => c.trim() === "mock_pro_status=true");
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        });
+        if (!user) return null;
+
+        const valid = await bcrypt.compare(credentials.password, user.hashedPassword);
+        if (!valid) return null;
 
         return {
-          id:    "dev-1",
-          name,
-          email,
-          image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email)}&backgroundColor=b6e3f4`,
-          tier:  isPro ? ("pro" as const) : ("free" as const),
+          id:    user.id,
+          name:  user.name,
+          email: user.email,
+          image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}&backgroundColor=b6e3f4`,
+          tier:  user.tier as "free" | "pro",
         };
       },
     }),

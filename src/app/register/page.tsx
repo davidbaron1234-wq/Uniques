@@ -24,15 +24,29 @@ export default function RegisterPage() {
     }
     setError("");
     setLoading(true);
+
+    // Step 1: Create the user in the database
+    const registerRes = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    });
+    if (!registerRes.ok) {
+      const data = await registerRes.json().catch(() => ({}));
+      setLoading(false);
+      setError(data.error ?? "Registration failed. Please try again.");
+      return;
+    }
+
+    // Step 2: Sign in with the newly created credentials
     const result = await signIn("credentials", {
       email,
       password,
-      name,
       redirect: false,
     });
     setLoading(false);
     if (result?.error) {
-      setError("Something went wrong. Please try again.");
+      setError("Account created but sign-in failed. Please sign in manually.");
     } else {
       router.push("/onboarding");
     }
