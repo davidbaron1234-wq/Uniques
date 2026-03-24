@@ -8,7 +8,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import Logo from "./Logo";
 import NotificationDropdown from "./NotificationDropdown";
-import { socialUsers, currentUser } from "@/lib/data";
+import { socialUsers } from "@/lib/data";
 import { MasterItem } from "@/lib/catalog/types";
 
 // ── Custom SVG Icons ──────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ export default function Header() {
       const saved = localStorage.getItem("uniques_profile");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed?.name) setDrawerProfile({ name: parsed.name, avatar: parsed.avatar ?? currentUser.avatar });
+        if (parsed?.name) setDrawerProfile({ name: parsed.name, avatar: parsed.avatar ?? session?.user?.image ?? "" });
       }
     } catch { /* ignore */ }
   }, [menuOpen]); // re-read every time the drawer opens
@@ -290,7 +290,7 @@ export default function Header() {
                 >
                   <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 bg-primary/20">
                     <img
-                      src={drawerProfile?.avatar ?? session.user.image ?? currentUser.avatar}
+                      src={drawerProfile?.avatar ?? session.user.image ?? session?.user?.image ?? ""}
                       alt={drawerProfile?.name ?? session.user.name ?? "Collector"}
                       className="w-full h-full object-cover"
                     />

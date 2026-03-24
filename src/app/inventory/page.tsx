@@ -32,7 +32,7 @@ import { PowerPicker } from "@/components/PowerPicker";
 import type { PowerPickerItem } from "@/components/PowerPicker";
 import EquityBar from "@/components/EquityBar";
 import { AreaChart, Area, ResponsiveContainer, XAxis, Tooltip } from "recharts";
-import { currentUser, tradeOffers } from "@/lib/data";
+import { tradeOffers } from "@/lib/data";
 import { formatValue } from "@/lib/format";
 import { CollectibleItem, Category, ItemCondition, ItemStatus, TradeHistoryEntry } from "@/lib/types";
 import type { MasterItem } from "@/lib/catalog/types";
@@ -162,25 +162,18 @@ function LimitReachedModal({ onClose, onUpgrade }: { onClose: () => void; onUpgr
 const STORAGE_PROFILE = "uniques_profile";
 const STORAGE_GRAILS  = "uniques_pinned_grails";
 
-// ── Defaults ─────────────────────────────────────────────────────────────
-const defaultProfile: UserProfile = {
-  name: currentUser.name,
-  bio: currentUser.bio || "",
-  avatar: currentUser.avatar,
-  joinDate: currentUser.memberSince || "2024-03-15",
-};
-
 // ── Loaders ──────────────────────────────────────────────────────────────
-function loadProfile(): UserProfile {
-  if (typeof window === "undefined") return defaultProfile;
+// fallback is the session-derived default — only used when no saved profile exists
+function loadProfile(fallback: UserProfile): UserProfile {
+  if (typeof window === "undefined") return fallback;
   try {
     const saved = localStorage.getItem(STORAGE_PROFILE);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed && parsed.name) return { ...defaultProfile, ...parsed };
+      if (parsed && parsed.name) return { ...fallback, ...parsed };
     }
   } catch { /* corrupt data */ }
-  return defaultProfile;
+  return fallback;
 }
 
 function loadPinnedGrails(): string[] {
@@ -678,11 +671,13 @@ export default function ProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { data: session } = useSession();
+  const { data: session, status: authStatus } = useSession();
   const isFree = !session?.user?.tier || session.user.tier === "free";
   const { items, setItems, updateItem, removeItem, unlockItems, addTradeHistory, addRawItem, tradeHistoryEntries } = useInventory();
   const { achievements } = useAchievements();
-  const [profile, setProfile] = useState<UserProfile>(defaultProfile);
+  const [profile, setProfile] = useState<UserProfile>({
+    name: "", bio: "", avatar: "", joinDate: "",
+  });
   const [pinnedGrailIds, setPinnedGrailIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
@@ -774,10 +769,18 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    setProfile(loadProfile());
+    if (authStatus === "loading") return; // wait for session before computing fallback
+    const sessionFallback: UserProfile = {
+      name: session?.user?.name ?? "Collector",
+      bio: "",
+      avatar: session?.user?.image ?? "",
+      joinDate: new Date().toISOString().split("T")[0],
+    };
+    setProfile(loadProfile(sessionFallback));
     setPinnedGrailIds(loadPinnedGrails());
     setHydrated(true);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus]);
 
   // Persist profile and grails together to prevent partial-write race conditions
   useEffect(() => {
@@ -949,7 +952,7 @@ export default function ProfilePage() {
     const entry: TradeHistoryEntry = {
       id: `trade-${Date.now()}`,
       from: { name: deal.counterpartyName, avatar: deal.counterpartyAvatar },
-      to: { name: "You", avatar: currentUser.avatar },
+      to: { name: "You", avatar: profile.avatar },
       fromItems: deal.theirItems,
       fromCash: deal.theirCash,
       toItems: [{
@@ -1014,7 +1017,7 @@ export default function ProfilePage() {
               {/* Name row — items-center ensures badge is vertically centered with name */}
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-xl font-bold text-cream truncate">
-                  {profile.name === "You" ? "My Profile" : profile.name}
+                  {profile.name || "My Profile"}
                 </h1>
                 {/* Pro / Upgrade badge */}
                 {!isFree ? (
@@ -1039,9 +1042,7 @@ export default function ProfilePage() {
               </div>
 
               {/* Trust stars */}
-              {currentUser.trustScore !== undefined && (
-                <TrustStars score={currentUser.trustScore} reviewCount={6} onClick={() => setShowReviews(true)} />
-              )}
+              <TrustStars score={4.8} reviewCount={6} onClick={() => setShowReviews(true)} />
 
               {/* Bio */}
               {profile.bio && (
@@ -1093,10 +1094,10 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-                  {currentUser.totalTrades !== undefined && (
+                  {tradeHistoryEntries.length > 0 && (
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#2C2929] border border-white/[0.08] text-[#FCF9D5] text-[10px] font-semibold shadow-sm whitespace-nowrap">
                       <RefreshCw className="w-3 h-3 text-[#CAE6CE]" />
-                      {currentUser.totalTrades} Trades
+                      {tradeHistoryEntries.length} Trade{tradeHistoryEntries.length !== 1 ? "s" : ""}
                     </div>
                   )}
                   {memberDate && (
@@ -1800,7 +1801,7 @@ export default function ProfilePage() {
       <AddItemModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAdd={handleAddItem} />
       <EditProfileModal isOpen={showEditProfile} onClose={() => setShowEditProfile(false)} profile={profile} onSave={setProfile} isPro={!isFree} />
       <GrailsPickerModal isOpen={showGrailsPicker} onClose={() => setShowGrailsPicker(false)} items={items} pinnedIds={pinnedGrailIds} onSave={setPinnedGrailIds} userTier={isFree ? "free" : "pro"} />
-      <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={currentUser.trustScore || 4.8} />
+      <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={4.8} />
 
       {/* ── Item Detail Modal ───────────────────────────────── */}
       {editingItem && (

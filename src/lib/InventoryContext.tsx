@@ -4,7 +4,6 @@ import { createContext, useContext, useState, useEffect, useCallback, Dispatch, 
 import { MasterItem } from "@/lib/catalog/types";
 import { CollectibleItem, ItemCondition, ItemStatus, TradeHistoryEntry } from "@/lib/types";
 import { mapCatalogCategory } from "@/lib/constants";
-import { inventoryItems as seedItems } from "@/lib/data";
 
 // v2: bumped to clear old corrupted data (duplicate Charizard bug)
 const STORAGE_KEY   = "uniques_inventory_v2";
@@ -47,12 +46,12 @@ export function useInventory() {
 
 // ── Load from localStorage ──────────────────────────────────────────────
 function loadItems(): CollectibleItem[] {
-  if (typeof window === "undefined") return seedItems;
+  if (typeof window === "undefined") return [];
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved !== null) return JSON.parse(saved);
   } catch {}
-  return seedItems;
+  return []; // Real users start with an empty vault — no mock seed
 }
 
 function loadHistory(): TradeHistoryEntry[] {
