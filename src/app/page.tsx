@@ -12,7 +12,9 @@ import ProposeTradeModal from "@/components/ProposeTradeModal";
 import { tradeOffers, tradeHistory as staticHistory } from "@/lib/data";
 import { useInventory } from "@/lib/InventoryContext";
 import { useAchievements } from "@/lib/AchievementsContext";
+import { usePreferences } from "@/lib/UserPreferencesContext";
 import { isDemoUser } from "@/lib/demo";
+import { generateFeedEvents } from "@/lib/mockFeedGenerator";
 import { formatValue } from "@/lib/format";
 import { TrendingUp, Repeat2, Package, ArrowLeftRight, CheckCircle2, Users, Heart, MessageCircle, Share, Trophy, Eye, X, Loader2, Smile, Sparkles, Bell } from "lucide-react";
 import type { CollectibleItem, TradeHistoryEntry } from "@/lib/types";
@@ -336,6 +338,8 @@ type NetworkEvent = {
   item: { name: string; imageUrl: string; estimatedValue?: number } | null;
   timestamp: string;
   suggested?: boolean;
+  /** Categories this post belongs to — used for interest-based filtering */
+  categories?: string[];
 };
 
 const NETWORK_EVENTS: NetworkEvent[] = [
@@ -346,6 +350,7 @@ const NETWORK_EVENTS: NetworkEvent[] = [
     action: "added a new grail to their vault",
     item: { name: "Charizard (Base Set) PSA 10", imageUrl: "https://images.pokemontcg.io/base1/4.png", estimatedValue: 12000 },
     timestamp: "1h ago",
+    categories: ["Pokémon TCG"],
   },
   {
     id: "ne-2",
@@ -362,6 +367,7 @@ const NETWORK_EVENTS: NetworkEvent[] = [
     action: "just completed a high-value trade",
     item: { name: "Freddy Funko Ghost Rider Metallic (SDCC 2013)", imageUrl: "https://images.unsplash.com/photo-1608889825205-eebdb9fc5806?w=400&h=400&fit=crop&auto=format&q=80&seed=5", estimatedValue: 33500 },
     timestamp: "5h ago",
+    categories: ["Funko Pop"],
   },
   {
     id: "ne-4",
@@ -370,6 +376,7 @@ const NETWORK_EVENTS: NetworkEvent[] = [
     action: "listed a new item for trade",
     item: { name: "Umbreon VMAX Alt Art", imageUrl: "https://images.pokemontcg.io/swsh7/215.png", estimatedValue: 310 },
     timestamp: "8h ago",
+    categories: ["Pokémon TCG"],
   },
   {
     id: "ne-5",
@@ -378,6 +385,7 @@ const NETWORK_EVENTS: NetworkEvent[] = [
     action: "hit a $10k vault milestone",
     item: { name: "LEGO Star Wars AT-AT #75313", imageUrl: "https://cdn.rebrickable.com/media/sets/75313-1.jpg", estimatedValue: 850 },
     timestamp: "1d ago",
+    categories: ["Lego"],
   },
 ];
 
@@ -392,6 +400,7 @@ const FOR_YOU_EVENTS: NetworkEvent[] = [
     item: { name: "Pikachu Illustrator (PSA 9)", imageUrl: "https://images.pokemontcg.io/swsh12pt5/67.png", estimatedValue: 350000 },
     timestamp: "2h ago",
     suggested: true,
+    categories: ["Pokémon TCG"],
   },
   {
     id: "fy-2",
@@ -401,6 +410,7 @@ const FOR_YOU_EVENTS: NetworkEvent[] = [
     item: { name: "LEGO Millennium Falcon #75192", imageUrl: "https://cdn.rebrickable.com/media/sets/75192-1.jpg", estimatedValue: 890 },
     timestamp: "6h ago",
     suggested: true,
+    categories: ["Lego"],
   },
 ];
 
@@ -420,21 +430,21 @@ const EXTRA_FOLLOWING: NetworkEvent[] = [
     user: { name: "Alex", handle: "alex", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex&backgroundColor=AA95C5" },
     type: "added_grail", action: "added a new grail to their vault",
     item: { name: "Mew ex Special Art Rare", imageUrl: "https://images.pokemontcg.io/sv3pt5/205.png", estimatedValue: 420 },
-    timestamp: "5m ago",
+    timestamp: "5m ago", categories: ["Pokémon TCG"],
   },
   {
     id: "ne-7",
     user: { name: "Drew", handle: "drew", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Drew&backgroundColor=B5EAD7" },
     type: "new_listing", action: "listed a new item for trade",
     item: { name: "Gengar VMAX Alt Art", imageUrl: "https://images.pokemontcg.io/swsh6/271.png", estimatedValue: 185 },
-    timestamp: "9h ago",
+    timestamp: "9h ago", categories: ["Pokémon TCG"],
   },
   {
     id: "ne-8",
     user: { name: "Ethan", handle: "ethan", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ethan&backgroundColor=FFDAC1" },
     type: "completed_trade", action: "just completed a trade",
     item: { name: "LEGO Technic Porsche 911 RSR #42096", imageUrl: "https://cdn.rebrickable.com/media/sets/42096-1.jpg", estimatedValue: 280 },
-    timestamp: "12h ago",
+    timestamp: "12h ago", categories: ["Lego"],
   },
   {
     id: "ne-9",
@@ -453,14 +463,14 @@ const EXTRA_FOLLOWING: NetworkEvent[] = [
     user: { name: "Ethan", handle: "ethan", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ethan&backgroundColor=FFDAC1" },
     type: "added_grail", action: "added a new grail to their vault",
     item: { name: "Shiny Rayquaza EX Full Art", imageUrl: "https://images.pokemontcg.io/xy7/61.png", estimatedValue: 940 },
-    timestamp: "2d ago",
+    timestamp: "2d ago", categories: ["Pokémon TCG"],
   },
   {
     id: "ne-12",
     user: { name: "Alex", handle: "alex", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex&backgroundColor=AA95C5" },
     type: "new_listing", action: "listed a new item for trade",
     item: { name: "Shadow Lugia VSTAR Alt Art", imageUrl: "https://images.pokemontcg.io/swsh12pt5/202.png", estimatedValue: 260 },
-    timestamp: "2d ago",
+    timestamp: "2d ago", categories: ["Pokémon TCG"],
   },
 ];
 
@@ -470,35 +480,35 @@ const EXTRA_SUGGESTED: NetworkEvent[] = [
     user: { name: "Casey", handle: "casey", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Casey&backgroundColor=BAFCA2" },
     type: "added_grail", action: "added a grail that matches your interests",
     item: { name: "Blastoise (Base Set 1st Ed.) PSA 9", imageUrl: "https://images.pokemontcg.io/base1/2.png", estimatedValue: 8500 },
-    timestamp: "3h ago",
+    timestamp: "3h ago", categories: ["Pokémon TCG"],
   },
   {
     id: "fy-4", suggested: true,
     user: { name: "Riley", handle: "riley", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Riley&backgroundColor=E2D9F3" },
     type: "new_listing", action: "listed a LEGO set matching your Radar",
     item: { name: "LEGO Technic Bugatti Chiron #42083", imageUrl: "https://cdn.rebrickable.com/media/sets/42083-1.jpg", estimatedValue: 480 },
-    timestamp: "7h ago",
+    timestamp: "7h ago", categories: ["Lego"],
   },
   {
     id: "fy-5", suggested: true,
     user: { name: "Morgan", handle: "morgan", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Morgan&backgroundColor=FFDAC1" },
     type: "completed_trade", action: "completed a trade for a vintage collectible",
     item: { name: "Honus Wagner T206 (VG Condition)", imageUrl: "https://images.unsplash.com/photo-1612404819070-1b5e6791e6ad?w=400&h=400&fit=crop&auto=format", estimatedValue: 12000 },
-    timestamp: "10h ago",
+    timestamp: "10h ago", categories: ["Sports Cards"],
   },
   {
     id: "fy-6", suggested: true,
     user: { name: "Sam", handle: "sam", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sam&backgroundColor=C7CEEA" },
     type: "new_listing", action: "listed a grail that people are watching",
     item: { name: "Freddy Funko Space Suit (SDCC 2015)", imageUrl: "https://images.unsplash.com/photo-1608889825205-eebdb9fc5806?w=400&h=400&fit=crop&auto=format&q=80&seed=99", estimatedValue: 9800 },
-    timestamp: "14h ago",
+    timestamp: "14h ago", categories: ["Funko Pop"],
   },
   {
     id: "fy-7", suggested: true,
     user: { name: "Blake", handle: "blake", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Blake&backgroundColor=B5EAD7" },
     type: "added_grail", action: "added a Pokémon grail you might love",
     item: { name: "Charizard GX Full Art (SM35)", imageUrl: "https://images.pokemontcg.io/sm35/9.png", estimatedValue: 1200 },
-    timestamp: "1d ago",
+    timestamp: "1d ago", categories: ["Pokémon TCG"],
   },
   {
     id: "fy-8", suggested: true,
@@ -632,6 +642,7 @@ export default function HomePage() {
   const { data: session, status } = useSession();
   const isDemo = isDemoUser(session?.user?.email);
   const firstName = session?.user?.name?.split(" ")[0] ?? "Collector";
+  const { preferences } = usePreferences();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -903,9 +914,36 @@ export default function HomePage() {
   const [isInfiniteLoading, setIsInfiniteLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const pool = feedTab === "following"
-    ? (isDemo ? FOLLOWING_POOL : [])
-    : (isDemo ? FY_POOL : FY_POOL.map((e) => ({ ...e, suggested: true })));
+  // Build the active feed pool, filtered by user interests where set
+  const pool = useMemo(() => {
+    const interests = preferences.favoriteCategories;
+
+    if (feedTab === "following") {
+      return isDemo ? FOLLOWING_POOL : [];
+    }
+
+    // "For You" base: demo uses curated static pool; real users get all-suggested
+    const base: NetworkEvent[] = isDemo
+      ? FY_POOL
+      : FY_POOL.map((e) => ({ ...e, suggested: true }));
+
+    // For real users with interests: augment base with generated events and filter
+    if (!isDemo && interests.length > 0) {
+      const generated = generateFeedEvents(interests, 25, 42) as NetworkEvent[];
+      const combined  = [...base, ...generated];
+      // Keep events that have no category tag (milestones etc) OR match user interests
+      return combined.filter((e) =>
+        !e.categories?.length || e.categories.some((c) => interests.includes(c))
+      );
+    }
+
+    // For real users with no interests, keep full suggested base
+    if (!isDemo) return base;
+
+    // Demo with interests filter (optional — demo always shows full feed)
+    return base;
+  }, [feedTab, isDemo, preferences.favoriteCategories]);
+
   const visiblePosts = pool.slice(0, visibleCount);
   const hasMore      = visibleCount < pool.length;
 

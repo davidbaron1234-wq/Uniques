@@ -27,8 +27,41 @@ model Profile {
   avatar              String   @default("")
   paymentMethods      String[]
   shippingPreferences String[]
+  interests           String[]           // favorite categories from onboarding
+  tooltipSeen         Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+// ── Items (published grails / vault items) ───────────────────────────────────
+model Item {
+  id             String   @id @default(cuid())
+  userId         String                    // Supabase Auth UUID
+  title          String
+  category       String
+  imageUrl       String   @default("")
+  estimatedValue Float?
+  upForTrade     Boolean  @default(false)
+  description    String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@index([category])
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String                    // Supabase Auth UUID
+  message   String
+  type      String   @default("achievement")  // "trade"|"match"|"alert"|"achievement"
+  isRead    Boolean  @default(false)
+  href      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, isRead])
 }
 
 // ── Messaging ─────────────────────────────────────────────────────────────────

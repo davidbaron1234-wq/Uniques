@@ -67,6 +67,7 @@ import {
   Truck,
   RefreshCw,
   Calendar,
+  Cloud,
   TrendingDown,
   Info,
   Crosshair,
@@ -684,6 +685,7 @@ export default function ProfilePage() {
   const [hydrated, setHydrated] = useState(false);
 
   const [showAddModal, setShowAddModal]     = useState(false);
+  const [dbItemCount, setDbItemCount]       = useState<number | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showEditPulse, setShowEditPulse]   = useState(false);
@@ -789,7 +791,11 @@ export default function ProfilePage() {
     if (!isDemoUser(session?.user?.email)) {
       fetch("/api/profile")
         .then((r) => r.ok ? r.json() : null)
-        .then((data) => {
+        .then((data: {
+          name?: string; bio?: string; avatar?: string;
+          paymentMethods?: string[]; shippingPreferences?: string[];
+          tooltipSeen?: boolean;
+        } | null) => {
           if (!data) return;
           setProfile((prev) => ({
             ...prev,
@@ -799,6 +805,8 @@ export default function ProfilePage() {
             paymentMethods:      data.paymentMethods      ?? prev.paymentMethods,
             shippingPreferences: data.shippingPreferences ?? prev.shippingPreferences,
           }));
+          // Wire tooltipSeen from DB: only show pulse if DB says user hasn't seen it yet
+          setShowEditPulse(data.tooltipSeen === false);
           // Keep localStorage in sync so instant hydration on next visit
           try { localStorage.setItem(STORAGE_PROFILE, JSON.stringify(data)); } catch { /* quota */ }
         })
@@ -809,16 +817,17 @@ export default function ProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
 
-  // Show one-time pulse on Edit Profile for new real users
+  // Load DB item count for "synced to cloud" indicator (real users only)
   useEffect(() => {
-    if (authStatus === "loading") return;
-    if (isDemoUser(session?.user?.email)) return; // demo account doesn't need onboarding hint
-    if (typeof window === "undefined") return;
-    if (!localStorage.getItem("profile_edit_tipped")) {
-      setShowEditPulse(true);
-    }
+    if (authStatus === "loading" || isDemo) return;
+    fetch("/api/items?userId=me")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { items: unknown[] } | null) => {
+        if (data) setDbItemCount(data.items.length);
+      })
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authStatus]);
+  }, [authStatus, isDemo]);
 
   // Persist profile and grails together to prevent partial-write race conditions
   useEffect(() => {
@@ -921,6 +930,23 @@ export default function ProfilePage() {
     // addRawItem updates the shared InventoryContext — items on this page
     // re-renders automatically since items now comes from context.
     addRawItem(item);
+
+    // Persist to DB for real users (fire-and-forget)
+    if (!isDemo) {
+      fetch("/api/items", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          title:          newItem.name,
+          category:       newItem.category,
+          imageUrl:       newItem.imagePreview ?? newItem.customImage ?? "",
+          estimatedValue: newItem.estimatedValue ?? null,
+          upForTrade:     newItem.upForTrade ?? false,
+        }),
+      })
+        .then((r) => r.ok ? setDbItemCount((c) => (c ?? 0) + 1) : undefined)
+        .catch(() => {});
+    }
   };
 
   const handleViewItem = (item: CollectibleItem) => {
@@ -1081,7 +1107,14 @@ export default function ProfilePage() {
                       setShowEditProfile(true);
                       if (showEditPulse) {
                         setShowEditPulse(false);
-                        try { localStorage.setItem("profile_edit_tipped", "1"); } catch { /* quota */ }
+                        // Persist tooltipSeen to DB (fire-and-forget)
+                        if (!isDemo) {
+                          fetch("/api/profile", {
+                            method:  "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body:    JSON.stringify({ tooltipSeen: true }),
+                          }).catch(() => {});
+                        }
                       }
                     }}
                     className="p-1 rounded-lg hover:bg-charcoal-light/50 transition-colors"
@@ -1161,6 +1194,12 @@ export default function ProfilePage() {
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#2C2929] border border-white/[0.08] text-[#FCF9D5] text-[10px] font-semibold shadow-sm whitespace-nowrap">
                       <Calendar className="w-3 h-3 text-[#AA95C5]" />
                       Joined &apos;{memberDate.slice(-2)}
+                    </div>
+                  )}
+                  {!isDemo && dbItemCount !== null && dbItemCount > 0 && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#2C2929] border border-white/[0.08] text-[#FCF9D5] text-[10px] font-semibold shadow-sm whitespace-nowrap">
+                      <Cloud className="w-3 h-3 text-[#CAE6CE]" />
+                      {dbItemCount} Synced
                     </div>
                   )}
                 </div>

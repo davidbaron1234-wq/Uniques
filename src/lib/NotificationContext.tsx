@@ -71,6 +71,18 @@ const WELCOME_NOTIFICATION: Notification = {
   href:    "/inventory",
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return "Just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 // ── Context & Provider ────────────────────────────────────────────────────────
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -80,35 +92,97 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const seeded = useRef(false);
 
-  // Seed once after auth resolves — demo gets rich mock feed, real users get welcome message
+  // Seed / load once after auth resolves
   useEffect(() => {
     if (status === "loading" || seeded.current) return;
     seeded.current = true;
+
     if (isDemoUser(session?.user?.email)) {
+      // Demo: use rich mock feed
       setNotifications(DEMO_NOTIFICATIONS);
-    } else {
-      setNotifications([WELCOME_NOTIFICATION]);
+      return;
     }
+
+    // Real users: fetch from DB; seed welcome notification if this is the first visit
+    fetch("/api/notifications")
+      .then((r) => r.ok ? r.json() : null)
+      .then(async (data: { notifications: Array<{
+        id: string; type: string; message: string; isRead: boolean; href: string | null; createdAt: string;
+      }> } | null) => {
+        if (!data) return;
+
+        if (data.notifications.length === 0) {
+          // First time: create welcome notification in DB then display it
+          const res = await fetch("/api/notifications", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ message: WELCOME_NOTIFICATION.message, type: "achievement", href: "/inventory" }),
+          });
+          if (res.ok) {
+            const created = await res.json() as { notification: { id: string; createdAt: string } };
+            setNotifications([{ ...WELCOME_NOTIFICATION, id: created.notification.id }]);
+          } else {
+            setNotifications([WELCOME_NOTIFICATION]);
+          }
+        } else {
+          setNotifications(
+            data.notifications.map((n) => ({
+              id:      n.id,
+              type:    n.type as NotifType,
+              message: n.message,
+              time:    relativeTime(n.createdAt),
+              isRead:  n.isRead,
+              href:    n.href ?? undefined,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Offline: fall back to welcome notification in memory
+        setNotifications([WELCOME_NOTIFICATION]);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.user?.email]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const markAllAsRead = useCallback(
-    () => setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true }))),
-    [],
-  );
+  const markAllAsRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    // Persist to DB for real users (fire-and-forget)
+    if (!isDemoUser(session?.user?.email)) {
+      fetch("/api/notifications", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ all: true }),
+      }).catch(() => {});
+    }
+  }, [session?.user?.email]);
 
-  const markAsRead = useCallback(
-    (id: string) =>
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
-      ),
-    [],
-  );
+  const markAsRead = useCallback((id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
+    );
+    // Persist to DB for real users (fire-and-forget)
+    if (!isDemoUser(session?.user?.email)) {
+      fetch("/api/notifications", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ ids: [id] }),
+      }).catch(() => {});
+    }
+  }, [session?.user?.email]);
 
   const addNotification = useCallback((notif: Notification) => {
     setNotifications((prev) => [notif, ...prev]);
-  }, []);
+    // For real users, also persist to DB
+    if (!isDemoUser(session?.user?.email)) {
+      fetch("/api/notifications", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ message: notif.message, type: notif.type, href: notif.href }),
+      }).catch(() => {});
+    }
+  }, [session?.user?.email]);
 
   return (
     <NotificationContext.Provider value={{ notifications, unreadCount, markAllAsRead, markAsRead, addNotification }}>
