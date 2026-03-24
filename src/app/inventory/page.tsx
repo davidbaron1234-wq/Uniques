@@ -674,6 +674,7 @@ export default function ProfilePage() {
 
   const { data: session, status: authStatus } = useSession();
   const isFree = !session?.user?.tier || session.user.tier === "free";
+  const isDemo = isDemoUser(session?.user?.email);
   const { items, setItems, updateItem, removeItem, unlockItems, addTradeHistory, addRawItem, tradeHistoryEntries } = useInventory();
   const { achievements } = useAchievements();
   const [profile, setProfile] = useState<UserProfile>({
@@ -685,6 +686,7 @@ export default function ProfilePage() {
   const [showAddModal, setShowAddModal]     = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showEditPulse, setShowEditPulse]   = useState(false);
   const [showGrailsPicker, setShowGrailsPicker] = useState(false);
   const [isChartExpanded, setIsChartExpanded] = useState(false);
   const [timeframe, setTimeframe] = useState("1M");
@@ -784,6 +786,17 @@ export default function ProfilePage() {
       setRadarItems(RADAR_SEED);
     }
     setHydrated(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus]);
+
+  // Show one-time pulse on Edit Profile for new real users
+  useEffect(() => {
+    if (authStatus === "loading") return;
+    if (isDemoUser(session?.user?.email)) return; // demo account doesn't need onboarding hint
+    if (typeof window === "undefined") return;
+    if (!localStorage.getItem("profile_edit_tipped")) {
+      setShowEditPulse(true);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
 
@@ -1038,16 +1051,35 @@ export default function ProfilePage() {
                     Go Pro
                   </button>
                 )}
-                <button
-                  onClick={() => setShowEditProfile(true)}
-                  className="ml-auto p-1 rounded-lg hover:bg-charcoal-light/50 transition-colors shrink-0"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-cream/30" />
-                </button>
+                <div className="ml-auto relative shrink-0">
+                  {/* One-time pulse ring for new users */}
+                  {showEditPulse && (
+                    <span className="absolute inset-0 rounded-lg animate-ping bg-primary/50 pointer-events-none" />
+                  )}
+                  <button
+                    onClick={() => {
+                      setShowEditProfile(true);
+                      if (showEditPulse) {
+                        setShowEditPulse(false);
+                        try { localStorage.setItem("profile_edit_tipped", "1"); } catch { /* quota */ }
+                      }
+                    }}
+                    className="p-1 rounded-lg hover:bg-charcoal-light/50 transition-colors"
+                  >
+                    <Edit3 className={`w-3.5 h-3.5 ${showEditPulse ? "text-primary" : "text-cream/30"}`} />
+                  </button>
+                  {/* Tooltip */}
+                  {showEditPulse && (
+                    <div className="absolute bottom-full right-0 mb-2 w-[190px] bg-[#2C2929] border border-primary/20 rounded-xl shadow-2xl p-2.5 text-left pointer-events-none z-50">
+                      <p className="text-[10px] text-cream/80 leading-snug">Tap to personalize your profile, payment &amp; shipping methods.</p>
+                      <div className="absolute top-full right-3 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-[#2C2929]" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Trust stars */}
-              <TrustStars score={4.8} reviewCount={6} onClick={() => setShowReviews(true)} />
+              <TrustStars score={isDemo ? 4.8 : 0} reviewCount={isDemo ? 6 : 0} onClick={() => setShowReviews(true)} />
 
               {/* Bio */}
               {profile.bio && (
@@ -1059,8 +1091,8 @@ export default function ProfilePage() {
 
         {/* ── Mega-Card: Value + Preferences ──────────────────── */}
         {(() => {
-          const payments = profile.paymentMethods?.length  ? profile.paymentMethods  : ["PayPal", "Venmo"];
-          const shipping = profile.shippingPreferences?.length ? profile.shippingPreferences : ["Worldwide Shipping", "Local Pickup"];
+          const payments = profile.paymentMethods?.length  ? profile.paymentMethods  : (isDemo ? ["PayPal", "Venmo"] : []);
+          const shipping = profile.shippingPreferences?.length ? profile.shippingPreferences : (isDemo ? ["Worldwide Shipping", "Local Pickup"] : []);
           return (
             <div className="mx-5 mb-5 rounded-2xl bg-background-light shadow-soft overflow-visible">
               {/* Value half — left: label+amount, right: stats */}
@@ -1806,7 +1838,7 @@ export default function ProfilePage() {
       <AddItemModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAdd={handleAddItem} />
       <EditProfileModal isOpen={showEditProfile} onClose={() => setShowEditProfile(false)} profile={profile} onSave={setProfile} isPro={!isFree} />
       <GrailsPickerModal isOpen={showGrailsPicker} onClose={() => setShowGrailsPicker(false)} items={items} pinnedIds={pinnedGrailIds} onSave={setPinnedGrailIds} userTier={isFree ? "free" : "pro"} />
-      <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={4.8} />
+      <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={isDemo ? 4.8 : 0} />
 
       {/* ── Item Detail Modal ───────────────────────────────── */}
       {editingItem && (

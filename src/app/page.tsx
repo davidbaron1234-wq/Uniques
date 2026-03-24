@@ -1093,6 +1093,22 @@ export default function HomePage() {
 
       <main className="max-w-lg mx-auto pt-6">
 
+        {/* ── New-user empty state — shown when there's nothing to act on ── */}
+        {actionEntries.length === 0 && (
+          <div className="mx-5 mb-6 pt-5 flex flex-col items-center text-center animate-slide-up">
+            <p className="text-base font-extrabold text-cream/80 mb-1">Grail Quest Starts Here.</p>
+            <p className="text-xs text-cream/35 mb-4 max-w-[240px] leading-relaxed">
+              Discover rare pieces, propose your first trade, and build a vault worth coveting.
+            </p>
+            <button
+              onClick={() => router.push("/search")}
+              className="bg-primary text-charcoal-dark text-xs font-bold px-5 py-2.5 rounded-full shadow-[0_0_16px_rgba(202,230,206,0.3)] active:scale-95 transition-all"
+            >
+              Explore Trending Grails
+            </button>
+          </div>
+        )}
+
         {/* ── Action Required — only rendered when there is something to act on ── */}
         {actionEntries.length > 0 && (
           <div className="mb-6 pt-3">

@@ -352,15 +352,30 @@ export default function HistoryPage() {
                 : <History className="w-8 h-8 text-cream/20" />
               }
             </div>
-            <p className="text-cream/40 font-medium">
-              {searchQuery.trim() ? `No results for "${searchQuery}"` : "Nothing here yet"}
-            </p>
-            <p className="text-cream/25 text-sm mt-1">
-              {searchQuery.trim()
-                ? "Try a different name or item"
-                : activeTab === "All" ? "Ready for your first trade? Curate items to get started." : `No "${activeTab}" trades`
-              }
-            </p>
+            {searchQuery.trim() ? (
+              <>
+                <p className="text-cream/40 font-medium">{`No results for "${searchQuery}"`}</p>
+                <p className="text-cream/25 text-sm mt-1">Try a different name or item</p>
+              </>
+            ) : activeTab === "All" ? (
+              <>
+                <p className="text-cream/70 font-extrabold text-base mb-1">Your Trading Saga Begins...</p>
+                <p className="text-cream/30 text-xs mb-5 max-w-[220px] leading-relaxed">
+                  Every legendary collector started with one trade. Yours is one tap away.
+                </p>
+                <button
+                  onClick={() => router.push("/search")}
+                  className="bg-primary text-charcoal-dark text-xs font-bold px-5 py-2.5 rounded-full shadow-[0_0_16px_rgba(202,230,206,0.3)] active:scale-95 transition-all"
+                >
+                  Initiate First Trade
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-cream/40 font-medium">Nothing here yet</p>
+                <p className="text-cream/25 text-sm mt-1">{`No "${activeTab}" trades`}</p>
+              </>
+            )}
           </div>
         )}
       </main>

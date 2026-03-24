@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Home, Compass, User, MessageSquare } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { isDemoUser } from "@/lib/demo";
 
-// Initial unread counts from seed data (matches inbox/page.tsx SEED)
+// Seed unread counts — only used for the demo/investor account
 const SEED_UNREAD: Record<string, number> = {
   drew:   2,
   ethan:  1,
@@ -23,11 +25,23 @@ const navItems = [
 export default function BottomNav() {
   const pathname = usePathname();
   const router   = useRouter();
+  const { data: session } = useSession();
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Keep a ref so the compute closure always sees the latest session
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
 
   useEffect(() => {
     const compute = () => {
-      // Batch-read all needed localStorage keys in a single pass
+      // Real users have no seeded conversations — badge is always 0.
+      // Only the demo account uses SEED_UNREAD to simulate an active inbox.
+      if (!isDemoUser(sessionRef.current?.user?.email)) {
+        setUnreadCount(0);
+        return;
+      }
+
+      // Demo path: derive count from SEED_UNREAD, respecting localStorage state
       const ids = Object.keys(SEED_UNREAD);
       const vals: Record<string, string | null> = {};
       for (const id of ids) {
@@ -55,6 +69,13 @@ export default function BottomNav() {
       document.removeEventListener("visibilitychange", compute);
     };
   }, []);
+
+  // Re-compute when session resolves (switches from null → real session)
+  useEffect(() => {
+    if (!isDemoUser(session?.user?.email)) {
+      setUnreadCount(0);
+    }
+  }, [session?.user?.email]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background shadow-[0_-2px_12px_rgba(0,0,0,0.4)]">
