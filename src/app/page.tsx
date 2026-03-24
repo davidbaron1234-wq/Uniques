@@ -903,7 +903,9 @@ export default function HomePage() {
   const [isInfiniteLoading, setIsInfiniteLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const pool        = feedTab === "following" ? FOLLOWING_POOL : FY_POOL;
+  const pool = feedTab === "following"
+    ? (isDemo ? FOLLOWING_POOL : [])
+    : (isDemo ? FY_POOL : FY_POOL.map((e) => ({ ...e, suggested: true })));
   const visiblePosts = pool.slice(0, visibleCount);
   const hasMore      = visibleCount < pool.length;
 
@@ -1251,6 +1253,21 @@ export default function HomePage() {
           </div>
 
           <div className="px-5 pt-4 space-y-4">
+            {pool.length === 0 && feedTab === "following" && (
+              <div className="flex flex-col items-center text-center py-12 animate-slide-up">
+                <div className="w-14 h-14 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-4">
+                  <Users className="w-6 h-6 text-cream/20" />
+                </div>
+                <p className="text-sm font-bold text-cream/60 mb-1">No one in your feed yet</p>
+                <p className="text-xs text-cream/30 mb-4 max-w-[220px]">Discover collectors to follow and see their latest grails here.</p>
+                <button
+                  onClick={() => router.push("/search")}
+                  className="px-5 py-2.5 rounded-2xl bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 active:scale-[0.97] transition-all"
+                >
+                  Discover Collectors
+                </button>
+              </div>
+            )}
             {visiblePosts.map((event, i) => {
               const meta          = EVENT_META[event.type];
               const isLiked       = likedIds.has(event.id);

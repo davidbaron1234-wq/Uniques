@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useTypewriter } from "@/hooks/useTypewriter";
-import { X, User, Settings, HelpCircle, LogOut, History, Loader2 } from "lucide-react";
+import { X, User, Settings, HelpCircle, LogOut, RotateCcw, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
@@ -321,7 +321,7 @@ export default function Header() {
             {/* Nav items — iOS-style with dividers */}
             <nav className="flex-1 px-3">
               {[
-                { icon: History,    label: "Trade History",  href: "/history"  },
+                { icon: RotateCcw,  label: "Trade History",  href: "/history"  },
                 { icon: Settings,   label: "Settings",       href: "/settings" },
                 { icon: HelpCircle, label: "Help & Support", href: null        },
               ].map((item, idx, arr) => (

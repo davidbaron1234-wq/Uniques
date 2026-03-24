@@ -60,7 +60,7 @@ import {
   Unlock,
   CheckCircle2,
   ArrowRight,
-  History,
+  RotateCcw as HistoryIcon,
   Zap,
   ShieldCheck,
   CreditCard,
@@ -1880,7 +1880,7 @@ export default function ProfilePage() {
         isPro={!isFree}
       />
       <GrailsPickerModal isOpen={showGrailsPicker} onClose={() => setShowGrailsPicker(false)} items={items} pinnedIds={pinnedGrailIds} onSave={setPinnedGrailIds} userTier={isFree ? "free" : "pro"} />
-      <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={isDemo ? 4.8 : 0} />
+      <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={isDemo ? 4.8 : 0} isDemo={isDemo} />
 
       {/* ── Item Detail Modal ───────────────────────────────── */}
       {editingItem && (
@@ -2002,7 +2002,7 @@ export default function ProfilePage() {
                       }}
                       className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-amber-500/15 text-amber-400 font-bold text-sm hover:bg-amber-500/25 active:scale-[0.97] transition-all"
                     >
-                      <History className="w-4 h-4" />
+                      <HistoryIcon className="w-4 h-4" />
                       Manage in History
                       <ArrowRight className="w-3.5 h-3.5 opacity-60" />
                     </button>

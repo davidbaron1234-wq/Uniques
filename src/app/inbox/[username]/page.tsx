@@ -293,14 +293,23 @@ export default function ChatPage() {
   const { showToast } = useInventory();
   const { addNotification } = useNotifications();
 
-  // Demo mode: username matches a seed key; real mode: username is a conversationId
-  const demoConv = CHAT_DATA[username];
+  // Demo mode: username matches a seed key; real mode: username is a conversationId (cuid)
+  // Non-demo users always use the real DB path — never show mock chat history
   const isDemo   = isDemoUser(session?.user?.email);
+  const demoConv = isDemo ? CHAT_DATA[username] : undefined;
   const isRealConversation = !demoConv && !!username;
   // conversationId is the URL param when in real mode
   const conversationId = isRealConversation ? username : null;
 
-  const [messages,        setMessages]        = useState<Msg[]>(demoConv?.messages ?? []);
+  const [messages,        setMessages]        = useState<Msg[]>([]);
+
+  // Seed demo messages once session confirms demo user
+  const demoSeededRef = useRef(false);
+  useEffect(() => {
+    if (!isDemo || demoSeededRef.current || !CHAT_DATA[username]) return;
+    demoSeededRef.current = true;
+    setMessages(CHAT_DATA[username].messages);
+  }, [isDemo, username]);
   const [draft,           setDraft]           = useState("");
   const [showEmoji,       setShowEmoji]       = useState(false);
   const [emojiSearch,     setEmojiSearch]     = useState("");
@@ -550,10 +559,12 @@ export default function ChatPage() {
   }
 
   // Unified conversation metadata (works for both demo and real conversations)
+  // Falls back to CHAT_DATA metadata for display (name/avatar) even for real users at a known handle
+  const knownMeta = CHAT_DATA[username];
   const conv = demoConv ?? {
-    name:   convMeta?.name   ?? "...",
-    handle: "",
-    avatar: convMeta?.avatar ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}&backgroundColor=b6e3f4`,
+    name:   convMeta?.name   ?? knownMeta?.name   ?? "...",
+    handle: convMeta ? `@${username}` : (knownMeta?.handle ?? ""),
+    avatar: convMeta?.avatar ?? knownMeta?.avatar ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}&backgroundColor=b6e3f4`,
     online: false,
   };
 

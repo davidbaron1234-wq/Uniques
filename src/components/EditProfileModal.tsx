@@ -171,7 +171,7 @@ export default function EditProfileModal({
   const isValid = name.trim().length > 0 && name.trim().length <= 16;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-4 pb-20 sm:p-4">
       <div className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in" onClick={onClose} />
 
       <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl shadow-2xl border border-white/10 animate-slide-up overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-none">

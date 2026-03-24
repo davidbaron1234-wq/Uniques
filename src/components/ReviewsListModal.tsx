@@ -99,6 +99,7 @@ interface ReviewsListModalProps {
   onClose: () => void;
   userName: string;
   trustScore: number;
+  isDemo?: boolean;
 }
 
 export default function ReviewsListModal({
@@ -106,8 +107,9 @@ export default function ReviewsListModal({
   onClose,
   userName,
   trustScore,
+  isDemo = false,
 }: ReviewsListModalProps) {
-  const [reviews, setReviews]         = useState<Review[]>(MOCK_REVIEWS);
+  const [reviews, setReviews]         = useState<Review[]>(isDemo ? MOCK_REVIEWS : []);
   const [myReviewId, setMyReviewId]   = useState<string | null>(null);
   const [sortBy, setSortBy]           = useState<"newest" | "highest" | "lowest">("newest");
   const [formOpen, setFormOpen]       = useState(false);
@@ -293,7 +295,16 @@ export default function ReviewsListModal({
             )}
           </div>
 
-          {/* ── Sort controls ── */}
+          {/* ── Empty state for real users ── */}
+          {reviews.length === 0 && !isDemo && (
+            <div className="flex flex-col items-center text-center py-8">
+              <p className="text-sm font-bold text-cream/40 mb-1">No reviews yet.</p>
+              <p className="text-xs text-cream/25">Complete a trade to start earning trust.</p>
+            </div>
+          )}
+
+          {/* ── Sort controls + list (only when there are reviews) ── */}
+          {reviews.length > 0 && (<>
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-cream/25 font-medium mr-0.5">Sort:</span>
             {(["newest", "highest", "lowest"] as const).map((opt) => (
@@ -398,6 +409,7 @@ export default function ReviewsListModal({
                 </div>
               );
             })}
+          </>)}
         </div>
       </div>
     </div>
