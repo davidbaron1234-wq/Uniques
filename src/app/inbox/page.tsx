@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { isDemoUser } from "@/lib/demo";
 import { driver } from "driver.js";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
@@ -460,7 +461,7 @@ function ConversationRow({
 
 export default function InboxPage() {
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/api/auth/signin");
@@ -522,29 +523,33 @@ export default function InboxPage() {
   const [ctxMenu,     setCtxMenu]     = useState<CtxMenu | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: "block" | "delete"; id: string } | null>(null);
 
-  // Initialise convs from seed, filtering deleted/blocked and restoring persisted state
-  const [convs, setConvs] = useState<Conv[]>(() => {
-    if (typeof window === "undefined") {
-      return SEED.map((c) => ({ ...c, pinned: false, hasDot: false }));
-    }
-    return SEED
-      .filter((c) =>
-        !localStorage.getItem(`inbox_del_${c.id}`) &&
-        !localStorage.getItem(`inbox_block_${c.id}`)
-      )
-      .map((c) => {
-        const hasDot = !!localStorage.getItem(`inbox_dot_${c.id}`);
-        const isRead = !!localStorage.getItem(`inbox_read_${c.id}`);
-        return {
-          ...c,
-          pinned: !!localStorage.getItem(`inbox_pin_${c.id}`),
-          hasDot,
-          // If manually marked unread (dot flag), force unread=0 so ONLY the dot renders.
-          // If explicitly read, also 0. Otherwise use seed count.
-          unread: hasDot || isRead ? 0 : c.unread,
-        };
-      });
-  });
+  // Convs start empty; demo users get SEED after auth resolves
+  const [convs, setConvs] = useState<Conv[]>([]);
+  const convSeeded = useRef(false);
+
+  useEffect(() => {
+    if (status === "loading" || convSeeded.current) return;
+    convSeeded.current = true;
+    if (!isDemoUser(session?.user?.email)) return; // real users keep empty inbox
+    if (typeof window === "undefined") return;
+    setConvs(
+      SEED
+        .filter((c) =>
+          !localStorage.getItem(`inbox_del_${c.id}`) &&
+          !localStorage.getItem(`inbox_block_${c.id}`)
+        )
+        .map((c) => {
+          const hasDot = !!localStorage.getItem(`inbox_dot_${c.id}`);
+          const isRead = !!localStorage.getItem(`inbox_read_${c.id}`);
+          return {
+            ...c,
+            pinned: !!localStorage.getItem(`inbox_pin_${c.id}`),
+            hasDot,
+            unread: hasDot || isRead ? 0 : c.unread,
+          };
+        })
+    );
+  }, [status, session?.user?.email]);
 
   // Re-sync read state when page regains focus (chat room sets inbox_read_*)
   // Debounced to prevent race conditions on rapid tab switches
@@ -753,7 +758,9 @@ export default function InboxPage() {
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center py-16 gap-3">
               <MessageSquare className="w-8 h-8 text-cream/15" />
-              <p className="text-sm text-cream/30">No conversations found</p>
+              <p className="text-sm text-cream/30 text-center px-6">
+                {query ? "No conversations found" : "Your inbox is waiting. Find your next grail and start a conversation."}
+              </p>
             </div>
           ) : (
             filtered.map(({ conv, matchSnippet }, i) => (

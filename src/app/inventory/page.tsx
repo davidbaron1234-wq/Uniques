@@ -87,6 +87,7 @@ import {
 import { type Achievement, ACHIEVEMENTS } from "@/lib/achievements";
 import AchievementModal from "@/components/AchievementModal";
 import { useAchievements } from "@/lib/AchievementsContext";
+import { isDemoUser } from "@/lib/demo";
 
 const DUMMY_DATA_MAP: Record<string, { name: string; val: number }[]> = {
   "1W": [
@@ -699,7 +700,7 @@ export default function ProfilePage() {
     notes: "",
   });
   const [profileTab, setProfileTab]       = useState<"collection" | "radar">("collection");
-  const [radarItems, setRadarItems]       = useState<RadarEntry[]>(RADAR_SEED);
+  const [radarItems, setRadarItems]       = useState<RadarEntry[]>([]);
   const [radarToast, setRadarToast]       = useState("");
   const [radarViewItem, setRadarViewItem] = useState<RadarEntry | null>(null);
   const [showAddToRadar, setShowAddToRadar] = useState(false);
@@ -778,6 +779,10 @@ export default function ProfilePage() {
     };
     setProfile(loadProfile(sessionFallback));
     setPinnedGrailIds(loadPinnedGrails());
+    // Demo account gets the full mock radar; real users start with an empty radar
+    if (isDemoUser(session?.user?.email)) {
+      setRadarItems(RADAR_SEED);
+    }
     setHydrated(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
@@ -1561,7 +1566,7 @@ export default function ProfilePage() {
                 <p className="text-xs text-white/30 mb-5 max-w-[200px] leading-relaxed">Curate your first piece to start building your vault.</p>
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="bg-gradient-to-r from-teal-400 to-cyan-400 text-[#1A1818] text-sm font-bold px-5 py-2.5 rounded-full shadow-[0_0_16px_rgba(45,212,191,0.35)] active:scale-95 transition-all"
+                  className="bg-primary text-charcoal-dark text-sm font-bold px-5 py-2.5 rounded-full shadow-[0_0_16px_rgba(45,212,191,0.35)] active:scale-95 transition-all"
                 >
                   Curate First Piece
                 </button>

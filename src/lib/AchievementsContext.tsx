@@ -3,8 +3,10 @@
 import {
   createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode,
 } from "react";
+import { useSession } from "next-auth/react";
 import { ACHIEVEMENTS, type Achievement } from "@/lib/achievements";
 import { useNotifications } from "@/lib/NotificationContext";
+import { isDemoUser } from "@/lib/demo";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,7 @@ function saveAchievements(list: Achievement[]) {
 const AchievementsContext = createContext<AchievementsContextValue | null>(null);
 
 export function AchievementsProvider({ children }: { children: ReactNode }) {
+  const { data: session, status: authStatus } = useSession();
   const [achievements, setAchievements] = useState<Achievement[]>(loadAchievements);
   const { addNotification } = useNotifications();
   const addNotificationRef = useRef(addNotification);
@@ -73,6 +76,24 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setAchievements(loadAchievements());
   }, []);
+
+  // Once auth resolves: real users start with only "early-adopter" unlocked
+  // (only applied when there's no saved localStorage state — respects earned achievements)
+  useEffect(() => {
+    if (authStatus === "loading") return;
+    if (isDemoUser(session?.user?.email)) return; // demo keeps all unlocked achievements
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem(STORAGE_KEY)) return; // user already has saved achievements
+    const cleanSlate = ACHIEVEMENTS.map((a) => ({
+      ...a,
+      status: (a.id === "early-adopter" ? "unlocked" : "locked") as Achievement["status"],
+      unlockedAt: a.id === "early-adopter" ? a.unlockedAt : undefined,
+      catalystItem: a.id === "early-adopter" ? a.catalystItem : undefined,
+    }));
+    setAchievements(cleanSlate);
+    saveAchievements(cleanSlate);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus]);
 
   const unlockAchievement = useCallback(
     (id: string, catalystItem?: { name: string; imageUrl: string }) => {

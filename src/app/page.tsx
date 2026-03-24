@@ -12,6 +12,7 @@ import ProposeTradeModal from "@/components/ProposeTradeModal";
 import { tradeOffers, tradeHistory as staticHistory } from "@/lib/data";
 import { useInventory } from "@/lib/InventoryContext";
 import { useAchievements } from "@/lib/AchievementsContext";
+import { isDemoUser } from "@/lib/demo";
 import { formatValue } from "@/lib/format";
 import { TrendingUp, Repeat2, Package, ArrowLeftRight, CheckCircle2, Users, Heart, MessageCircle, Share, Trophy, Eye, X, Loader2, Smile, Sparkles, Bell } from "lucide-react";
 import type { CollectibleItem, TradeHistoryEntry } from "@/lib/types";
@@ -629,6 +630,7 @@ function TabRedirect() {
 export default function HomePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const isDemo = isDemoUser(session?.user?.email);
   const firstName = session?.user?.name?.split(" ")[0] ?? "Collector";
 
   useEffect(() => {
@@ -950,10 +952,13 @@ export default function HomePage() {
 
   // Convert pending tradeOffers into TradeHistoryEntry for the shared TradeCard.
   // Exclude any offer already in the context (accepted, completed, etc.).
-  const pendingEntries = tradeOffers
-    .filter((o) => o.status === "pending" && !dismissedIds.has(o.id) && !handledTradeIds.has(o.id))
-    .map(offerToEntry)
-    .slice(0, 3);
+  // Demo account shows mock offers; real users start with no pending offers.
+  const pendingEntries = isDemo
+    ? tradeOffers
+        .filter((o) => o.status === "pending" && !dismissedIds.has(o.id) && !handledTradeIds.has(o.id))
+        .map(offerToEntry)
+        .slice(0, 3)
+    : [];
 
   // Accepted trades awaiting fulfillment (from context, not yet completed)
   const acceptedPending = tradeHistoryEntries.filter(
@@ -975,11 +980,12 @@ export default function HomePage() {
   };
 
   // Recent activity — last 3 unique, non-dismissed entries
+  // Demo account includes mock staticHistory; real users see only real trades.
   const recentActivity = useMemo(() => {
     const seen = new Set<string>();
     return [
       ...tradeHistoryEntries,
-      ...staticHistory.map(toEntry),
+      ...(isDemo ? staticHistory.map(toEntry) : []),
     ]
       .filter((t) => {
         if (seen.has(t.id) || dismissedIds.has(t.id)) return false;
@@ -988,7 +994,7 @@ export default function HomePage() {
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 3);
-  }, [tradeHistoryEntries, dismissedIds]);
+  }, [tradeHistoryEntries, dismissedIds, isDemo]);
 
   // ── Early return — MUST come after all hooks ─────────────────────────────
   if (status === "loading" || status === "unauthenticated") {

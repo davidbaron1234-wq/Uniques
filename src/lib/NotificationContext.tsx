@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
+import { useSession } from "next-auth/react";
+import { isDemoUser } from "@/lib/demo";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,9 +25,9 @@ interface NotificationContextValue {
   addNotification: (n: Notification) => void;
 }
 
-// ── Seed data ─────────────────────────────────────────────────────────────────
+// ── Seed data (demo account only) ─────────────────────────────────────────────
 
-const INITIAL_NOTIFICATIONS: Notification[] = [
+const DEMO_NOTIFICATIONS: Notification[] = [
   {
     id:      "n0",
     type:    "achievement",
@@ -60,12 +62,34 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
   },
 ];
 
+const WELCOME_NOTIFICATION: Notification = {
+  id:      "welcome-beta",
+  type:    "achievement",
+  message: "Welcome to Uniques Beta! You are an early adopter. Explore, trade, collect.",
+  time:    "Just now",
+  isRead:  false,
+  href:    "/inventory",
+};
+
 // ── Context & Provider ────────────────────────────────────────────────────────
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
+  const { data: session, status } = useSession();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const seeded = useRef(false);
+
+  // Seed once after auth resolves — demo gets rich mock feed, real users get welcome message
+  useEffect(() => {
+    if (status === "loading" || seeded.current) return;
+    seeded.current = true;
+    if (isDemoUser(session?.user?.email)) {
+      setNotifications(DEMO_NOTIFICATIONS);
+    } else {
+      setNotifications([WELCOME_NOTIFICATION]);
+    }
+  }, [status, session?.user?.email]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 

@@ -2,12 +2,14 @@
 
 import { useRef, useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import TradeCard from "@/components/TradeCard";
 import ProposeTradeModal from "@/components/ProposeTradeModal";
 import { tradeHistory as staticHistory, tradeOffers } from "@/lib/data";
 import { useInventory } from "@/lib/InventoryContext";
+import { isDemoUser } from "@/lib/demo";
 import { History, Search } from "lucide-react";
 import type { CollectibleItem, TradeHistoryEntry } from "@/lib/types";
 import type { Category } from "@/lib/constants";
@@ -70,6 +72,8 @@ type TabName = typeof TABS[number];
 
 export default function HistoryPage() {
   const router = useRouter();
+  const { data: session } = useSession();
+  const isDemo = isDemoUser(session?.user?.email);
   const { items, tradeHistoryEntries, addTradeHistory, updateTradeHistory, removeItem, addRawItem, lockItems, showToast } = useInventory();
 
   const [activeTab, setActiveTab]   = useState<TabName>("All");
@@ -94,12 +98,13 @@ export default function HistoryPage() {
   const completingIds = useRef(new Set<string>());
 
   // ── Build unified entry list (memoized to avoid rebuilding on every render) ──
+  // Demo account includes mock tradeOffers + staticHistory; real users see only real trades.
   const allEntries = useMemo(() => {
     const seen = new Set<string>();
     return [
       ...tradeHistoryEntries,
-      ...tradeOffers.map(offerToEntry),
-      ...staticHistory.map(toEntry),
+      ...(isDemo ? tradeOffers.map(offerToEntry) : []),
+      ...(isDemo ? staticHistory.map(toEntry) : []),
     ]
       .filter((t) => {
         if (seen.has(t.id) || cancelledIds.has(t.id)) return false;
@@ -108,7 +113,7 @@ export default function HistoryPage() {
       })
       .map((t) => completedAtMap[t.id] ? { ...t, completedAt: completedAtMap[t.id] } : t)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [tradeHistoryEntries, cancelledIds, completedAtMap]);
+  }, [tradeHistoryEntries, cancelledIds, completedAtMap, isDemo]);
 
   // ── Tab filtering ────────────────────────────────────────────────────────
   const filteredEntries = allEntries.filter((t) => {
@@ -353,7 +358,7 @@ export default function HistoryPage() {
             <p className="text-cream/25 text-sm mt-1">
               {searchQuery.trim()
                 ? "Try a different name or item"
-                : activeTab === "All" ? "Your deal history will appear here" : `No "${activeTab}" trades`
+                : activeTab === "All" ? "Ready for your first trade? Curate items to get started." : `No "${activeTab}" trades`
               }
             </p>
           </div>
