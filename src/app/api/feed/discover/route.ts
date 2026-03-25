@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ALL_CATEGORIES, CATEGORY_QUERIES, seedCategories } from "@/app/api/feed/seed/route";
+import { ALL_CATEGORIES, CATEGORY_QUERIES, seedCategories } from "@/lib/feedSeeder";
 
 export const runtime = "nodejs";
 
