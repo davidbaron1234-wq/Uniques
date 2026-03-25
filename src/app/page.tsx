@@ -610,7 +610,8 @@ function FeedCard({
           <p className="text-[#D4AF37]/50 text-[10px] font-semibold mt-1 uppercase tracking-widest">Vault Milestone</p>
         </div>
       )}
-      {isRadar && (
+      {/* Radar without a specific item → show want-list collage */}
+      {isRadar && !event.item && (
         <div className="overflow-x-auto flex gap-3 pb-2 no-scrollbar px-4 mt-1">
           {RADAR_IMAGES.map((src, idx) => (
             <div key={idx} className="flex-shrink-0 w-24 rounded-xl bg-white/[0.05] overflow-hidden border border-white/[0.06]">
@@ -620,7 +621,8 @@ function FeedCard({
           ))}
         </div>
       )}
-      {!isMilestone && !isRadar && event.item && (
+      {/* Any event with a concrete item → show item image */}
+      {!isMilestone && event.item && (
         <>
           <button
             onClick={() => event.item && setFeedOfferTarget({
@@ -1267,41 +1269,47 @@ export default function HomePage() {
       .finally(() => setFollowingLoading(false));
   }, [feedTab, isDemo]);
 
-  // ── FY tab — real eBay discover events (real users only) ─────────────────
-  type DiscoverEvent = {
-    id: string; type: string; title: string; imageUrl: string;
-    price: number; category: string; suggested: true;
-  };
-  const [fyDiscovered, setFyDiscovered] = useState<NetworkEvent[]>([]);
-  const [fyLoading,    setFyLoading]    = useState(false);
-  const prevCatsRef = useRef<string>("");
+  // ── FY tab — DB-backed discover feed (real users only) ───────────────────
+  // Page-based infinite scroll: each page fetches 20 socially-wrapped items.
+  // The API returns NetworkEvent-shaped objects directly — no client mapping needed.
+  type DiscoverApiEvent = NetworkEvent;
+  const [fyDiscovered,  setFyDiscovered]  = useState<NetworkEvent[]>([]);
+  const [fyLoading,     setFyLoading]     = useState(false);
+  const [fyPage,        setFyPage]        = useState(0);
+  const [fyHasMore,     setFyHasMore]     = useState(true);
+  const prevCatsRef = useRef<string>("__init__");
 
+  const fetchFyPage = (cats: string[], page: number) => {
+    setFyLoading(true);
+    const catsParam = cats.length > 0 ? `&categories=${encodeURIComponent(cats.join(","))}` : "";
+    fetch(`/api/feed/discover?page=${page}&pageSize=20${catsParam}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { events?: DiscoverApiEvent[]; hasMore?: boolean } | null) => {
+        if (data?.events?.length) {
+          setFyDiscovered((prev) => page === 1 ? data.events! : [...prev, ...data.events!]);
+          setFyHasMore(data.hasMore ?? false);
+          setFyPage(page);
+        } else if (page === 1) {
+          setFyDiscovered([]);
+          setFyHasMore(false);
+        }
+      })
+      .catch(() => { if (page === 1) { setFyDiscovered([]); setFyHasMore(false); } })
+      .finally(() => setFyLoading(false));
+  };
+
+  // Re-fetch page 1 whenever categories change
   useEffect(() => {
     if (isDemo) return;
-    const interests = preferences.favoriteCategories;
-    const cats = interests.length > 0 ? interests : ["Pokémon TCG", "Sports Cards", "Watches", "Sneakers"];
-    const catsKey = cats.join(",");
-    if (catsKey === prevCatsRef.current) return; // same categories — skip
-    prevCatsRef.current = catsKey;
-    setFyLoading(true);
-    fetch(`/api/feed/discover?categories=${encodeURIComponent(catsKey)}&count=15`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data: { events?: DiscoverEvent[] } | null) => {
-        if (!data?.events?.length) { setFyDiscovered([]); return; }
-        const events: NetworkEvent[] = data.events.map((e) => ({
-          id:         e.id,
-          user:       { name: "Market", handle: "market", avatar: "" },
-          type:       "new_listing" as EventType,
-          action:     "listed a grail for trade on eBay",
-          item:       { name: e.title, imageUrl: e.imageUrl, estimatedValue: e.price },
-          timestamp:  "Live",
-          suggested:  true,
-          categories: [e.category],
-        }));
-        setFyDiscovered(events);
-      })
-      .catch(() => { setFyDiscovered([]); })
-      .finally(() => setFyLoading(false));
+    const cats = preferences.favoriteCategories; // empty = API uses all categories
+    const key  = cats.join(",");
+    if (key === prevCatsRef.current) return;
+    prevCatsRef.current = key;
+    setFyDiscovered([]);
+    setFyPage(0);
+    setFyHasMore(true);
+    fetchFyPage(cats, 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDemo, preferences.favoriteCategories]);
 
   // ── DB-backed likes for following/activity tab posts ─────────────────────
@@ -1328,22 +1336,17 @@ export default function HomePage() {
     }
   };
 
-  // Build the active feed pool, filtered by user interests where set
+  // Pool + visible posts
+  // Demo: static FY_POOL with visibleCount pagination (client-side slice).
+  // Real users: fyDiscovered grows as pages are fetched; all fetched posts are visible.
   const pool = useMemo(() => {
     if (feedTab === "following" || feedTab === "activity") return [];
+    return isDemo ? FY_POOL : fyDiscovered;
+  }, [feedTab, isDemo, fyDiscovered]);
 
-    // Demo: use curated static pool (Unsplash images are fine for mock data)
-    if (isDemo) return FY_POOL;
-
-    // Real users: ONLY real eBay-sourced items.
-    // generateFeedEvents() uses Unsplash stock images — NEVER used for real users.
-    const interests = preferences.favoriteCategories;
-    if (!interests.length) return fyDiscovered;
-    return fyDiscovered.filter((e) => !e.categories?.length || e.categories.some((c) => interests.includes(c)));
-  }, [feedTab, isDemo, preferences.favoriteCategories, fyDiscovered]);
-
-  const visiblePosts = pool.slice(0, visibleCount);
-  const hasMore      = visibleCount < pool.length;
+  // For demo, paginate client-side; for real users, all fetched pages are visible
+  const visiblePosts = isDemo ? pool.slice(0, visibleCount) : pool;
+  const hasMore      = isDemo ? (visibleCount < pool.length) : fyHasMore;
 
   // Reset pagination when switching tabs
   useEffect(() => {
@@ -1354,21 +1357,28 @@ export default function HomePage() {
   // IntersectionObserver — fires when the sentinel scrolls into view
   useEffect(() => {
     const el = sentinelRef.current;
-    if (!el || !hasMore) return;
+    if (!el || !hasMore || feedTab !== "foryou") return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting || isInfiniteLoading) return;
-        setIsInfiniteLoading(true);
-        setTimeout(() => {
-          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, pool.length));
-          setIsInfiniteLoading(false);
-        }, 800);
+        if (!entries[0].isIntersecting || fyLoading || isInfiniteLoading) return;
+        if (isDemo) {
+          setIsInfiniteLoading(true);
+          setTimeout(() => {
+            setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, pool.length));
+            setIsInfiniteLoading(false);
+          }, 400);
+        } else {
+          // Fetch next page from API
+          const cats = preferences.favoriteCategories;
+          fetchFyPage(cats, fyPage + 1);
+        }
       },
       { threshold: 0.1 },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, isInfiniteLoading, pool.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, fyLoading, isInfiniteLoading, pool.length, feedTab, fyPage, isDemo]);
 
   // Pending offers — local state tracks dismissals (accept/decline removes from view)
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
@@ -1800,7 +1810,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* FY tab loading skeleton */}
+          {/* FY tab: initial loading skeleton */}
           {feedTab === "foryou" && !isDemo && fyLoading && fyDiscovered.length === 0 && (
             <div className="px-5 space-y-4 pt-2">
               {[0, 1, 2].map((i) => (
@@ -1809,11 +1819,11 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* FY tab empty state when eBay returned nothing */}
-          {feedTab === "foryou" && !isDemo && !fyLoading && fyDiscovered.length === 0 && pool.length === 0 && (
+          {/* FY tab: empty state */}
+          {feedTab === "foryou" && !isDemo && !fyLoading && fyDiscovered.length === 0 && (
             <div className="px-5 py-12 flex flex-col items-center text-center animate-slide-up">
-              <p className="text-sm font-bold text-cream/60 mb-1">Market data loading…</p>
-              <p className="text-xs text-cream/30 max-w-[220px]">Real listings will appear here shortly. Pull down to refresh.</p>
+              <p className="text-sm font-bold text-cream/60 mb-1">Feed is loading…</p>
+              <p className="text-xs text-cream/30 max-w-[220px]">Seeding real market data. Refresh in a moment.</p>
             </div>
           )}
 
@@ -1821,9 +1831,9 @@ export default function HomePage() {
           <div ref={sentinelRef} className="px-5">
             {hasMore ? (
               <div className="py-10 flex flex-col items-center justify-center gap-2">
-                <Loader2 className={`w-5 h-5 text-[#CAE6CE] ${isInfiniteLoading ? "animate-spin opacity-60" : "opacity-20"}`} />
+                <Loader2 className={`w-5 h-5 text-[#CAE6CE] ${(fyLoading || isInfiniteLoading) ? "animate-spin opacity-60" : "opacity-20"}`} />
                 <span className="text-[10px] text-[#787569] opacity-60">
-                  {isInfiniteLoading ? "Loading more grails…" : "Scroll for more"}
+                  {(fyLoading || isInfiniteLoading) ? "Loading more grails…" : "Scroll for more"}
                 </span>
               </div>
             ) : feedTab === "foryou" && pool.length > 0 ? (

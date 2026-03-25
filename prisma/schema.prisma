@@ -115,6 +115,21 @@ model Activity {
   @@index([userId])
 }
 
+// ── Market Items (eBay-seeded feed pool) ─────────────────────────────────────
+// Populated by POST /api/feed/seed — never mixed with user-owned Item records.
+model MarketItem {
+  id        String   @id @default(cuid())
+  ebayId    String   @unique
+  title     String
+  imageUrl  String
+  price     Float
+  category  String
+  createdAt DateTime @default(now())
+
+  @@index([category])
+  @@index([createdAt])
+}
+
 // ── Messaging ─────────────────────────────────────────────────────────────────
 model Conversation {
   id           String                    @id @default(cuid())
