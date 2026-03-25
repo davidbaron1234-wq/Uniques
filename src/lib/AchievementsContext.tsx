@@ -81,63 +81,70 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
     setAchievements(loadAchievements());
   }, []);
 
-  // Once auth resolves: seed achievements if no localStorage state exists yet.
-  // Demo account → unlock the showcase set; real users → only "early-adopter".
-  // If localStorage already has data it is respected (earned achievements survive).
+  // Demo account: seed showcase achievements from static data (localStorage cache)
   useEffect(() => {
     if (authStatus === "loading") return;
     if (typeof window === "undefined") return;
-    if (localStorage.getItem(STORAGE_KEY)) return; // respect previously-earned state
+    if (!isDemoUser(session?.user?.email)) return; // real users handled by DB sync below
+    if (localStorage.getItem(STORAGE_KEY)) return; // respect previously-earned demo state
 
-    const demo = isDemoUser(session?.user?.email);
-    const seeded = ACHIEVEMENTS.map((a) => {
-      const shouldUnlock = demo ? DEMO_UNLOCKED_IDS.has(a.id) : a.id === "early-adopter";
-      return {
-        ...a,
-        status:      (shouldUnlock ? "unlocked" : "locked") as Achievement["status"],
-        unlockedAt:  shouldUnlock ? a.unlockedAt  : undefined,
-        catalystItem: shouldUnlock ? a.catalystItem : undefined,
-      };
-    });
+    const seeded = ACHIEVEMENTS.map((a) => ({
+      ...a,
+      status:      (DEMO_UNLOCKED_IDS.has(a.id) ? "unlocked" : "locked") as Achievement["status"],
+      unlockedAt:  DEMO_UNLOCKED_IDS.has(a.id) ? a.unlockedAt  : undefined,
+      catalystItem: DEMO_UNLOCKED_IDS.has(a.id) ? a.catalystItem : undefined,
+    }));
     setAchievements(seeded);
     saveAchievements(seeded);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
 
-  // Sync DB achievements on login — cross-device persistence
-  const dbAchSynced = useRef(false);
+  // Real users: DB is the single source of truth.
+  // Re-runs whenever the user's session ID changes (login / account switch).
+  // Builds the authoritative achievement list from the canonical ACHIEVEMENTS
+  // definitions + DB unlock records — overwriting any stale localStorage cache.
   useEffect(() => {
-    if (authStatus === "loading" || dbAchSynced.current) return;
+    if (authStatus === "loading") return;
     if (!session?.user?.id || isDemoUser(session.user.email)) return;
-    dbAchSynced.current = true;
+
     fetch("/api/achievements")
       .then((r) => r.ok ? r.json() : null)
-      .then((data: { achievements: { achievementId: string; unlockedAt: string; catalystName?: string; catalystImage?: string }[] } | null) => {
-        if (!data?.achievements?.length) return;
-        setAchievements((prev) => {
-          let changed = false;
-          const next = prev.map((a) => {
-            const record = data.achievements.find((r) => r.achievementId === a.id);
-            if (record && a.status !== "unlocked") {
-              changed = true;
-              return {
-                ...a,
-                status: "unlocked" as const,
-                unlockedAt: new Date(record.unlockedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-                catalystItem: record.catalystName
-                  ? { name: record.catalystName, imageUrl: record.catalystImage ?? "" }
-                  : a.catalystItem,
-              };
-            }
-            return a;
-          });
-          if (changed) saveAchievements(next);
-          return changed ? next : prev;
+      .then((data: {
+        achievements: {
+          achievementId: string;
+          unlockedAt:    string;
+          catalystName?: string;
+          catalystImage?: string;
+        }[];
+      } | null) => {
+        if (!data) return;
+
+        const dbMap = new Map(data.achievements.map((r) => [r.achievementId, r]));
+
+        // Rebuild from canonical ACHIEVEMENTS + DB records — DB wins
+        const authoritative = ACHIEVEMENTS.map((a) => {
+          const record = dbMap.get(a.id);
+          if (record) {
+            return {
+              ...a,
+              status:      "unlocked" as const,
+              unlockedAt:  new Date(record.unlockedAt).toLocaleDateString("en-US", {
+                month: "short", day: "numeric", year: "numeric",
+              }),
+              catalystItem: record.catalystName
+                ? { name: record.catalystName, imageUrl: record.catalystImage ?? "" }
+                : a.catalystItem,
+            };
+          }
+          return a; // not in DB → locked (canonical default)
         });
+
+        setAchievements(authoritative);
+        saveAchievements(authoritative);
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authStatus, session?.user?.id]);
+  }, [session?.user?.id, authStatus]);
 
   // Shared state-update + notification logic used by both unlock paths
   const applyUnlock = useCallback(

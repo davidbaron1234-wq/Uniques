@@ -55,6 +55,19 @@ export async function POST(request: Request) {
       return Response.json({ error: "title is required" }, { status: 400 });
     }
 
+    // ── Free tier vault limit ─────────────────────────────────────────────
+    if (session.user.tier !== "pro") {
+      const existingCount = await prisma.item.count({
+        where: { userId: session.user.id, status: { not: "TRADED" } },
+      });
+      if (existingCount >= 10) {
+        return Response.json(
+          { error: "Free tier vault limit reached. Upgrade to Pro for unlimited items.", code: "UPGRADE_REQUIRED" },
+          { status: 403 },
+        );
+      }
+    }
+
     const category = body.category || "Other";
     const imageUrl = body.imageUrl ?? "";
 

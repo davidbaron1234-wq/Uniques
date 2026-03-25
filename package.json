@@ -29,7 +29,8 @@
     "pg": "^8.20.0",
     "react": "^18",
     "react-dom": "^18",
-    "recharts": "^3.8.0"
+    "recharts": "^3.8.0",
+    "stripe": "^20.4.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

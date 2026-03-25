@@ -5,6 +5,8 @@ import { CollectibleItem, TradeHistoryEntry } from "@/lib/types";
 import { currentUser } from "@/lib/data";
 import { useInventory } from "@/lib/InventoryContext";
 import { useNotifications } from "@/lib/NotificationContext";
+import { useSession } from "next-auth/react";
+import { isDemoUser } from "@/lib/demo";
 import { formatValue } from "@/lib/format";
 import { ArrowLeftRight, Award, Box, Check, ChevronRight, DollarSign, MessageSquare, Plus, Send, Shield, Smile, X } from "lucide-react";
 import { PowerPicker } from "@/components/PowerPicker";
@@ -149,6 +151,8 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
   // Pull live inventory directly from context — always reflects uniques_inventory_v2
   const { addTradeHistory, lockItems, items: contextItems } = useInventory();
   const { addNotification } = useNotifications();
+  const { data: session } = useSession();
+  const isDemo = isDemoUser(session?.user?.email);
 
   const [selectedTargetItem, setSelectedTargetItem] = useState<CollectibleItem | null>(targetItem ?? null);
   const [showItemPicker, setShowItemPicker] = useState(false);
@@ -248,6 +252,39 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
       isRead:  false,
       href:    "/?tab=history",
     });
+
+    // Persist trade to DB for real users (fire-and-forget)
+    // Items with IDs not starting with "new-" are confirmed DB records
+    if (!isDemo && session?.user?.id) {
+      const dbItemIds = selectedItems
+        .map((i) => i.id)
+        .filter((id) => id && !id.startsWith("new-"));
+      fetch("/api/trades", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          proposerItemIds: dbItemIds,
+          offerData: {
+            toUser:    { name: targetUser.name, avatar: targetUser.avatar },
+            fromItems: selectedItems.map((i) => ({
+              id:             i.id,
+              name:           i.name,
+              imageUrl:       (i as { customImage?: string }).customImage ?? i.imageUrl,
+              estimatedValue: i.estimatedValue,
+            })),
+            toItems: selectedTargetItem ? [{
+              id:             selectedTargetItem.id,
+              name:           selectedTargetItem.name,
+              imageUrl:       selectedTargetItem.imageUrl,
+              estimatedValue: selectedTargetItem.estimatedValue,
+            }] : [],
+            fromCash: cashOffer,
+            toCash:   theirCashOffer,
+            message:  message.trim(),
+          },
+        }),
+      }).catch(() => {});
+    }
 
     // Store for inbox pre-population if the user visits later
     const payload = {

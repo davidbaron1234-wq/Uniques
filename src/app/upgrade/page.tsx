@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, X, Zap, TrendingUp, ScanLine, Package, Star, ArrowLeft, Sparkles, Crown, Trophy } from "lucide-react";
+import { Check, X, Zap, TrendingUp, ScanLine, Package, Star, ArrowLeft, Sparkles, Crown, Trophy, Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
 const FREE_FEATURES = [
   { label: "Up to 10 vault pieces",  ok: true  },
@@ -29,6 +30,7 @@ const PRO_FEATURES = [
 export default function UpgradePage() {
   const router = useRouter();
   const { status } = useSession();
+  const [upgrading, setUpgrading] = useState(false);
 
   if (status === "unauthenticated") {
     router.replace("/api/auth/signin");
@@ -36,8 +38,23 @@ export default function UpgradePage() {
   }
   if (status === "loading") return null;
 
-  const handleUpgrade = () => {
-    router.push("/checkout");
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const data = await res.json() as { url?: string; fallback?: boolean; error?: string };
+      if (data.url) {
+        // Real Stripe session — redirect to hosted checkout
+        window.location.href = data.url;
+      } else {
+        // Stripe not yet configured (dev / staging) — use simulated checkout page
+        router.push("/checkout");
+      }
+    } catch {
+      router.push("/checkout");
+    } finally {
+      setUpgrading(false);
+    }
   };
 
   return (
@@ -109,13 +126,18 @@ export default function UpgradePage() {
             {/* CTA */}
             <button
               onClick={handleUpgrade}
-              className="w-full py-4 rounded-2xl bg-primary text-charcoal-dark font-extrabold text-base hover:bg-primary/90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 relative overflow-hidden group"
+              disabled={upgrading}
+              className="w-full py-4 rounded-2xl bg-primary text-charcoal-dark font-extrabold text-base hover:bg-primary/90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 relative overflow-hidden group disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {/* Shimmer */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+              {!upgrading && (
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+              )}
               <span className="relative flex items-center justify-center gap-2">
-                <Zap className="w-5 h-5" />
-                Upgrade to Pro
+                {upgrading ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" />Redirecting to checkout…</>
+                ) : (
+                  <><Zap className="w-5 h-5" />Upgrade to Pro</>
+                )}
               </span>
             </button>
 

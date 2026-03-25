@@ -103,39 +103,24 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Real users: fetch from DB; seed welcome notification if this is the first visit
+    // Real users: fetch from DB. New users will see an empty inbox until their first
+    // notification arrives (e.g. the early-adopter achievement toast on first item add).
     fetch("/api/notifications")
       .then((r) => r.ok ? r.json() : null)
-      .then(async (data: { notifications: Array<{
+      .then((data: { notifications: Array<{
         id: string; type: string; message: string; isRead: boolean; href: string | null; createdAt: string;
       }> } | null) => {
         if (!data) return;
-
-        if (data.notifications.length === 0) {
-          // First time: create welcome notification in DB then display it
-          const res = await fetch("/api/notifications", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ message: WELCOME_NOTIFICATION.message, type: "achievement", href: "/inventory" }),
-          });
-          if (res.ok) {
-            const created = await res.json() as { notification: { id: string; createdAt: string } };
-            setNotifications([{ ...WELCOME_NOTIFICATION, id: created.notification.id }]);
-          } else {
-            setNotifications([WELCOME_NOTIFICATION]);
-          }
-        } else {
-          setNotifications(
-            data.notifications.map((n) => ({
-              id:      n.id,
-              type:    n.type as NotifType,
-              message: n.message,
-              time:    relativeTime(n.createdAt),
-              isRead:  n.isRead,
-              href:    n.href ?? undefined,
-            }))
-          );
-        }
+        setNotifications(
+          data.notifications.map((n) => ({
+            id:      n.id,
+            type:    n.type as NotifType,
+            message: n.message,
+            time:    relativeTime(n.createdAt),
+            isRead:  n.isRead,
+            href:    n.href ?? undefined,
+          }))
+        );
       })
       .catch(() => {
         // Offline: fall back to welcome notification in memory

@@ -951,7 +951,18 @@ export default function ProfilePage() {
           status:         "VAULT",
         }),
       })
-        .then((r) => r.ok ? r.json() : null)
+        .then(async (r) => {
+          if (r.status === 403) {
+            const d = await r.json() as { code?: string };
+            if (d.code === "UPGRADE_REQUIRED") {
+              // Undo the optimistic add — user hit the free tier limit
+              removeItem(item.id);
+              setShowLimitModal(true);
+            }
+            return null;
+          }
+          return r.ok ? r.json() : null;
+        })
         .then((data: { item: unknown; newAchievements: string[] } | null) => {
           if (!data) return;
           setDbItemCount((c) => (c ?? 0) + 1);
@@ -1112,6 +1123,35 @@ export default function ProfilePage() {
       (deal.theirCash ?? 0) +
       (editingItem.estimatedValue ?? 0);
     checkTradeAchievements(completedBefore + 1, tradeTotal);
+
+    // Persist to DB for real users
+    if (!isDemo) {
+      // Post trade completion to "My Activity" social feed
+      fetch("/api/activities", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          type:     "trade_completed",
+          title:    `Completed a trade with ${deal.counterpartyName}`,
+          imageUrl: deal.theirItems?.[0]?.imageUrl ?? "",
+          metadata: {
+            counterparty: deal.counterpartyName,
+            tradeValue:   tradeTotal,
+            itemNames:    deal.theirItems?.map((i) => i.name).slice(0, 3) ?? [],
+          },
+        }),
+      }).catch(() => {});
+
+      // Mark traded item as TRADED in DB (preserves history, removes from vault)
+      const itemId = editingItem.id;
+      if (itemId && !itemId.startsWith("new-")) {
+        fetch(`/api/items?id=${itemId}`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ status: "TRADED" }),
+        }).catch(() => {});
+      }
+    }
   };
 
   const categoryCounts = useMemo(() =>

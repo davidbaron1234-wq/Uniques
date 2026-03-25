@@ -50,9 +50,10 @@ export default function LoginPage() {
         {/* Card */}
         <div className="glass border border-white/[0.08] rounded-3xl p-6 space-y-5 shadow-2xl">
 
-          {/* Google mock button */}
+          {/* Google OAuth button */}
           <button
             type="button"
+            onClick={() => signIn("google", { callbackUrl: "/" })}
             className="w-full flex items-center justify-center gap-3 py-3 rounded-2xl bg-white/[0.06] border border-white/[0.08] text-cream/70 text-sm font-semibold hover:bg-white/[0.1] active:scale-[0.98] transition-all"
           >
             {/* Google "G" wordmark */}

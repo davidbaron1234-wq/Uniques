@@ -970,13 +970,16 @@ function ActivityCard({
 
   const typeLabel = item.type === "grail_published"      ? "New Grail"
     : item.type === "achievement_unlocked" ? "Achievement"
+    : item.type === "trade_completed"      ? "Trade"
     : item.type === "radar_added"          ? "Radar Update"
     : "Activity";
   const typeCls = item.type === "grail_published"      ? "bg-yellow-400/15 text-yellow-400"
     : item.type === "achievement_unlocked" ? "bg-amber-400/15 text-amber-400"
+    : item.type === "trade_completed"      ? "bg-green-400/15 text-green-400"
     : "bg-primary/15 text-primary";
   const action = item.type === "grail_published"      ? "added a new grail to their vault"
     : item.type === "achievement_unlocked" ? "unlocked an achievement"
+    : item.type === "trade_completed"      ? "completed a trade"
     : item.type === "radar_added"          ? "added an item to their Radar"
     : "posted an update";
   const timeAgo = (() => {
@@ -1011,15 +1014,30 @@ function ActivityCard({
         <span className="text-[10px] text-cream/25 font-medium flex-shrink-0">{timeAgo}</span>
       </div>
 
+      {/* Image — shown when available */}
       {item.imageUrl && (
-        <>
-          <div className="mx-4 rounded-xl overflow-hidden bg-white/[0.04] h-48 w-[calc(100%-2rem)]">
-            <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
-          </div>
-          <div className="px-4 pt-3">
-            <p className="text-sm font-bold text-cream leading-tight truncate">{item.title}</p>
-          </div>
-        </>
+        <div className="mx-4 rounded-xl overflow-hidden bg-white/[0.04] h-48 w-[calc(100%-2rem)]">
+          <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+        </div>
+      )}
+
+      {/* Title — always shown; achievement/trade cards have no image but still need a headline */}
+      {(item.title) && (
+        <div className="px-4 pt-3">
+          <p className="text-sm font-bold text-cream leading-tight truncate">{item.title}</p>
+          {/* Achievement description from metadata */}
+          {item.type === "achievement_unlocked" && !!item.metadata?.description && (
+            <p className="text-[11px] text-cream/40 mt-0.5 leading-relaxed">
+              {String(item.metadata.description)}
+            </p>
+          )}
+          {/* Trade value summary */}
+          {item.type === "trade_completed" && !!item.metadata?.tradeValue && (
+            <p className="text-[11px] text-primary/70 mt-0.5 font-semibold">
+              Deal value: ${Number(item.metadata.tradeValue).toLocaleString()}
+            </p>
+          )}
+        </div>
       )}
 
       {/* Zero mock engagement: likes seeded from DB */}
@@ -1432,11 +1450,8 @@ export default function HomePage() {
   };
   const [activityFeed,    setActivityFeed]    = useState<ActivityFeedItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
-  const activityLoadedRef = useRef(false);
-
   useEffect(() => {
-    if (feedTab !== "activity" || isDemo || activityLoadedRef.current) return;
-    activityLoadedRef.current = true;
+    if (feedTab !== "activity" || isDemo) return;
     setActivityLoading(true);
     fetch("/api/activities")
       .then((r) => r.ok ? r.json() : null)

@@ -146,6 +146,24 @@ model MarketItem {
   @@index([createdAt])
 }
 
+// ── Trades ────────────────────────────────────────────────────────────────────
+// Created when a user proposes a trade via ProposeTradeModal.
+// proposerItemIds holds the DB item IDs being offered (set to IN_TRADE on create,
+// TRADED on completion or back to VAULT on decline).
+// offerData (JSON) holds the full display payload: items, cash, message, counterparty.
+model Trade {
+  id              String    @id @default(cuid())
+  proposerId      String
+  proposerItemIds String[]  // DB item IDs being offered
+  offerData       Json      // snapshot of the full offer for display & auditing
+  status          String    @default("pending") // pending | completed | declined
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([proposerId])
+  @@index([status])
+}
+
 // ── Messaging ─────────────────────────────────────────────────────────────────
 model Conversation {
   id           String                    @id @default(cuid())
