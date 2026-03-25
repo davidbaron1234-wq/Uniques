@@ -15,6 +15,6 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as { categories?: string[] };
   const cats  = (body.categories ?? ALL_CATEGORIES).filter((c) => CATEGORY_QUERIES[c]);
-  const seeded = await seedCategories(cats);
-  return NextResponse.json({ seeded, categories: cats });
+  const result = await seedCategories(cats);
+  return NextResponse.json({ seeded: result.total, categories: cats, details: result.details });
 }

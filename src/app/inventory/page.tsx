@@ -677,7 +677,7 @@ export default function ProfilePage() {
   const isFree = !session?.user?.tier || session.user.tier === "free";
   const isDemo = isDemoUser(session?.user?.email);
   const { items, setItems, updateItem, removeItem, unlockItems, addTradeHistory, addRawItem, tradeHistoryEntries } = useInventory();
-  const { achievements } = useAchievements();
+  const { achievements, unlockAchievement, applyServerAchievement } = useAchievements();
   const [profile, setProfile] = useState<UserProfile>({
     name: "", bio: "", avatar: "", joinDate: "",
   });
@@ -930,10 +930,15 @@ export default function ProfilePage() {
     // addRawItem updates the shared InventoryContext — items on this page
     // re-renders automatically since items now comes from context.
     addRawItem(item);
+    // Check graded achievements client-side with the updated item list
+    checkGradedAchievements([item, ...items]);
 
     // Persist to DB for real users (fire-and-forget)
     if (!isDemo) {
-      const finalImageUrl = newItem.customImage ?? newItem.imagePreview ?? "";
+      // Priority: user's own uploaded photo > catalog/eBay image > nothing.
+      // customImage is the photo the user took or uploaded; never discard it in favour of
+      // a generic eBay thumbnail.
+      const finalImageUrl = newItem.customImage || newItem.imagePreview || "";
       fetch("/api/items", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -943,11 +948,19 @@ export default function ProfilePage() {
           imageUrl:       finalImageUrl,
           estimatedValue: newItem.estimatedValue ?? null,
           upForTrade:     newItem.upForTrade ?? false,
+          status:         "VAULT",
         }),
       })
-        .then((r) => {
-          if (!r.ok) return;
+        .then((r) => r.ok ? r.json() : null)
+        .then((data: { item: unknown; newAchievements: string[] } | null) => {
+          if (!data) return;
           setDbItemCount((c) => (c ?? 0) + 1);
+          // Apply server-confirmed achievements (server already wrote to DB — no double-write)
+          if (data.newAchievements?.length) {
+            data.newAchievements.forEach((id) =>
+              applyServerAchievement(id, finalImageUrl ? { name: newItem.name, imageUrl: finalImageUrl } : undefined)
+            );
+          }
           // Record activity so it appears in "My Activity" feed
           fetch("/api/activities", {
             method:  "POST",
@@ -1000,7 +1013,51 @@ export default function ProfilePage() {
       pieces: editConfig.pieces,
     });
     setEditingItem(null);
+    // Check graded achievements after edit (graded status or grade may have changed)
+    checkGradedAchievements(items.map((i) => i.id === editingItem.id ? { ...i, ...editConfig, estimatedValue: editConfig.askingPrice } : i));
+    // Persist value change to DB and run achievement check
+    if (!isDemo) {
+      fetch(`/api/items?id=${editingItem.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          estimatedValue: editConfig.askingPrice ?? null,
+          upForTrade:     editConfig.status === "For Trade",
+        }),
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data: { newAchievements: string[] } | null) => {
+          data?.newAchievements?.forEach((id) => applyServerAchievement(id));
+        })
+        .catch(() => {});
+    }
   };
+
+  // ── Client-side achievement checks ───────────────────────────────────────
+
+  /** Check graded-item achievements against the current items array. */
+  const checkGradedAchievements = useCallback((currentItems: CollectibleItem[]) => {
+    if (isDemo) return;
+    const psa10 = currentItems.filter(
+      (i) => i.graded && i.grader === "PSA" && String(i.gradeNum).trim() === "10"
+    );
+    const premium = currentItems.filter(
+      (i) => i.graded && (
+        (i.grader === "PSA" && String(i.gradeNum).trim() === "10") ||
+        (i.grader === "BGS" && parseFloat(String(i.gradeNum) || "0") >= 9.5)
+      )
+    );
+    if (psa10.length >= 5)  unlockAchievement("mint-condition");
+    if (premium.length >= 10) unlockAchievement("flawless");
+  }, [isDemo, unlockAchievement]);
+
+  /** Check trade-based achievements after a trade completes. */
+  const checkTradeAchievements = useCallback((completedCount: number, tradeTotal: number) => {
+    if (isDemo) return;
+    if (completedCount === 1) unlockAchievement("first-blood");
+    if (completedCount >= 10) unlockAchievement("dealmaker");
+    if (tradeTotal >= 10_000) unlockAchievement("high-roller");
+  }, [isDemo, unlockAchievement]);
 
   const handleDeleteItem = () => {
     if (!editingItem) return;
@@ -1047,6 +1104,14 @@ export default function ProfilePage() {
     addTradeHistory(entry);
     removeItem(editingItem.id);
     setEditingItem(null);
+
+    // Trade achievements: count accepted trades + total deal value
+    const completedBefore = tradeHistoryEntries.filter((e) => e.status === "accepted").length;
+    const tradeTotal =
+      (deal.theirItems?.reduce((s, i) => s + (i.estimatedValue || 0), 0) ?? 0) +
+      (deal.theirCash ?? 0) +
+      (editingItem.estimatedValue ?? 0);
+    checkTradeAchievements(completedBefore + 1, tradeTotal);
   };
 
   const categoryCounts = useMemo(() =>
@@ -2082,14 +2147,24 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto overscroll-contain p-5">
-                  <ItemConfigForm config={editConfig} onChange={setEditConfig} category={editingItem.category} />
+                  <ItemConfigForm config={editConfig} onChange={setEditConfig} category={editingItem.category} isManualEntry={!editingItem.masterId} />
                 </div>
                 <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
                   <button onClick={() => setViewMode(true)} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Back</button>
-                  <button onClick={handleSaveEdit} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all">
-                    <Save className="w-4 h-4" />
-                    Save Changes
-                  </button>
+                  {(() => {
+                    const needsPrice = (editConfig.status === "For Trade" || editConfig.status === "For Sale") && !(editConfig.askingPrice && editConfig.askingPrice > 0);
+                    return (
+                      <button
+                        onClick={handleSaveEdit}
+                        disabled={needsPrice}
+                        title={needsPrice ? "Set an asking price to continue" : undefined}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-sm active:scale-[0.97] transition-all ${needsPrice ? "bg-background-light text-cream/20 cursor-not-allowed" : "bg-primary/20 text-primary hover:bg-primary/30"}`}
+                      >
+                        <Save className="w-4 h-4" />
+                        {needsPrice ? "Set a Price First" : "Save Changes"}
+                      </button>
+                    );
+                  })()}
                 </div>
               </>
             )}

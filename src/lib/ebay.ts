@@ -348,7 +348,10 @@ async function fetchRawEbay(
   const priceFilter = maxPrice
     ? `price:[${priceMin}..${maxPrice}]`
     : `price:[${priceMin}..]`;
-  url.searchParams.set("filter", `buyingOptions:{FIXED_PRICE},${priceFilter},priceCurrency:USD`);
+  // Include both fixed-price and auction listings so that collectibles
+  // predominantly sold at auction (Rolex, coins, rare sneakers, comics)
+  // still appear in the feed. Both formats carry a price value.
+  url.searchParams.set("filter", `buyingOptions:{FIXED_PRICE|AUCTION},${priceFilter},priceCurrency:USD`);
   url.searchParams.set("sort", "-price");
   if (categoryId) url.searchParams.set("category_ids", categoryId);
 

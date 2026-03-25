@@ -13,7 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ALL_CATEGORIES, CATEGORY_QUERIES, seedCategories } from "@/lib/feedSeeder";
 
-export const runtime = "nodejs";
+export const runtime     = "nodejs";
+export const maxDuration = 60;
 
 // ── Social context pools ──────────────────────────────────────────────────────
 
@@ -65,8 +66,12 @@ function pick<T>(arr: T[], key: string): T {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
-  const requestedCats = (searchParams.get("categories") ?? "")
-    .split(",").map((c) => c.trim()).filter((c) => CATEGORY_QUERIES[c]);
+  const rawRequested  = (searchParams.get("categories") ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+  const requestedCats = rawRequested.filter((c) => CATEGORY_QUERIES[c]);
+  // If the caller explicitly requested categories but NONE map to a seeded eBay pool, return empty
+  if (rawRequested.length > 0 && requestedCats.length === 0) {
+    return NextResponse.json({ events: [], hasMore: false, page: 1 });
+  }
   const cats     = requestedCats.length > 0 ? requestedCats : ALL_CATEGORIES;
   const page     = Math.max(1, parseInt(searchParams.get("page")     ?? "1"));
   const pageSize = Math.min(20, parseInt(searchParams.get("pageSize") ?? "20"));
@@ -110,6 +115,13 @@ export async function GET(req: NextRequest) {
       if (i < row.length) interleaved.push(row[i]);
     }
   }
+
+  // Fisher-Yates shuffle so each request returns a fresh ordering
+  for (let i = interleaved.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [interleaved[i], interleaved[j]] = [interleaved[j], interleaved[i]];
+  }
+
   const pageItems = interleaved.slice(0, pageSize);
 
   // ── Social wrapping ────────────────────────────────────────────────────────
@@ -130,9 +142,8 @@ export async function GET(req: NextRequest) {
   });
 
   // ── hasMore: are there more items beyond this page? ───────────────────────
-  // Use the smallest per-cat count to be conservative
-  const minCatCount = Math.min(...catCounts.map((c, i) => thinCats.includes(cats[i]) ? 0 : c));
-  const hasMore = catSkip + perCat < minCatCount;
+  // True if at least one category has more rows after this skip window
+  const hasMore = catRows.some((r) => r.length >= perCat);
 
   // ── Verification log ──────────────────────────────────────────────────────
   const VALID_CDNS = ["ebayimg.com", "pokemontcg.io", "rebrickable.com"];

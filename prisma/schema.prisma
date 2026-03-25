@@ -36,18 +36,34 @@ model Profile {
 // ── Items (published grails / vault items) ───────────────────────────────────
 model Item {
   id             String   @id @default(cuid())
-  userId         String                    // Supabase Auth UUID
+  userId         String                    // current owner — swapped on trade completion
   title          String
   category       String
   imageUrl       String   @default("")
   estimatedValue Float?
   upForTrade     Boolean  @default(false)
   description    String   @default("")
+  // Trade lifecycle: VAULT (owned, not active) | IN_TRADE (locked in a deal) | TRADED (ownership transferred)
+  status         String   @default("VAULT")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@index([userId])
   @@index([category])
+  @@index([status])
+}
+
+// ── User Achievements ─────────────────────────────────────────────────────────
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+  catalystName  String?
+  catalystImage String?
+
+  @@unique([userId, achievementId])
+  @@index([userId])
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ interface ItemConfigFormProps {
   config: ItemConfig;
   onChange: (config: ItemConfig) => void;
   category?: string;
+  isManualEntry?: boolean;
 }
 
 // ── Condition definitions per category (exported as single source of truth) ──
@@ -120,7 +121,7 @@ const STATUSES: { value: ItemStatus; label: string; desc: string }[] = [
   { value: "For Sale", label: "For Sale", desc: "Accepting cash" },
 ];
 
-export default function ItemConfigForm({ config, onChange, category }: ItemConfigFormProps) {
+export default function ItemConfigForm({ config, onChange, category, isManualEntry }: ItemConfigFormProps) {
   const update = (partial: Partial<ItemConfig>) => onChange({ ...config, ...partial });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPriceTip, setShowPriceTip] = useState(false);
@@ -346,7 +347,15 @@ export default function ItemConfigForm({ config, onChange, category }: ItemConfi
         </div>
 
         {/* ── Market Insights panel ── */}
-        {(() => {
+        {isManualEntry ? (
+          <div className="mt-2 bg-white/[0.03] border border-white/[0.05] rounded-xl p-3.5 flex items-start gap-3">
+            <span className="text-xl leading-none mt-0.5">🗺️</span>
+            <div>
+              <p className="text-xs font-bold text-cream/60 mb-0.5">Uncharted Territory</p>
+              <p className="text-[10px] text-cream/30 leading-relaxed">This item is highly unique, or wasn&apos;t selected from our official catalog. We don&apos;t have historical data yet, so you set the market!</p>
+            </div>
+          </div>
+        ) : (() => {
           const base = marketBase;
           const estValue  = Math.round(base * 1.00 * 100) / 100;
           const high30    = Math.round(base * 1.20 * 100) / 100;
@@ -358,7 +367,7 @@ export default function ItemConfigForm({ config, onChange, category }: ItemConfi
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <TrendingUp className="w-3 h-3 text-primary/60" />
-                  <span className="text-[10px] font-bold text-cream/35 uppercase tracking-wider">Market Insights</span>
+                  <span className="text-[10px] font-bold text-cream/35 uppercase">Market Insights</span>
                 </div>
                 <button
                   type="button"

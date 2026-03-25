@@ -38,14 +38,17 @@ function loadPreferences(): UserPreferences {
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
   const [isMounted, setIsMounted] = useState(false);
-  const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  // Initialize synchronously from localStorage so the first render already has the
+  // user's saved categories — prevents a spurious all-categories feed fetch on load.
+  const [preferences, setPreferences] = useState<UserPreferences>(() =>
+    typeof window !== "undefined" ? loadPreferences() : DEFAULT_PREFERENCES
+  );
   // Track whether we've already loaded from DB to avoid re-loading
   const dbLoaded = useRef(false);
   // Track last synced categories to avoid unnecessary PATCH calls
   const lastSyncedRef = useRef<string>("");
 
   useEffect(() => {
-    setPreferences(loadPreferences());
     setIsMounted(true);
   }, []);
 

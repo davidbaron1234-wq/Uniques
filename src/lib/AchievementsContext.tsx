@@ -11,9 +11,11 @@ import { isDemoUser } from "@/lib/demo";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AchievementsContextValue {
-  achievements:      Achievement[];
-  unlockAchievement: (id: string, catalystItem?: { name: string; imageUrl: string }) => void;
-  isUnlocked:        (id: string) => boolean;
+  achievements:           Achievement[];
+  unlockAchievement:      (id: string, catalystItem?: { name: string; imageUrl: string }) => void;
+  /** Apply a server-confirmed unlock: updates state + fires notification. Does NOT re-POST to DB. */
+  applyServerAchievement: (id: string, catalystItem?: { name: string; imageUrl: string }) => void;
+  isUnlocked:             (id: string) => boolean;
 }
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
@@ -102,11 +104,46 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
 
-  const unlockAchievement = useCallback(
-    (id: string, catalystItem?: { name: string; imageUrl: string }) => {
+  // Sync DB achievements on login — cross-device persistence
+  const dbAchSynced = useRef(false);
+  useEffect(() => {
+    if (authStatus === "loading" || dbAchSynced.current) return;
+    if (!session?.user?.id || isDemoUser(session.user.email)) return;
+    dbAchSynced.current = true;
+    fetch("/api/achievements")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { achievements: { achievementId: string; unlockedAt: string; catalystName?: string; catalystImage?: string }[] } | null) => {
+        if (!data?.achievements?.length) return;
+        setAchievements((prev) => {
+          let changed = false;
+          const next = prev.map((a) => {
+            const record = data.achievements.find((r) => r.achievementId === a.id);
+            if (record && a.status !== "unlocked") {
+              changed = true;
+              return {
+                ...a,
+                status: "unlocked" as const,
+                unlockedAt: new Date(record.unlockedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+                catalystItem: record.catalystName
+                  ? { name: record.catalystName, imageUrl: record.catalystImage ?? "" }
+                  : a.catalystItem,
+              };
+            }
+            return a;
+          });
+          if (changed) saveAchievements(next);
+          return changed ? next : prev;
+        });
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus, session?.user?.id]);
+
+  // Shared state-update + notification logic used by both unlock paths
+  const applyUnlock = useCallback(
+    (id: string, catalystItem: { name: string; imageUrl: string } | undefined, persistToDB: boolean) => {
       setAchievements((prev) => {
         const target = prev.find((a) => a.id === id);
-        // Already unlocked or unknown id — skip silently
         if (!target || target.status === "unlocked") return prev;
 
         const unlockedAt = new Date().toLocaleDateString("en-US", {
@@ -118,10 +155,9 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
             ? { ...a, status: "unlocked" as const, unlockedAt, catalystItem: catalystItem ?? a.catalystItem }
             : a,
         );
-
         saveAchievements(updated);
 
-        // Fire notification after state update using ref to avoid stale closures
+        // Notification toast
         setTimeout(() => {
           addNotificationRef.current({
             id:      `achievement-${id}-${Date.now()}`,
@@ -133,17 +169,17 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
           });
         }, 0);
 
-        // Record activity for real users (fire-and-forget, non-blocking)
+        // Persist to DB for real users (client-triggered path only)
+        // Server-triggered path already persisted in checkUserAchievements — don't double-write
         const s = sessionRef.current;
-        if (!isDemoUser(s?.user?.email) && s?.user?.id) {
-          fetch("/api/activities", {
+        if (persistToDB && !isDemoUser(s?.user?.email) && s?.user?.id) {
+          fetch("/api/achievements", {
             method:  "POST",
             headers: { "Content-Type": "application/json" },
             body:    JSON.stringify({
-              type:     "achievement_unlocked",
-              title:    target.title,
-              imageUrl: catalystItem?.imageUrl ?? "",
-              metadata: { achievementId: id, description: target.description },
+              achievementId: id,
+              catalystName:  catalystItem?.name,
+              catalystImage: catalystItem?.imageUrl,
             }),
           }).catch(() => {});
         }
@@ -154,13 +190,25 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  /** Client-triggered unlock: updates state, fires notification, persists to DB + creates Activity. */
+  const unlockAchievement = useCallback(
+    (id: string, catalystItem?: { name: string; imageUrl: string }) => applyUnlock(id, catalystItem, true),
+    [applyUnlock],
+  );
+
+  /** Server-confirmed unlock: updates state + fires notification only. Server already wrote to DB. */
+  const applyServerAchievement = useCallback(
+    (id: string, catalystItem?: { name: string; imageUrl: string }) => applyUnlock(id, catalystItem, false),
+    [applyUnlock],
+  );
+
   const isUnlocked = useCallback(
     (id: string) => achievements.some((a) => a.id === id && a.status === "unlocked"),
     [achievements],
   );
 
   return (
-    <AchievementsContext.Provider value={{ achievements, unlockAchievement, isUnlocked }}>
+    <AchievementsContext.Provider value={{ achievements, unlockAchievement, applyServerAchievement, isUnlocked }}>
       {children}
     </AchievementsContext.Provider>
   );

@@ -49,6 +49,11 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   const [suggestions, setSuggestions] = useState<MasterItem[]>([]);
   const [, setIsSearching] = useState(false);
   const [catalogTotal, setCatalogTotal] = useState(0);
+  const [suggestionQuery, setSuggestionQuery] = useState("");
+  const [suggestionPage, setSuggestionPage] = useState(1);
+  const [suggestionCategory, setSuggestionCategory] = useState("");
+  const [suggestionHasMore, setSuggestionHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   
@@ -71,9 +76,21 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     gradeNum: "10"
   });
   
-  const scanInputRef  = useRef<HTMLInputElement>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const scanInputRef       = useRef<HTMLInputElement>(null);
+  const photoInputRef      = useRef<HTMLInputElement>(null);
+  const debounceRef        = useRef<ReturnType<typeof setTimeout>>();
+  const searchWrapperRef   = useRef<HTMLDivElement>(null);
+
+  // ── Close dropdown on outside click ──────────────────────────────────────
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // ── מנוע מחירים (Sniper) ──
   const fetchMarketPrice = async (query: string, cat: Category, setCode?: string, cardNum?: string) => {
@@ -232,22 +249,49 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     return () => clearTimeout(t);
   }, [conditionError]);
 
-  const searchCatalog = useCallback((query: string) => {
+  // cat="" means global search; passing a category filters results to that category
+  const searchCatalog = useCallback((query: string, cat = "") => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query || query.length < 2) {
       setSuggestions([]);
+      setSuggestionQuery("");
+      setSuggestionPage(1);
+      setSuggestionCategory("");
+      setSuggestionHasMore(false);
       setIsSearching(false);
       return;
     }
     setIsSearching(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/catalog/search?q=${encodeURIComponent(query)}&pageSize=8`);
+        const catParam = cat ? `&category=${encodeURIComponent(cat)}` : "";
+        const res = await fetch(`/api/catalog/search?q=${encodeURIComponent(query)}&pageSize=5&page=1${catParam}`);
         const data = await res.json();
-        setSuggestions(data.items || []);
-      } catch { setSuggestions([]); } finally { setIsSearching(false); }
+        const items: MasterItem[] = data.items || [];
+        setSuggestions(items);
+        setSuggestionQuery(query);
+        setSuggestionCategory(cat);
+        setSuggestionPage(2);
+        setSuggestionHasMore((data.total || 0) > items.length);
+        if (items.length > 0) setShowSuggestions(true);
+      } catch { setSuggestions([]); setSuggestionHasMore(false); } finally { setIsSearching(false); }
     }, 250);
   }, []);
+
+  const loadMoreSuggestions = useCallback(async () => {
+    if (!suggestionQuery || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const catParam = suggestionCategory ? `&category=${encodeURIComponent(suggestionCategory)}` : "";
+      const res = await fetch(`/api/catalog/search?q=${encodeURIComponent(suggestionQuery)}&pageSize=5&page=${suggestionPage}${catParam}`);
+      const data = await res.json();
+      const newItems: MasterItem[] = data.items || [];
+      setSuggestions((prev) => [...prev, ...newItems]);
+      setSuggestionPage((prev) => prev + 1);
+      const totalLoaded = suggestions.length + newItems.length;
+      setSuggestionHasMore(totalLoaded < (data.total || 0));
+    } catch {} finally { setIsLoadingMore(false); }
+  }, [suggestionQuery, suggestionPage, suggestionCategory, isLoadingMore, suggestions.length]);
 
   const handleSelectSuggestion = (item: MasterItem) => {
     setName(item.name);
@@ -255,6 +299,8 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     setConfig((prev) => ({ ...prev, askingPrice: item.marketPrice || undefined }));
     setCatalogImage(item.imageLarge || item.imageSmall);
     setShowSuggestions(false);
+    setSuggestionHasMore(false);
+    setSuggestionPage(1);
     setCategory(mapCatalogCategory(item.category));
   };
 
@@ -387,15 +433,16 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   const handleNextStep = () => setStep("configure");
 
   const handleSave = () => {
-    if (!name.trim() || !category) return;
+    if (!name.trim()) return;
     // Condition is mandatory unless the item is graded (grade replaces condition)
     if (!config.graded && !config.condition) {
       setConditionError(true);
       return;
     }
+    const finalCategory = (category || "Other") as Category;
     onAdd({
       name: name.trim(),
-      category: category as Category,
+      category: finalCategory,
       upForTrade: config.status === "For Trade",
       imagePreview: catalogImage,
       customImage: config.customImage || scannedImage || undefined,
@@ -428,7 +475,8 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   };
 
   const handleClose = () => { resetForm(); onClose(); };
-  const isStepOneValid  = name.trim() && category;
+  // Category is mandatory — user must pick one (even "Other") before proceeding.
+  const isStepOneValid = !!name.trim() && !!category;
 
   if (!isOpen) return null;
 
@@ -557,9 +605,16 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                 </div>
               )}
 
-              <div className="relative">
-                <input type="text" value={name} onChange={(e) => { setName(e.target.value); searchCatalog(e.target.value); }} onFocus={() => setShowSuggestions(true)} placeholder="Search the catalog…"
-                  className="w-full pl-10 pr-10 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all" />
+              <div className="relative" ref={searchWrapperRef}>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => { setName(e.target.value); searchCatalog(e.target.value, category as string); }}
+                  onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); setShowSuggestions(false); } }}
+                  placeholder="Search the catalog…"
+                  className="w-full pl-10 pr-10 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
+                />
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/30" />
                 {showSuggestions && suggestions.length > 0 && (
                   <div className="absolute z-50 w-full mt-2 bg-charcoal-light rounded-2xl border border-white/10 overflow-hidden shadow-2xl max-h-60 overflow-y-auto">
@@ -579,6 +634,16 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                         </div>
                       </button>
                     ))}
+                    {suggestionHasMore && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); loadMoreSuggestions(); }}
+                        disabled={isLoadingMore}
+                        className="w-full p-3 flex items-center justify-center gap-2 text-primary/70 hover:text-primary hover:bg-white/5 transition-colors text-xs font-semibold"
+                      >
+                        {isLoadingMore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                        {isLoadingMore ? "Loading…" : `See more results for "${suggestionQuery}"`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -589,8 +654,11 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   onChange={(e) => {
                     const newCat = e.target.value as Category;
                     setCategory(newCat);
-                    // If the user hasn't typed anything yet, auto-browse eBay for this category
-                    if (!name.trim()) {
+                    if (name.trim()) {
+                      // Re-run search filtered by the new category
+                      searchCatalog(name.trim(), newCat);
+                    } else {
+                      // No query yet — browse eBay for this category
                       setIsSearching(true);
                       setSuggestions([]);
                       fetch(`/api/catalog/search?category=${encodeURIComponent(newCat)}&pageSize=8`)
@@ -605,6 +673,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   <option value="" disabled>Select a category</option>
                   {CATEGORIES.map((cat) => <option key={cat} value={cat} className="bg-charcoal-dark text-cream">{cat}</option>)}
                 </select>
+                <p className="mt-1.5 px-1 text-[10px] text-cream/25">💡 Tip: Select a category to narrow down your search results.</p>
               </div>
             </div>
 
@@ -627,18 +696,25 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </div>
             </div>
             <div className="flex-1 overflow-y-auto scrollbar-none p-5">
-              <ItemConfigForm config={config} onChange={handleConfigChange} category={category as string} />
+              <ItemConfigForm config={config} onChange={handleConfigChange} category={category as string} isManualEntry={!masterId} />
             </div>
             <div className="px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
               <div className="flex gap-3">
                 <button onClick={() => { setStep("search"); setConditionError(false); }} className="px-5 py-3 rounded-2xl bg-background-light text-cream/40 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all">Back</button>
-                <button
-                  onClick={handleSave}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
-                >
-                  <Save className="w-4 h-4" />
-                  Add to Vault
-                </button>
+                {(() => {
+                  const needsPrice = (config.status === "For Trade" || config.status === "For Sale") && !(config.askingPrice && config.askingPrice > 0);
+                  return (
+                    <button
+                      onClick={handleSave}
+                      disabled={needsPrice}
+                      title={needsPrice ? "Set an asking price to continue" : undefined}
+                      className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-sm active:scale-[0.97] transition-all ${needsPrice ? "bg-background-light text-cream/20 cursor-not-allowed" : "bg-primary/20 text-primary hover:bg-primary/30"}`}
+                    >
+                      <Save className="w-4 h-4" />
+                      {needsPrice ? "Set a Price First" : "Add to Vault"}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </>

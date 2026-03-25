@@ -1,13 +1,42 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, Dispatch, SetStateAction, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, Dispatch, SetStateAction, ReactNode } from "react";
+import { useSession } from "next-auth/react";
 import { MasterItem } from "@/lib/catalog/types";
 import { CollectibleItem, ItemCondition, ItemStatus, TradeHistoryEntry } from "@/lib/types";
 import { mapCatalogCategory } from "@/lib/constants";
+import { isDemoUser } from "@/lib/demo";
 
 // v2: bumped to clear old corrupted data (duplicate Charizard bug)
 const STORAGE_KEY   = "uniques_inventory_v2";
 const HISTORY_KEY   = "uniques_trade_history";
+
+// Shape returned by GET /api/items
+type DBItem = {
+  id:             string;
+  title:          string;
+  category:       string;
+  imageUrl:       string;
+  estimatedValue: number | null;
+  upForTrade:     boolean;
+  description:    string;
+  status:         string;
+};
+
+function dbItemToCollectible(i: DBItem): CollectibleItem {
+  return {
+    id:             i.id,
+    name:           i.title,
+    category:       i.category as CollectibleItem["category"],
+    // imageUrl holds the authoritative image in the DB (custom upload or catalog URL).
+    // We also populate customImage so the UI's `customImage || imageUrl` pattern always
+    // shows the correct photo — not a stale catalog URL from a previous local state.
+    imageUrl:       i.imageUrl,
+    customImage:    i.imageUrl || undefined,
+    estimatedValue: i.estimatedValue ?? undefined,
+    upForTrade:     i.upForTrade,
+  };
+}
 
 export interface AddItemOptions {
   askingPrice?: number;
@@ -69,6 +98,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CollectibleItem[]>([]);
   const [tradeHistoryEntries, setTradeHistoryEntries] = useState<TradeHistoryEntry[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const { data: session, status } = useSession();
+  const dbLoaded = useRef(false);
 
   useEffect(() => {
     // 1. Read from localStorage exactly once on client mount
@@ -76,6 +107,25 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setTradeHistoryEntries(loadHistory());
     setIsMounted(true);
   }, []);
+
+  // 2. Cloud sync: replace localStorage items with DB items for authenticated users.
+  //    This is the source of truth on every device — ensures cross-device consistency.
+  useEffect(() => {
+    if (status === "loading" || dbLoaded.current) return;
+    if (isDemoUser(session?.user?.email)) { dbLoaded.current = true; return; }
+    if (!session?.user?.id) return;
+
+    dbLoaded.current = true;
+    fetch("/api/items?userId=me")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { items: DBItem[] } | null) => {
+        if (!data?.items) return;
+        const dbItems = data.items.map(dbItemToCollectible);
+        setItems(dbItems);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(dbItems)); } catch {}
+      })
+      .catch(() => {});
+  }, [status, session?.user?.email, session?.user?.id]);
 
   // 2. Persist ONLY if strictly mounted (prevents initial overwrite)
   useEffect(() => {

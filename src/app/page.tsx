@@ -15,9 +15,10 @@ import { useAchievements } from "@/lib/AchievementsContext";
 import { usePreferences } from "@/lib/UserPreferencesContext";
 import { isDemoUser } from "@/lib/demo";
 import { formatValue } from "@/lib/format";
-import { TrendingUp, Repeat2, Package, ArrowLeftRight, CheckCircle2, Users, Heart, MessageCircle, Share, Trophy, Eye, X, Loader2, Smile, Sparkles, Bell } from "lucide-react";
+import { TrendingUp, Repeat2, Package, ArrowLeftRight, CheckCircle2, Users, Heart, MessageCircle, Share, Trophy, Eye, X, Loader2, Smile, Sparkles, Bell, ArrowUp } from "lucide-react";
 import type { CollectibleItem, TradeHistoryEntry } from "@/lib/types";
 import type { Category } from "@/lib/constants";
+import { ACHIEVEMENTS } from "@/lib/achievements";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,9 @@ const CURRENT_USER: FeedUser & { avatar: string } = {
   avatar: "https://api.dicebear.com/7.x/bottts-neutral/svg?seed=DavidBar&backgroundColor=ffd83d",
 };
 
+// Module-level comment cache — survives component unmount/remount (navigation)
+const gPostedComments: Record<string, FeedComment[]> = {};
+
 // ── Emoji picker data ─────────────────────────────────────────────────────────
 
 type EmojiItem     = { e: string; n: string };
@@ -249,6 +253,21 @@ const DUMMY_LIKED_BY: Record<string, string[]> = {
 
 // Helper: ms ago from now (evaluated at module load, good enough for static seed data)
 const msAgo = (h: number, m = 0) => Date.now() - (h * 3600 + m * 60) * 1_000;
+
+/** Dynamic relative time for live-posted comments. Accepts a `now` param so React
+ *  re-renders the correct string whenever the ticker state updates. */
+function formatTimeAgo(timestamp: number, now = Date.now()): string {
+  const s = Math.floor((now - timestamp) / 1_000);
+  if (s < 5)  return "Just now";
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7)  return `${d}d`;
+  return `${Math.floor(d / 7)}w`;
+}
 
 const DUMMY_FEED_COMMENTS: Record<string, FeedComment[]> = {
   "ne-1": [
@@ -339,6 +358,8 @@ type NetworkEvent = {
   suggested?: boolean;
   /** Categories this post belongs to — used for interest-based filtering */
   categories?: string[];
+  /** When set, renders a proper achievement card instead of the generic milestone trophy */
+  achievementId?: string;
 };
 
 const NETWORK_EVENTS: NetworkEvent[] = [
@@ -517,6 +538,167 @@ const EXTRA_SUGGESTED: NetworkEvent[] = [
   },
 ];
 
+// ── Mock achievement/milestone events injected into real-user FY feed ────────
+const MOCK_ACHIEVEMENT_EVENTS: NetworkEvent[] = [
+  {
+    id: "mock-ach-1", suggested: true,
+    user: { name: "Morgan", handle: "morgan", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Morgan&backgroundColor=FFDAC1" },
+    type: "milestone", action: "crossed a $10K vault milestone",
+    item: null, timestamp: "3h ago", achievementId: "heavyweight",
+  },
+  {
+    id: "mock-ach-2", suggested: true,
+    user: { name: "Blake", handle: "blake", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Blake&backgroundColor=B5EAD7" },
+    type: "milestone", action: "completed their 10th trade",
+    item: null, timestamp: "7h ago", achievementId: "dealmaker",
+  },
+  {
+    id: "mock-ach-3", suggested: true,
+    user: { name: "Casey", handle: "casey", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Casey&backgroundColor=BAFCA2" },
+    type: "milestone", action: "completed their very first trade",
+    item: null, timestamp: "1d ago", achievementId: "first-blood",
+  },
+  {
+    id: "mock-ach-4", suggested: true,
+    user: { name: "Sam", handle: "sam", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sam&backgroundColor=C7CEEA" },
+    type: "milestone", action: "proposed a trade worth over $10,000",
+    item: null, timestamp: "2d ago", achievementId: "high-roller",
+  },
+  {
+    id: "mock-ach-5", suggested: true,
+    user: { name: "Riley", handle: "riley", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Riley&backgroundColor=E2D9F3" },
+    type: "milestone", action: "joined during the Beta phase",
+    item: null, timestamp: "2d ago", achievementId: "early-adopter",
+  },
+];
+
+// Deterministic hash for fake engagement on FY feed cards
+function fyHashCount(id: string, min: number, max: number): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(31, h) + id.charCodeAt(i)) | 0;
+  return (Math.abs(h) % (max - min)) + min;
+}
+
+// ── Deterministic mock comment generation for real FY events ─────────────────
+
+const COMMENT_USERS = [
+  { name: "Drew",   handle: "drew",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Drew&backgroundColor=B5EAD7"   },
+  { name: "Alex",   handle: "alex",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex&backgroundColor=AA95C5"   },
+  { name: "Morgan", handle: "morgan", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Morgan&backgroundColor=FFDAC1" },
+  { name: "Sam",    handle: "sam",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sam&backgroundColor=C7CEEA"    },
+  { name: "Ethan",  handle: "ethan",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ethan&backgroundColor=FFDAC1" },
+  { name: "Maya",   handle: "maya",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Maya&backgroundColor=FFB7B2"  },
+  { name: "Riley",  handle: "riley",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Riley&backgroundColor=E2D9F3" },
+  { name: "Jordan", handle: "jordan", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan&backgroundColor=C7CEEA"},
+  { name: "Casey",  handle: "casey",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Casey&backgroundColor=BAFCA2" },
+  { name: "Blake",  handle: "blake",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Blake&backgroundColor=B5EAD7" },
+];
+
+const MOCK_COMMENT_POOL = [
+  "Absolute grail 🔥 How long did it take to track one down?",
+  "PSA grade on this? The centering looks insane.",
+  "What's the last sale on this? Curious where it sits right now.",
+  "Would you consider trades? I have some alt arts that might interest you.",
+  "Been hunting this exact piece for two years. Congrats 🎉",
+  "The condition on this is wild. Definitely a 10 candidate.",
+  "This one's been on my radar forever. Is it up for trade?",
+  "One of the best pieces I've seen posted here in a while. Major W.",
+  "How's the surface? Any print lines?",
+  "Top of the market right now. Great time to hold.",
+  "Insane piece. I'd never let this go.",
+  "Edges and corners on point. Easy 10 material.",
+  "This makes my collection feel small 😂",
+  "Is the case original or re-slabbed?",
+  "I've been watching three of these on eBay this week lol.",
+  "The photography doesn't do it justice — must look incredible in hand.",
+  "What did you give up for this? 👀",
+  "Not for sale right? RIGHT? 😅",
+  "Market on this has been going crazy lately. Smart hold.",
+  "One of the rarest pieces I've seen posted here.",
+  "I had a chance to grab one at a show last year and passed 😭",
+  "Absolute unit of a grail. Congrats on the W 🏆",
+  "The foil pattern on these is unmatched.",
+  "I need this in my life immediately.",
+  "Clean slab, clean pull. Everything checks out.",
+  "Have you had it appraised recently? Values are moving.",
+  "This is genuinely one of the best in the hobby.",
+  "The detail on this is something else entirely.",
+  "How long have you been sitting on this?",
+  "Any chance this goes up for trade? DM me 🙏",
+  "This literally made my jaw drop.",
+  "Nobody is talking about how undervalued this category is.",
+  "Adding this to my want list immediately.",
+  "The lighting in this photo really does it justice.",
+  "I've only seen two of these in person. Incredible.",
+  "What's the long-term plan — hold or eventually trade?",
+  "This community never disappoints with the grails.",
+  "I'd have to trade my entire collection for this lol.",
+  "The pop on this is exactly what I imagined.",
+  "Truly rare. Not many still in this condition.",
+  "Some days I wonder if I'm even in the same league 😂",
+  "Is this the first time you've posted something this valuable?",
+  "This just became the most viewed post on my feed today 🔥",
+  "Centering looks perfect from here. Grade it already.",
+  "The resale on these is unreal right now.",
+];
+
+/** Generate a deterministic list of N mock comments for a given post ID. */
+function generateMockComments(eventId: string, count: number): FeedComment[] {
+  const comments: FeedComment[] = [];
+  for (let i = 0; i < count; i++) {
+    const seed      = `${eventId}__c${i}`;
+    const userIdx   = fyHashCount(seed + "u",  0, COMMENT_USERS.length);
+    const textIdx   = fyHashCount(seed + "t",  0, MOCK_COMMENT_POOL.length);
+    const likes     = fyHashCount(seed + "l",  0, 22);
+    const minsAgo   = fyHashCount(seed + "ts", 4, 500);
+    const timeStr   = minsAgo < 60 ? `${minsAgo}m` : `${Math.floor(minsAgo / 60)}h`;
+    const timestamp = Date.now() - minsAgo * 60_000;
+
+    // ~20% chance of one reply
+    const replies: FeedReply[] = [];
+    if (fyHashCount(seed + "r", 0, 5) === 0) {
+      const rs         = `${eventId}__r${i}`;
+      const rUserIdx   = fyHashCount(rs + "u",  0, COMMENT_USERS.length);
+      const rTextIdx   = fyHashCount(rs + "t",  0, MOCK_COMMENT_POOL.length);
+      const rMinsAgo   = Math.max(1, minsAgo - fyHashCount(rs + "ts", 1, 30));
+      const rTimeStr   = rMinsAgo < 60 ? `${rMinsAgo}m` : `${Math.floor(rMinsAgo / 60)}h`;
+      replies.push({
+        id:        `${rs}-reply`,
+        user:      COMMENT_USERS[rUserIdx],
+        text:      MOCK_COMMENT_POOL[rTextIdx],
+        time:      rTimeStr,
+        timestamp: Date.now() - rMinsAgo * 60_000,
+        likes:     fyHashCount(rs + "l", 0, 8),
+      });
+    }
+
+    comments.push({
+      id:        seed,
+      user:      COMMENT_USERS[userIdx],
+      text:      MOCK_COMMENT_POOL[textIdx],
+      time:      timeStr,
+      timestamp,
+      likes,
+      replies,
+    });
+  }
+  return comments;
+}
+
+// Deterministic "Wants" tag for Trending Grails cards
+const WANTS_TAGS_POOL = ["Pokémon TCG", "Alt Arts", "Vintage Watches", "Lego Sets", "Graded Cards", "Sneakers", "Comics", "Rare Coins", "Funko Exclusives", "Sports Cards"];
+function wantsTagForId(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(31, h) + id.charCodeAt(i)) | 0;
+  return WANTS_TAGS_POOL[Math.abs(h) % WANTS_TAGS_POOL.length];
+}
+function viewCountForId(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(31, h) + id.charCodeAt(i)) | 0;
+  const n = (Math.abs(h) % 2200) + 200;
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
+}
+
 // Full pools — Following: chronological following posts; For You: interleaved algorithmic feed
 const FOLLOWING_POOL: NetworkEvent[] = [...NETWORK_EVENTS, ...EXTRA_FOLLOWING];
 
@@ -567,10 +749,11 @@ function FeedCard({
   postedComments: Record<string, unknown[]>;
   setFeedOfferTarget: (t: { user: { name: string; avatar: string }; item?: import("@/lib/types").CollectibleItem }) => void;
 }) {
-  const meta        = EVENT_META[event.type];
+  const meta        = EVENT_META[event.type as EventType] ?? EVENT_META.added_grail;
   const isLiked     = likedIds.has(event.id);
-  const likes       = (DUMMY_LIKES[event.id] ?? 0) + (isLiked ? 1 : 0);
-  const commCount   = (DUMMY_FEED_COMMENTS[event.id]?.length ?? 0) + (postedComments[event.id]?.length ?? 0);
+  // Seed mock engagement: DUMMY_LIKES for static events, hash-based for real eBay FY items
+  const likes       = (DUMMY_LIKES[event.id] ?? fyHashCount(event.id, 12, 450)) + (isLiked ? 1 : 0);
+  const commCount   = (DUMMY_FEED_COMMENTS[event.id]?.length ?? fyHashCount(event.id + "c", 2, 45)) + (postedComments[event.id]?.length ?? 0);
   const isMilestone = event.type === "milestone";
   const isRadar     = event.type === "updated_radar";
 
@@ -602,14 +785,27 @@ function FeedCard({
         <span className="text-[10px] text-cream/25 font-medium flex-shrink-0">{event.timestamp}</span>
       </div>
 
-      {isMilestone && (
-        <div className="mx-4 h-48 rounded-xl overflow-hidden relative flex flex-col items-center justify-center bg-[#1A1608]"
-          style={{ background: "radial-gradient(ellipse at 50% 60%, rgba(212,175,55,0.18) 0%, rgba(26,22,8,0.95) 70%)" }}>
-          <Trophy className="w-14 h-14 text-[#D4AF37] mb-3 drop-shadow-[0_0_20px_rgba(212,175,55,0.5)]" />
-          <p className="text-[#FDE047] text-lg font-black tracking-tight drop-shadow-[0_0_12px_rgba(253,224,71,0.4)]">Hit $10K Value</p>
-          <p className="text-[#D4AF37]/50 text-[10px] font-semibold mt-1 uppercase tracking-widest">Vault Milestone</p>
-        </div>
-      )}
+      {isMilestone && (() => {
+        const ach = event.achievementId ? ACHIEVEMENTS.find((a) => a.id === event.achievementId) : null;
+        const AchIcon = ach?.icon ?? Trophy;
+        const glowColor = ach?.glow ?? "rgba(212,175,55,0.35)";
+        const iconCls   = ach?.color ?? "text-[#D4AF37]";
+        return (
+          <div className="mx-4 h-48 rounded-xl overflow-hidden relative flex flex-col items-center justify-center"
+            style={{ background: `radial-gradient(ellipse at 50% 60%, ${glowColor.replace("0.35", "0.22").replace("0.3", "0.18")} 0%, rgba(20,18,18,0.97) 70%)`, boxShadow: `inset 0 0 40px ${glowColor.replace("0.35", "0.08").replace("0.3", "0.06")}` }}>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3"
+              style={{ background: `${glowColor.replace("0.35", "0.12").replace("0.3", "0.10")}`, boxShadow: `0 0 24px ${glowColor}` }}>
+              <AchIcon className={`w-8 h-8 ${iconCls}`} />
+            </div>
+            <p className="text-cream text-sm font-black tracking-tight">{ach?.title ?? "Milestone"}</p>
+            <p className="text-cream/40 text-[10px] font-semibold mt-1 text-center px-6 leading-snug">{ach?.description ?? event.action}</p>
+            <div className="mt-2 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider"
+              style={{ background: glowColor.replace("0.35", "0.15").replace("0.3", "0.12"), color: `hsl(from ${glowColor} h s 75% / 1)` }}>
+              Achievement Unlocked
+            </div>
+          </div>
+        );
+      })()}
       {/* Radar without a specific item → show want-list collage */}
       {isRadar && !event.item && (
         <div className="overflow-x-auto flex gap-3 pb-2 no-scrollbar px-4 mt-1">
@@ -933,6 +1129,13 @@ export default function HomePage() {
   const isDemo = isDemoUser(session?.user?.email);
   const { preferences } = usePreferences();
 
+  // Real user identity for posted comments — falls back to CURRENT_USER shape
+  const commentUser = useMemo(() => ({
+    name:   session?.user?.name   ?? CURRENT_USER.name,
+    handle: session?.user?.name?.toLowerCase().replace(/\s+/g, "") ?? CURRENT_USER.handle,
+    avatar: session?.user?.image  ?? CURRENT_USER.avatar,
+  }), [session?.user?.name, session?.user?.image]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/login");
@@ -1075,18 +1278,28 @@ export default function HomePage() {
   const [activeCommentPost, setActiveCommentPost] = useState<string | null>(null);
   const [commentText, setCommentText]             = useState("");
   const [commentLikedIds, setCommentLikedIds]     = useState<Set<string>>(new Set());
-  const [postedComments, setPostedComments]       = useState<Record<string, FeedComment[]>>({});
+  const [postedComments, setPostedComments]       = useState<Record<string, FeedComment[]>>(() => ({ ...gPostedComments }));
   const [modalComments, setModalComments]         = useState<FeedComment[]>([]);
   const [sortMode, setSortMode]                   = useState<"top" | "fresh">("top");
   const [showLikesList, setShowLikesList]         = useState(false);
   const [replyingToId, setReplyingToId]           = useState<string | null>(null);
   const commentInputRef                           = useRef<HTMLInputElement>(null);
+  // Ticker for dynamic "time ago" on posted comments — updates every 30 s
+  const [commentsNow, setCommentsNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setCommentsNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Init modal comments whenever a post is opened
   useEffect(() => {
     if (!activeCommentPost) { setModalComments([]); return; }
-    const base  = DUMMY_FEED_COMMENTS[activeCommentPost] ?? [];
-    const extra = postedComments[activeCommentPost]      ?? [];
+    // Static events have hand-crafted comments; real FY events get deterministic generated ones
+    const isRealFy = !DUMMY_FEED_COMMENTS[activeCommentPost] && fyDiscovered.some((e) => e.id === activeCommentPost);
+    const base = isRealFy
+      ? generateMockComments(activeCommentPost, fyHashCount(activeCommentPost + "c", 2, 45))
+      : (DUMMY_FEED_COMMENTS[activeCommentPost] ?? []);
+    const extra = postedComments[activeCommentPost] ?? [];
     setModalComments([...base, ...extra]);
     setSortMode("top");
     setShowLikesList(false);
@@ -1094,10 +1307,14 @@ export default function HomePage() {
   }, [activeCommentPost]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortedComments = useMemo(() => {
-    if (sortMode === "top") return [...modalComments].sort((a, b) => b.likes - a.likes);
-    // Fresh Drops: strict timestamp descending — guarantees new comments always appear first
-    return [...modalComments].sort((a, b) => b.timestamp - a.timestamp);
-  }, [modalComments, sortMode]);
+    const myComments    = modalComments.filter((c) => c.user.name === commentUser.name);
+    const otherComments = modalComments.filter((c) => c.user.name !== commentUser.name);
+    const sortedOthers  = sortMode === "top"
+      ? [...otherComments].sort((a, b) => b.likes - a.likes)
+      : [...otherComments].sort((a, b) => b.timestamp - a.timestamp);
+    // User's own comments always pinned to top (most recent first among them)
+    return [...myComments.sort((a, b) => b.timestamp - a.timestamp), ...sortedOthers];
+  }, [modalComments, sortMode, commentUser.name]);
 
   const toggleCommentLike = (id: string) =>
     setCommentLikedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -1110,7 +1327,7 @@ export default function HomePage() {
       // Nest as a reply under the parent comment
       const newReply: FeedReply = {
         id: `reply-${now}`,
-        user: { name: CURRENT_USER.name, handle: CURRENT_USER.handle, avatar: CURRENT_USER.avatar },
+        user: { name: commentUser.name, handle: commentUser.handle, avatar: commentUser.avatar },
         text: commentText.trim(),
         time: "just now",
         timestamp: now,
@@ -1124,7 +1341,7 @@ export default function HomePage() {
       // New top-level comment — prepend so it leads in Fresh Drops
       const newComment: FeedComment = {
         id: `new-${now}`,
-        user: { name: CURRENT_USER.name, handle: CURRENT_USER.handle, avatar: CURRENT_USER.avatar },
+        user: { name: commentUser.name, handle: commentUser.handle, avatar: commentUser.avatar },
         text: commentText.trim(),
         time: "just now",
         timestamp: now,
@@ -1132,7 +1349,11 @@ export default function HomePage() {
         replies: [],
       };
       setModalComments((prev) => [newComment, ...prev]);
-      setPostedComments((prev) => ({ ...prev, [activeCommentPost]: [...(prev[activeCommentPost] ?? []), newComment] }));
+      setPostedComments((prev) => {
+        const updated = [...(prev[activeCommentPost] ?? []), newComment];
+        gPostedComments[activeCommentPost] = updated;
+        return { ...prev, [activeCommentPost]: updated };
+      });
     }
     setCommentText("");
   };
@@ -1279,18 +1500,52 @@ export default function HomePage() {
   const [fyHasMore,     setFyHasMore]     = useState(true);
   const prevCatsRef = useRef<string>("__init__");
 
+  // Separate trending pool — server-side shuffle ensures freshness regardless of page
+  const [fyTrending,        setFyTrending]        = useState<NetworkEvent[]>([]);
+  const [fyTrendingLoading, setFyTrendingLoading] = useState(false);
+  const [fyTrendingPage,    setFyTrendingPage]    = useState(1);
+  const [fyTrendingHasMore, setFyTrendingHasMore] = useState(true);
+  const fyTrendingLoadingRef  = useRef(false);
+  // True after the very first trending fetch resolves (success or error).
+  // Used so we don't flash null before the first fetch even starts.
+  const fyTrendingFetchDoneRef = useRef(false);
+  const carouselRef            = useRef<HTMLDivElement>(null);
+  const trendingSentinelRef    = useRef<HTMLDivElement>(null);
+
+  // Guard against stale results when categories change mid-flight
+  const fyFetchKeyRef = useRef<string>("");
+
   const fetchFyPage = (cats: string[], page: number) => {
+    const fetchKey = cats.join(",");
+    fyFetchKeyRef.current = fetchKey;
     setFyLoading(true);
     const catsParam = cats.length > 0 ? `&categories=${encodeURIComponent(cats.join(","))}` : "";
     fetch(`/api/feed/discover?page=${page}&pageSize=20${catsParam}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data: { events?: DiscoverApiEvent[]; hasMore?: boolean } | null) => {
+        // Discard results if categories changed while this request was in flight
+        if (fyFetchKeyRef.current !== fetchKey) return;
         if (data?.events?.length) {
-          setFyDiscovered((prev) => page === 1 ? data.events! : [...prev, ...data.events!]);
+          // Inject mock achievement cards: one at position 3, another at position 9 (every ~6 posts)
+          const events = data.events!;
+          const achA = { ...MOCK_ACHIEVEMENT_EVENTS[(page * 2)     % MOCK_ACHIEVEMENT_EVENTS.length], id: `mock-ach-p${page}a` };
+          const achB = { ...MOCK_ACHIEVEMENT_EVENTS[(page * 2 + 1) % MOCK_ACHIEVEMENT_EVENTS.length], id: `mock-ach-p${page}b` };
+          let withAch: DiscoverApiEvent[];
+          if (events.length >= 10) {
+            withAch = [...events.slice(0, 3), achA, ...events.slice(3, 9), achB, ...events.slice(9)];
+          } else if (events.length >= 4) {
+            withAch = [...events.slice(0, 3), achA, ...events.slice(3)];
+          } else {
+            withAch = [...events, achA];
+          }
+          setFyDiscovered((prev) => page === 1 ? withAch : [...prev, ...withAch]);
           setFyHasMore(data.hasMore ?? false);
           setFyPage(page);
         } else if (page === 1) {
           setFyDiscovered([]);
+          setFyHasMore(false);
+        } else {
+          // No more items on subsequent pages — stop the infinite scroll
           setFyHasMore(false);
         }
       })
@@ -1298,7 +1553,46 @@ export default function HomePage() {
       .finally(() => setFyLoading(false));
   };
 
-  // Re-fetch page 1 whenever categories change
+  /** Fetch a page of trending items and append (or reset) the carousel. */
+  const fetchMoreTrending = (cats: string[], page: number, reset = false) => {
+    if (fyTrendingLoadingRef.current && !reset) return;
+    fyTrendingLoadingRef.current = true;
+    setFyTrendingLoading(true);
+    const catsParam = cats.length > 0 ? `&categories=${encodeURIComponent(cats.join(","))}` : "";
+    fetch(`/api/feed/discover?page=${page}&pageSize=14${catsParam}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { events?: NetworkEvent[] } | null) => {
+        if (data?.events?.length) {
+          const newItems = data.events.filter((e) => e.item);
+          if (reset) {
+            setFyTrending(newItems);
+          } else {
+            setFyTrending((prev) => {
+              const existingIds = new Set(prev.map((e) => e.id));
+              const fresh = newItems.filter((e) => !existingIds.has(e.id));
+              // If every item is a duplicate we've done a full cycle — restart with
+              // the current batch (server shuffle gives a fresh ordering of the same pool).
+              if (fresh.length === 0 && prev.length > 0) return newItems;
+              return [...prev, ...fresh];
+            });
+          }
+          setFyTrendingPage(page >= 8 ? 1 : page + 1);
+          setFyTrendingHasMore(true);
+        } else if (!reset) {
+          // Empty server page — restart from page 1 (different shuffle seed next request)
+          setFyTrending([]);
+          setFyTrendingPage(1);
+          setFyTrendingHasMore(true);
+        } else {
+          // reset=true returned empty: DB pool is genuinely empty
+          setFyTrendingHasMore(false);
+        }
+      })
+      .catch(() => { setFyTrendingHasMore(false); })
+      .finally(() => { fyTrendingLoadingRef.current = false; setFyTrendingLoading(false); fyTrendingFetchDoneRef.current = true; });
+  };
+
+  // Re-fetch page 1 whenever categories change; also reset and fetch trending
   useEffect(() => {
     if (isDemo) return;
     const cats = preferences.favoriteCategories; // empty = API uses all categories
@@ -1309,8 +1603,31 @@ export default function HomePage() {
     setFyPage(0);
     setFyHasMore(true);
     fetchFyPage(cats, 1);
+    // Trending Grails is always GLOBAL — no category filter, pulls from the entire DB pool
+    // so every collector is exposed to the full breadth of high-value items
+    setFyTrendingPage(1);
+    setFyTrendingHasMore(true);
+    fetchMoreTrending([], 1, true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDemo, preferences.favoriteCategories]);
+
+  // IntersectionObserver for infinite horizontal trending scroll
+  useEffect(() => {
+    const sentinel  = trendingSentinelRef.current;
+    const container = carouselRef.current;
+    if (!sentinel || !container || isDemo || !fyTrendingHasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !fyTrendingLoadingRef.current) {
+          fetchMoreTrending([], fyTrendingPage);  // always global — no category filter
+        }
+      },
+      { root: container, threshold: 0.1, rootMargin: "0px 60px 0px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fyTrendingHasMore, fyTrendingLoading, fyTrendingPage, isDemo]);
 
   // ── DB-backed likes for following/activity tab posts ─────────────────────
   const [dbLikedIds, setDbLikedIds] = useState<Set<string>>(new Set());
@@ -1346,7 +1663,8 @@ export default function HomePage() {
 
   // For demo, paginate client-side; for real users, all fetched pages are visible
   const visiblePosts = isDemo ? pool.slice(0, visibleCount) : pool;
-  const hasMore      = isDemo ? (visibleCount < pool.length) : fyHasMore;
+  // Only FY tab has more-to-load; other tabs have their own finite content
+  const hasMore      = feedTab === "foryou" && (isDemo ? (visibleCount < pool.length) : fyHasMore);
 
   // Reset pagination when switching tabs
   useEffect(() => {
@@ -1541,22 +1859,6 @@ export default function HomePage() {
 
       <main className="max-w-lg mx-auto pt-6">
 
-        {/* ── New-user empty state — shown when there's nothing to act on ── */}
-        {actionEntries.length === 0 && (
-          <div className="mx-5 mb-6 pt-5 flex flex-col items-center text-center animate-slide-up">
-            <p className="text-base font-extrabold text-cream/80 mb-1">Grail Quest Starts Here.</p>
-            <p className="text-xs text-cream/35 mb-4 max-w-[240px] leading-relaxed">
-              Discover rare pieces, propose your first trade, and build a vault worth coveting.
-            </p>
-            <button
-              onClick={() => router.push("/search")}
-              className="bg-primary text-charcoal-dark text-xs font-bold px-5 py-2.5 rounded-full shadow-[0_0_16px_rgba(202,230,206,0.3)] active:scale-95 transition-all"
-            >
-              Explore Trending Grails
-            </button>
-          </div>
-        )}
-
         {/* ── Action Required — only rendered when there is something to act on ── */}
         {actionEntries.length > 0 && (
           <div className="mb-6 pt-3">
@@ -1624,51 +1926,82 @@ export default function HomePage() {
         )}
 
         {/* ── Trending Grails — Stories carousel ── */}
-        <div className="mb-6" data-tour="home-feed">
-          <div className="px-5 mb-3">
-            <p className="text-[10px] text-cream/30 font-bold uppercase tracking-widest">Trending Grails</p>
-            <p className="text-[10px] text-cream/20 mt-0.5 font-medium">Pieces with the most views in the last 24 hours.</p>
-          </div>
-          <div className="flex gap-4 pb-4 no-scrollbar px-5 overflow-x-auto flex-nowrap snap-x snap-mandatory" style={{ scrollPaddingLeft: "1.25rem" }}>
-            {COMMUNITY_HIGHLIGHTS.map((item, i) => (
-              <div
-                key={item.id}
-                className="flex-shrink-0 w-40 rounded-2xl bg-background-light shadow-soft overflow-hidden text-left animate-slide-up snap-start"
-                style={{ animationDelay: `${i * 0.07}s`, animationFillMode: "both" }}
-              >
-                {/* Item image — click opens offer modal */}
-                <button
-                  onClick={() => setFeedOfferTarget({
-                    user: { name: item.ownerName, avatar: item.ownerAvatar },
-                    item: { id: item.id, name: item.name, category: item.category as Category, imageUrl: item.imageUrl, estimatedValue: item.estimatedValue, upForTrade: true },
-                  })}
-                  className="relative h-40 w-full overflow-hidden bg-charcoal-dark/40 block active:brightness-90 transition-all"
-                >
-                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                  {/* Views badge */}
-                  <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-10">
-                    <Eye className="w-3 h-3" />
-                    {item.views}
-                  </div>
-                </button>
-                <div className="p-2.5">
-                  <p className="text-[10px] text-cream/70 line-clamp-2 leading-snug font-semibold mb-1.5">{item.name}</p>
-                  {/* Owner — click navigates to profile */}
-                  <Link href={`/u/${item.ownerHandle}`} className="flex items-center gap-1.5 mb-1.5 hover:opacity-70 transition-opacity w-fit">
-                    <div className="w-4 h-4 rounded-full overflow-hidden bg-surface/20 flex-shrink-0">
-                      <img src={item.ownerAvatar} alt={item.ownerName} className="w-full h-full object-cover" />
-                    </div>
-                    <span className="text-[9px] text-cream/35 font-medium">{item.ownerName}</span>
-                  </Link>
-                  <div className="flex items-center justify-between gap-1 flex-wrap">
-                    <span className="text-[10px] font-extrabold text-primary">{formatValue(item.estimatedValue)}</span>
-                    <span className="text-[8px] text-cream/25 font-semibold bg-white/[0.06] px-1.5 py-0.5 rounded-full whitespace-nowrap">{item.wantsTag}</span>
-                  </div>
-                </div>
+        {(() => {
+          // Real users: never hide section while loading — show skeleton instead
+          if (!isDemo && fyTrendingFetchDoneRef.current && fyTrending.length === 0) return null;
+
+          const trendingCards = isDemo
+            ? COMMUNITY_HIGHLIGHTS
+            : fyTrending.map((e) => ({
+                id:             e.id,
+                name:           e.item!.name,
+                category:       e.categories?.[0] ?? "Other",
+                imageUrl:       e.item!.imageUrl,
+                estimatedValue: e.item!.estimatedValue ?? 0,
+                ownerName:      e.user.name,
+                ownerHandle:    e.user.handle,
+                ownerAvatar:    e.user.avatar,
+                wantsTag:       wantsTagForId(e.id),
+                views:          viewCountForId(e.id),
+              }));
+
+          return (
+            <div className="mb-6" data-tour="home-feed">
+              <div className="px-5 mb-3">
+                <p className="text-[10px] text-cream/30 font-bold uppercase tracking-widest">Trending Grails</p>
+                <p className="text-[10px] text-cream/20 mt-0.5 font-medium">Pieces with the most views in the last 24 hours.</p>
               </div>
-            ))}
-          </div>
-        </div>
+              <div ref={carouselRef} className="flex gap-4 pb-4 no-scrollbar px-5 overflow-x-auto flex-nowrap snap-x snap-mandatory" style={{ scrollPaddingLeft: "1.25rem" }}>
+                {/* Skeleton while initial load */}
+                {!isDemo && fyTrending.length === 0 && !fyTrendingFetchDoneRef.current && (
+                  [0, 1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex-shrink-0 w-40 h-[272px] rounded-2xl bg-background-light animate-pulse" style={{ animationDelay: `${i * 0.08}s` }} />
+                  ))
+                )}
+                {trendingCards.map((item, i) => (
+                  <div
+                    key={item.id}
+                    className="flex-shrink-0 w-40 rounded-2xl bg-background-light shadow-soft overflow-hidden text-left animate-slide-up snap-start"
+                    style={{ animationDelay: `${i * 0.07}s`, animationFillMode: "both" }}
+                  >
+                    <button
+                      onClick={() => setFeedOfferTarget({
+                        user: { name: item.ownerName, avatar: item.ownerAvatar },
+                        item: { id: item.id, name: item.name, category: item.category as Category, imageUrl: item.imageUrl, estimatedValue: item.estimatedValue, upForTrade: true },
+                      })}
+                      className="relative h-40 w-full overflow-hidden bg-charcoal-dark/40 block active:brightness-90 transition-all"
+                    >
+                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                      <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-10">
+                        <Eye className="w-3 h-3" />
+                        {item.views}
+                      </div>
+                    </button>
+                    <div className="p-2.5">
+                      <p className="text-[10px] text-cream/70 line-clamp-2 leading-snug font-semibold mb-1.5">{item.name}</p>
+                      <Link href={`/u/${item.ownerHandle}`} className="flex items-center gap-1.5 mb-1.5 hover:opacity-70 transition-opacity w-fit">
+                        <div className="w-4 h-4 rounded-full overflow-hidden bg-surface/20 flex-shrink-0">
+                          <img src={item.ownerAvatar} alt={item.ownerName} className="w-full h-full object-cover" />
+                        </div>
+                        <span className="text-[9px] text-cream/35 font-medium">{item.ownerName}</span>
+                      </Link>
+                      <div className="flex items-center justify-between gap-1 flex-wrap">
+                        <span className="text-[10px] font-extrabold text-primary">{formatValue(item.estimatedValue)}</span>
+                        <span className="text-[8px] text-cream/25 font-semibold bg-white/[0.06] px-1.5 py-0.5 rounded-full whitespace-nowrap">{item.wantsTag}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {/* Infinite scroll sentinel — triggers fetch of more trending items */}
+                {!isDemo && fyTrendingHasMore && (
+                  <div ref={trendingSentinelRef} className="flex-shrink-0 w-16 flex items-center justify-center self-stretch">
+                    {fyTrendingLoading && <Loader2 className="w-4 h-4 text-primary/30 animate-spin" />}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Feed toggle + posts ── */}
         <div className="mb-8">
@@ -1739,7 +2072,7 @@ export default function HomePage() {
                     <p className="text-sm font-bold text-cream/60 mb-1">No one in your feed yet</p>
                     <p className="text-xs text-cream/30 mb-4 max-w-[220px]">Follow collectors on their profile pages to see their latest grails here.</p>
                     <button
-                      onClick={() => router.push("/search")}
+                      onClick={() => router.push("/search?tab=Collectors")}
                       className="px-5 py-2.5 rounded-2xl bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 active:scale-[0.97] transition-all"
                     >
                       Discover Collectors
@@ -1810,20 +2143,29 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* FY tab: initial loading skeleton */}
+          {/* FY tab: skeleton loading state (shown while seeding) */}
           {feedTab === "foryou" && !isDemo && fyLoading && fyDiscovered.length === 0 && (
             <div className="px-5 space-y-4 pt-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="rounded-2xl border bg-[#2C2929] border-white/[0.05] overflow-hidden h-64 animate-pulse" />
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="rounded-2xl border border-white/[0.05] overflow-hidden animate-pulse" style={{ animationDelay: `${i * 0.1}s` }}>
+                  <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                    <div className="w-9 h-9 rounded-xl bg-white/[0.06]" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-24 rounded bg-white/[0.06]" />
+                      <div className="h-2.5 w-40 rounded bg-white/[0.04]" />
+                    </div>
+                  </div>
+                  <div className="mx-4 h-48 rounded-xl bg-white/[0.06] mb-4" />
+                </div>
               ))}
             </div>
           )}
 
-          {/* FY tab: empty state */}
+          {/* FY tab: empty state after load attempt with no results */}
           {feedTab === "foryou" && !isDemo && !fyLoading && fyDiscovered.length === 0 && (
             <div className="px-5 py-12 flex flex-col items-center text-center animate-slide-up">
-              <p className="text-sm font-bold text-cream/60 mb-1">Feed is loading…</p>
-              <p className="text-xs text-cream/30 max-w-[220px]">Seeding real market data. Refresh in a moment.</p>
+              <p className="text-sm font-bold text-cream/60 mb-1">Your feed is being built</p>
+              <p className="text-xs text-cream/30 max-w-[220px]">Pull down to refresh and your personalized grail feed will appear.</p>
             </div>
           )}
 
@@ -1886,13 +2228,14 @@ export default function HomePage() {
 
       {/* ── Comments Modal ── */}
       {activeCommentPost && (() => {
-        const activeEvent   = ALL_EVENTS.find((e) => e.id === activeCommentPost);
+        // Check static pool first, then fall back to real DB-backed FY events
+        const activeEvent   = ALL_EVENTS.find((e) => e.id === activeCommentPost) ?? fyDiscovered.find((e) => e.id === activeCommentPost);
         if (!activeEvent) return null;
         const isMilestone   = activeEvent.type === "milestone";
         const isRadar       = activeEvent.type === "updated_radar";
         const meta          = EVENT_META[activeEvent.type];
         const isLiked       = likedIds.has(activeCommentPost);
-        const modalLikes    = (DUMMY_LIKES[activeCommentPost] ?? 0) + (isLiked ? 1 : 0);
+        const modalLikes    = (DUMMY_LIKES[activeCommentPost] ?? fyHashCount(activeCommentPost, 12, 450)) + (isLiked ? 1 : 0);
         const likedBy       = DUMMY_LIKED_BY[activeCommentPost] ?? [];
         const totalComments = sortedComments.length;
         const replyingTo    = replyingToId ? modalComments.find((c) => c.id === replyingToId) : null;
@@ -1960,15 +2303,28 @@ export default function HomePage() {
                   </div>
 
                   {/* Item visual — tall & full width */}
-                  {isMilestone && (
-                    <div className="w-full h-[260px] rounded-xl overflow-hidden flex flex-col items-center justify-center mt-1"
-                      style={{ background: "radial-gradient(ellipse at 50% 60%, rgba(212,175,55,0.22) 0%, rgba(26,22,8,0.97) 70%)" }}
-                    >
-                      <Trophy className="w-16 h-16 text-[#D4AF37] mb-3 drop-shadow-[0_0_24px_rgba(212,175,55,0.55)]" />
-                      <p className="text-[#FDE047] text-xl font-black tracking-tight drop-shadow-[0_0_14px_rgba(253,224,71,0.4)]">Hit $10K Value</p>
-                      <p className="text-[#D4AF37]/50 text-[10px] font-semibold mt-1.5 uppercase tracking-widest">Vault Milestone</p>
-                    </div>
-                  )}
+                  {isMilestone && (() => {
+                    const ach = activeEvent.achievementId ? ACHIEVEMENTS.find((a) => a.id === activeEvent.achievementId) : null;
+                    const AchIcon = ach?.icon ?? Trophy;
+                    const glowColor = ach?.glow ?? "rgba(212,175,55,0.35)";
+                    const iconCls   = ach?.color ?? "text-[#D4AF37]";
+                    return (
+                      <div className="w-full h-[260px] rounded-xl overflow-hidden flex flex-col items-center justify-center mt-1"
+                        style={{ background: `radial-gradient(ellipse at 50% 60%, ${glowColor.replace("0.35", "0.22").replace("0.3", "0.18")} 0%, rgba(20,18,18,0.97) 70%)` }}
+                      >
+                        <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-4"
+                          style={{ background: glowColor.replace("0.35", "0.12").replace("0.3", "0.10"), boxShadow: `0 0 32px ${glowColor}` }}>
+                          <AchIcon className={`w-10 h-10 ${iconCls}`} />
+                        </div>
+                        <p className="text-cream text-xl font-black tracking-tight">{ach?.title ?? "Milestone"}</p>
+                        <p className="text-cream/40 text-xs font-semibold mt-1.5 text-center px-8 leading-snug">{ach?.description ?? activeEvent.action}</p>
+                        <div className="mt-3 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider"
+                          style={{ background: glowColor.replace("0.35", "0.15").replace("0.3", "0.12") }}>
+                          <span style={{ color: `hsl(from ${glowColor} h s 75% / 1)` }}>Achievement Unlocked</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {isRadar && (
                     <div className="overflow-x-auto flex gap-3 pb-1 no-scrollbar mt-1">
                       {RADAR_IMAGES.map((src, idx) => (
@@ -2105,7 +2461,7 @@ export default function HomePage() {
                                   <p className="text-[12px] text-cream/75 leading-snug">{c.text}</p>
                                 </div>
                                 <div className="flex items-center gap-3 mt-1.5 px-1">
-                                  <span className="text-[10px] text-cream/25">{c.time}</span>
+                                  <span className="text-[10px] text-cream/25">{c.timestamp ? formatTimeAgo(c.timestamp, commentsNow) : c.time}</span>
                                   <button
                                     onClick={() => toggleCommentLike(c.id)}
                                     className="flex items-center gap-1 text-[10px] font-semibold active:scale-95 transition-transform"
@@ -2146,7 +2502,7 @@ export default function HomePage() {
                                           <p className="text-[11px] text-cream/65 leading-snug">{r.text}</p>
                                         </div>
                                         <div className="flex items-center gap-3 mt-1 px-1">
-                                          <span className="text-[9px] text-cream/20">{r.time}</span>
+                                          <span className="text-[9px] text-cream/20">{r.timestamp ? formatTimeAgo(r.timestamp, commentsNow) : r.time}</span>
                                           <button
                                             onClick={() => toggleCommentLike(r.id)}
                                             className="flex items-center gap-1 text-[9px] font-semibold active:scale-95 transition-transform"
@@ -2242,11 +2598,8 @@ export default function HomePage() {
                   </div>
                 )}
 
-                {/* Input row */}
+                {/* Input row — emoji | text input | send arrow */}
                 <div className="flex items-center gap-2 px-4 py-3">
-                  <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0 bg-surface/20">
-                    <img src={CURRENT_USER.avatar} alt={CURRENT_USER.name} className="w-full h-full object-cover" />
-                  </div>
                   {/* Emoji toggle */}
                   <button
                     ref={commentSmileRef}
@@ -2260,7 +2613,7 @@ export default function HomePage() {
                     } disabled:opacity-30`}
                     aria-label="Emoji picker"
                   >
-                    <Smile className="w-4.5 h-4.5" />
+                    <Smile className="w-4 h-4" />
                   </button>
                   <input
                     ref={commentInputRef}
@@ -2274,14 +2627,15 @@ export default function HomePage() {
                                       "Add a comment…"
                     }
                     disabled={showLikesList}
-                    className="flex-1 bg-white/[0.05] border border-white/[0.08] rounded-2xl px-4 py-2.5 text-sm text-cream placeholder:text-cream/20 focus:outline-none focus:ring-1 focus:ring-[#CAE6CE]/30 transition-all disabled:opacity-40"
+                    className="flex-1 min-w-0 bg-white/[0.05] border border-white/[0.08] rounded-2xl px-4 py-2.5 text-sm text-cream placeholder:text-cream/20 focus:outline-none focus:ring-1 focus:ring-[#CAE6CE]/30 transition-all disabled:opacity-40"
                   />
                   <button
                     onClick={handlePostComment}
                     disabled={!commentText.trim() || showLikesList}
-                    className="px-3 py-2.5 rounded-2xl bg-[#CAE6CE]/10 border border-[#CAE6CE]/20 text-[#CAE6CE] text-xs font-bold hover:bg-[#CAE6CE]/20 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
+                    className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#CAE6CE]/10 border border-[#CAE6CE]/20 text-[#CAE6CE] flex items-center justify-center hover:bg-[#CAE6CE]/20 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+                    aria-label="Send comment"
                   >
-                    Post
+                    <ArrowUp className="w-4 h-4" />
                   </button>
                 </div>
               </div>

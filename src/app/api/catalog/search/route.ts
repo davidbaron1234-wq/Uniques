@@ -83,6 +83,43 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   }
 
+  // ── Text search WITH category filter ─────────────────────────────────────
+  // Bias the eBay query with category-specific keywords so results are scoped
+  // to the selected category. Fallback to local catalog on eBay failure.
+  if (q.length >= 2 && catParam) {
+    const CATEGORY_KEYWORDS: Record<string, string> = {
+      "Pokémon TCG":  "pokemon card",
+      "Sports Cards": "sports card",
+      "Other TCG":    "tcg card",
+      "Funko Pop":    "funko pop",
+      "Lego":         "lego set",
+      "Sneakers":     "sneaker shoe",
+      "Video Games":  "video game",
+      "Comics":       "comic book",
+      "Watches":      "watch",
+      "Coins":        "coin",
+    };
+    const kw = CATEGORY_KEYWORDS[catParam] ?? catParam.toLowerCase();
+    // Avoid appending if any keyword word is already in the query
+    const qLower = q.toLowerCase();
+    const alreadyBiased = kw.split(" ").some((w) => qLower.includes(w));
+    const biasedQ = alreadyBiased ? q : `${q} ${kw}`;
+    try {
+      const biasedResult = await searchEbayItems(biasedQ, {
+        limit:  pageSize,
+        offset: (page - 1) * pageSize,
+        categoryIds,
+        minPrice,
+        maxPrice,
+      });
+      if (biasedResult.items.length > 0) return NextResponse.json(biasedResult);
+    } catch (err) {
+      console.error("[catalog/search] Category-biased eBay failed:", err);
+    }
+    // eBay gave nothing — use local catalog (always respects category param)
+    return NextResponse.json(searchCatalog(q, { category: category || undefined, page, pageSize }));
+  }
+
   // ── Specific text search: eBay first, local fallback ─────────────────────
   try {
     const ebayResult = await searchEbayItems(q, {

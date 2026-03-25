@@ -378,7 +378,9 @@ function SearchPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { status } = useSession();
-  const [activeTab, setActiveTab] = useState<"Market" | "Collectors">("Market");
+  const [activeTab, setActiveTab] = useState<"Market" | "Collectors">(
+    searchParams.get("tab") === "Collectors" ? "Collectors" : "Market",
+  );
   const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
 
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
