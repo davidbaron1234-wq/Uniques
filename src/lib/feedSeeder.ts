@@ -36,10 +36,13 @@ export async function seedCategories(categories: string[]): Promise<number> {
         return;
       }
 
+      // Trusted image CDNs: eBay CDN + enriched sources (Pokemon TCG API, Rebrickable)
+      const VALID_CDNS = ["ebayimg.com", "pokemontcg.io", "rebrickable.com"];
+
       for (const item of data.items) {
         const imageUrl = item.imageLarge ?? item.imageSmall ?? "";
-        // Only store authentic eBay CDN images
-        if (!imageUrl.includes("ebayimg.com")) continue;
+        // Reject blank or non-CDN images (blocks Unsplash and placeholder URLs)
+        if (!imageUrl || !VALID_CDNS.some((cdn) => imageUrl.includes(cdn))) continue;
 
         try {
           await prisma.marketItem.upsert({

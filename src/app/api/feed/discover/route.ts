@@ -135,10 +135,16 @@ export async function GET(req: NextRequest) {
   const hasMore = catSkip + perCat < minCatCount;
 
   // ── Verification log ──────────────────────────────────────────────────────
-  const domains = Array.from(new Set(events.map((e) => {
+  const VALID_CDNS = ["ebayimg.com", "pokemontcg.io", "rebrickable.com"];
+  const domainSet = new Set(events.map((e) => {
     try { return new URL(e.item.imageUrl).hostname; } catch { return "invalid"; }
-  })));
-  console.log(`[discover] page=${page} cats=[${cats.join(",")}] returning ${events.length} events. Image domains: ${domains.join(", ")}`);
+  }));
+  const domains = Array.from(domainSet);
+  const badImages = events.filter((e) => !VALID_CDNS.some((cdn) => e.item.imageUrl?.includes(cdn)));
+  if (badImages.length > 0) {
+    console.warn(`[discover] WARNING: ${badImages.length} non-CDN image URLs:`, badImages.map((e) => e.item.imageUrl));
+  }
+  console.log(`[discover] page=${page} cats=[${cats.join(",")}] returning ${events.length} events. Domains: ${domains.join(", ")}`);
 
   return NextResponse.json({ events, hasMore, page });
 }
