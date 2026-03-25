@@ -43,6 +43,8 @@ export type DiscoverEvent = {
 
 const CACHE = new Map<string, CacheEntry>();
 const TTL   = 60 * 60 * 1000; // 1 hour
+// Cache version — bump to invalidate stale entries after a deploy
+const CACHE_VERSION = "v2";
 
 // ── Route ─────────────────────────────────────────────────────────────────────
 
@@ -60,7 +62,7 @@ export async function GET(req: NextRequest) {
 
   await Promise.allSettled(
     categories.map(async (cat) => {
-      const cached = CACHE.get(cat);
+      const cached = CACHE.get(`${CACHE_VERSION}:${cat}`);
       if (cached && now < cached.expiresAt) {
         results.push(...cached.events.slice(0, perCat));
         return;
@@ -84,10 +86,23 @@ export async function GET(req: NextRequest) {
         suggested: true,
       }));
 
-      CACHE.set(cat, { events, expiresAt: now + TTL });
+      // Verification: every image must come from a real eBay CDN domain
+      const badUrls = events.filter((e) => !e.imageUrl?.includes("ebayimg.com"));
+      if (badUrls.length > 0) {
+        console.warn(`[discover] Non-eBay image URLs for "${cat}":`, badUrls.map((e) => e.imageUrl));
+      } else {
+        console.log(`[discover] ✓ ${cat}: ${events.length} items, all from i.ebayimg.com`);
+      }
+
+      CACHE.set(`${CACHE_VERSION}:${cat}`, { events, expiresAt: now + TTL });
       results.push(...events.slice(0, perCat));
     }),
   );
+
+  // Emit a summary for verification in Vercel logs
+  const domainSet = new Set(results.map((e) => { try { return new URL(e.imageUrl).hostname; } catch { return "invalid"; } }));
+  const domains = Array.from(domainSet);
+  console.log(`[discover] Returning ${results.length} events. Image domains: ${domains.join(", ")}`);
 
   return NextResponse.json({ events: results.slice(0, count) });
 }

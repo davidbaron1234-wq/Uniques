@@ -14,7 +14,6 @@ import { useInventory } from "@/lib/InventoryContext";
 import { useAchievements } from "@/lib/AchievementsContext";
 import { usePreferences } from "@/lib/UserPreferencesContext";
 import { isDemoUser } from "@/lib/demo";
-import { generateFeedEvents } from "@/lib/mockFeedGenerator";
 import { formatValue } from "@/lib/format";
 import { TrendingUp, Repeat2, Package, ArrowLeftRight, CheckCircle2, Users, Heart, MessageCircle, Share, Trophy, Eye, X, Loader2, Smile, Sparkles, Bell } from "lucide-react";
 import type { CollectibleItem, TradeHistoryEntry } from "@/lib/types";
@@ -1331,22 +1330,16 @@ export default function HomePage() {
 
   // Build the active feed pool, filtered by user interests where set
   const pool = useMemo(() => {
-    const interests = preferences.favoriteCategories;
-
     if (feedTab === "following" || feedTab === "activity") return [];
 
     // Demo: use curated static pool (Unsplash images are fine for mock data)
     if (isDemo) return FY_POOL;
 
-    // Real users: ONLY real eBay discovered items + interest-based generated events.
-    // Never include Unsplash-sourced FY_POOL items for real users.
-    const generated = interests.length > 0
-      ? (generateFeedEvents(interests, 25, 42) as NetworkEvent[])
-      : [];
-    const combined = [...fyDiscovered, ...generated];
-    return interests.length > 0
-      ? combined.filter((e) => !e.categories?.length || e.categories.some((c) => interests.includes(c)))
-      : combined;
+    // Real users: ONLY real eBay-sourced items.
+    // generateFeedEvents() uses Unsplash stock images — NEVER used for real users.
+    const interests = preferences.favoriteCategories;
+    if (!interests.length) return fyDiscovered;
+    return fyDiscovered.filter((e) => !e.categories?.length || e.categories.some((c) => interests.includes(c)));
   }, [feedTab, isDemo, preferences.favoriteCategories, fyDiscovered]);
 
   const visiblePosts = pool.slice(0, visibleCount);
