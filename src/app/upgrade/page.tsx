@@ -3,18 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, X, Zap, TrendingUp, ScanLine, Package, Star, ArrowLeft, Sparkles, Crown, Trophy, Loader2 } from "lucide-react";
+import { Check, Zap, TrendingUp, ScanLine, Package, Star, ArrowLeft, Sparkles, Crown, Trophy, Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
-const FREE_FEATURES = [
-  { label: "Up to 10 vault pieces",  ok: true  },
-  { label: "Manual catalog search",  ok: true  },
-  { label: "Collector profile page", ok: true  },
-  { label: "Trade messaging",        ok: true  },
-  { label: "Unlimited vault",        ok: false },
-  { label: "AI Auto-Scanner",        ok: false },
-  { label: "Market Analytics",       ok: false },
-  { label: "Verified Collector Badge", ok: false },
-];
 
 const PRO_FEATURES = [
   { label: "Unlimited vault capacity",           icon: Package    },
@@ -145,38 +135,6 @@ export default function UpgradePage() {
               Secured by Stripe · 256-bit SSL encryption
             </p>
           </div>
-        </div>
-
-        {/* Comparison table */}
-        <div className="rounded-3xl bg-white/[0.03] border border-white/[0.06] overflow-hidden">
-          <div className="grid grid-cols-3 border-b border-white/[0.06]">
-            <div className="px-4 py-3 col-span-1">
-              <span className="text-[10px] font-bold text-cream/25 uppercase tracking-wider">Feature</span>
-            </div>
-            <div className="px-3 py-3 text-center border-l border-white/[0.06]">
-              <span className="text-[10px] font-bold text-cream/35 uppercase tracking-wider">Free</span>
-            </div>
-            <div className="px-3 py-3 text-center border-l border-white/[0.06] bg-primary/5">
-              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Pro</span>
-            </div>
-          </div>
-
-          {FREE_FEATURES.map(({ label, ok }) => (
-            <div key={label} className="grid grid-cols-3 border-b border-white/[0.04] last:border-0">
-              <div className="px-4 py-3 flex items-center col-span-1">
-                <span className="text-xs text-cream/60">{label}</span>
-              </div>
-              <div className="px-3 py-3 flex items-center justify-center border-l border-white/[0.04]">
-                {ok
-                  ? <Check className="w-4 h-4 text-green-400" />
-                  : <X     className="w-4 h-4 text-red-400/50" />
-                }
-              </div>
-              <div className="px-3 py-3 flex items-center justify-center border-l border-white/[0.04] bg-primary/[0.03]">
-                <Check className="w-4 h-4 text-primary" />
-              </div>
-            </div>
-          ))}
         </div>
 
         {/* Social proof */}

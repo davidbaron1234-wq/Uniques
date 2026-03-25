@@ -8,6 +8,7 @@ import confetti from "canvas-confetti";
 import { useInventory } from "@/lib/InventoryContext";
 import { useNotifications } from "@/lib/NotificationContext";
 import { isDemoUser } from "@/lib/demo";
+import { supabase } from "@/lib/supabase";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import ProposeTradeModal from "@/components/ProposeTradeModal";
@@ -364,6 +365,54 @@ export default function ChatPage() {
         if (found) setConvMeta({ name: found.name, avatar: found.avatarUrl });
       })
       .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRealConversation, conversationId, session?.user?.id]);
+
+  // ── Supabase Realtime: live-subscribe to new messages in this conversation ───
+  // Fires for INSERT events on the Message table; skips own messages (already
+  // shown optimistically) and appends remote messages instantly without a refresh.
+  useEffect(() => {
+    if (!isRealConversation || !conversationId || !session?.user?.id) return;
+
+    const channel = supabase
+      .channel(`chat:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event:  "INSERT",
+          schema: "public",
+          table:  "Message",
+          filter: `conversationId=eq.${conversationId}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            id:             string;
+            senderId:       string;
+            content:        string;
+            type:           string;
+            metadata:       unknown;
+            createdAt:      string;
+          };
+          // Skip own messages — already shown via optimistic update
+          if (row.senderId === session.user!.id) return;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id:   row.id,
+              from: "them" as const,
+              time: new Date(row.createdAt).toLocaleTimeString("en-US", {
+                hour: "numeric", minute: "2-digit",
+              }),
+              text:       row.type === "text"         ? row.content                           : undefined,
+              tradeOffer: row.type === "trade-offer"  ? (row.metadata as EmbeddedTradeOffer)  : undefined,
+              system:     row.type === "system",
+            },
+          ]);
+        },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRealConversation, conversationId, session?.user?.id]);
 
