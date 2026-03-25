@@ -787,14 +787,14 @@ export default function ProfilePage() {
     setPinnedGrailIds(loadPinnedGrails());
     if (isDemoUser(session?.user?.email)) setRadarItems(RADAR_SEED);
 
-    // Then hydrate from the real DB (non-demo users)
+    // Then hydrate from the real DB (non-demo users) — DB is source of truth
     if (!isDemoUser(session?.user?.email)) {
       fetch("/api/profile")
         .then((r) => r.ok ? r.json() : null)
         .then((data: {
           name?: string; bio?: string; avatar?: string;
           paymentMethods?: string[]; shippingPreferences?: string[];
-          tooltipSeen?: boolean;
+          tooltipSeen?: boolean; pinnedItemIds?: string[];
         } | null) => {
           if (!data) return;
           setProfile((prev) => ({
@@ -805,6 +805,10 @@ export default function ProfilePage() {
             paymentMethods:      data.paymentMethods      ?? prev.paymentMethods,
             shippingPreferences: data.shippingPreferences ?? prev.shippingPreferences,
           }));
+          // Grails/pinned items: DB is the source of truth for real users
+          if (Array.isArray(data.pinnedItemIds)) {
+            setPinnedGrailIds(data.pinnedItemIds);
+          }
           // Wire tooltipSeen from DB: only show pulse if DB says user hasn't seen it yet
           setShowEditPulse(data.tooltipSeen === false);
           // Keep localStorage in sync so instant hydration on next visit
@@ -2031,7 +2035,24 @@ export default function ProfilePage() {
         }}
         isPro={!isFree}
       />
-      <GrailsPickerModal isOpen={showGrailsPicker} onClose={() => setShowGrailsPicker(false)} items={items} pinnedIds={pinnedGrailIds} onSave={setPinnedGrailIds} userTier={isFree ? "free" : "pro"} />
+      <GrailsPickerModal
+        isOpen={showGrailsPicker}
+        onClose={() => setShowGrailsPicker(false)}
+        items={items}
+        pinnedIds={pinnedGrailIds}
+        onSave={(ids) => {
+          setPinnedGrailIds(ids);
+          // Persist to DB so grails sync across all devices
+          if (!isDemo) {
+            fetch("/api/profile", {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ pinnedItemIds: ids }),
+            }).catch(() => {});
+          }
+        }}
+        userTier={isFree ? "free" : "pro"}
+      />
       <ReviewsListModal isOpen={showReviews} onClose={() => setShowReviews(false)} userName={profile.name} trustScore={isDemo ? 4.8 : 0} isDemo={isDemo} />
 
       {/* ── Item Detail Modal ───────────────────────────────── */}

@@ -3,48 +3,54 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, Zap, TrendingUp, ScanLine, Package, Star, ArrowLeft, Sparkles, Crown, Trophy, Loader2 } from "lucide-react";
+import { Check, X, Zap, ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
 
-const PRO_FEATURES = [
-  { label: "Unlimited vault capacity",           icon: Package    },
-  { label: "Unlimited Grail Slots",              icon: Crown      },
-  { label: "Full Trophy Room Gallery",           icon: Trophy     },
-  { label: "AI Auto-Scanner (Vision + OCR)",     icon: ScanLine   },
-  { label: "Institutional Market Analytics",     icon: TrendingUp },
-  { label: "Verified Collector Pro Badge",       icon: Star       },
-  { label: "Priority trade matching",            icon: Zap        },
-  { label: "Everything in Free",                 icon: Check      },
+type FeatureRow = { label: string; free: string | boolean; pro: string | boolean };
+
+const FEATURES: FeatureRow[] = [
+  { label: "Vault capacity",           free: "10 items",   pro: "Unlimited"  },
+  { label: "Grail Slots",              free: "3 slots",    pro: "Unlimited"  },
+  { label: "Full Trophy Room",         free: false,        pro: true         },
+  { label: "AI Auto-Scanner",          free: false,        pro: true         },
+  { label: "Market Analytics",         free: false,        pro: true         },
+  { label: "Verified Pro Badge",       free: false,        pro: true         },
+  { label: "Priority trade matching",  free: false,        pro: true         },
+  { label: "Collector profile",        free: true,         pro: true         },
+  { label: "Trade messaging",          free: true,         pro: true         },
 ];
+
+function FeatureValue({ value, isPro }: { value: string | boolean; isPro: boolean }) {
+  if (typeof value === "string") {
+    return (
+      <span className={`text-[11px] font-bold leading-tight text-center ${
+        isPro ? "text-primary" : "text-cream/35"
+      }`}>{value}</span>
+    );
+  }
+  if (value) {
+    return <Check className={`w-4 h-4 flex-shrink-0 ${isPro ? "text-primary" : "text-cream/30"}`} />;
+  }
+  return <X className="w-3.5 h-3.5 flex-shrink-0 text-cream/12" />;
+}
 
 export default function UpgradePage() {
   const router = useRouter();
   const { status } = useSession();
   const [upgrading, setUpgrading] = useState(false);
 
-  if (status === "unauthenticated") {
-    router.replace("/api/auth/signin");
-    return null;
-  }
+  if (status === "unauthenticated") { router.replace("/api/auth/signin"); return null; }
   if (status === "loading") return null;
 
   const handleUpgrade = async () => {
     setUpgrading(true);
     try {
-      const res = await fetch("/api/stripe/checkout", { method: "POST" });
-      const data = await res.json() as { url?: string; fallback?: boolean; error?: string };
-      if (data.url) {
-        // Real Stripe session — redirect to hosted checkout
-        window.location.href = data.url;
-      } else {
-        // Stripe not yet configured (dev / staging) — use simulated checkout page
-        router.push("/checkout");
-      }
-    } catch {
-      router.push("/checkout");
-    } finally {
-      setUpgrading(false);
-    }
+      const res  = await fetch("/api/stripe/checkout", { method: "POST" });
+      const data = await res.json() as { url?: string; fallback?: boolean };
+      if (data.url) { window.location.href = data.url; }
+      else          { router.push("/checkout"); }
+    } catch { router.push("/checkout"); }
+    finally  { setUpgrading(false); }
   };
 
   return (
@@ -57,17 +63,14 @@ export default function UpgradePage() {
 
       {/* Header */}
       <div className="relative flex items-center justify-between px-5 pt-5 pb-4 max-w-lg mx-auto w-full">
-        <button
-          onClick={() => router.back()}
-          className="p-2 rounded-xl hover:bg-white/[0.06] text-cream/50 hover:text-cream transition-colors"
-        >
+        <button onClick={() => router.back()} className="p-2 rounded-xl hover:bg-white/[0.06] text-cream/50 hover:text-cream transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <Logo />
         <div className="w-9" />
       </div>
 
-      <div className="relative flex-1 px-5 pb-10 max-w-lg mx-auto w-full space-y-6">
+      <div className="relative flex-1 px-5 pb-10 max-w-lg mx-auto w-full space-y-5">
 
         {/* Hero */}
         <div className="text-center space-y-2 pt-2">
@@ -79,66 +82,94 @@ export default function UpgradePage() {
             Collect smarter.<br />Trade faster.
           </h1>
           <p className="text-sm text-cream/40 max-w-xs mx-auto">
-            Unlock the full Uniques experience for less than a coffee a month.
+            See everything you&apos;re leaving on the table with the Free tier.
           </p>
         </div>
 
-        {/* Price card */}
-        <div className="relative rounded-3xl overflow-hidden">
-          {/* Glow border */}
-          <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary/30 via-surface/20 to-primary/10 blur-[2px]" />
-          <div className="relative bg-charcoal-dark rounded-3xl p-6 border border-primary/25 shadow-2xl">
-            <div className="flex items-start justify-between mb-5">
-              <div>
-                <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1">Pro Plan</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-5xl font-extrabold text-cream">$4.99</span>
-                  <span className="text-sm text-cream/35 font-medium">/month</span>
-                </div>
-                <p className="text-xs text-cream/30 mt-1">Cancel anytime · No commitment</p>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-primary/20 border border-primary/30 flex items-center justify-center">
-                <Zap className="w-6 h-6 text-primary" />
-              </div>
+        {/* Plan header cards */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Free */}
+          <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-4 flex flex-col gap-1">
+            <p className="text-[10px] font-bold text-cream/25 uppercase tracking-widest">Free</p>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-3xl font-extrabold text-cream/40">$0</span>
+              <span className="text-[11px] text-cream/20">/mo</span>
             </div>
+            <span className="mt-1.5 inline-block text-[10px] font-semibold text-cream/20 bg-white/[0.04] px-2 py-0.5 rounded-full w-fit">
+              Current plan
+            </span>
+          </div>
 
-            <div className="space-y-2.5 mb-6">
-              {PRO_FEATURES.map(({ label, icon: Icon }) => (
-                <div key={label} className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                    <Icon className="w-3 h-3 text-primary" />
-                  </div>
-                  <span className="text-sm text-cream/80 font-medium">{label}</span>
-                </div>
-              ))}
+          {/* Pro */}
+          <div className="relative rounded-2xl overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-primary/5 blur-[2px]" />
+            <div className="relative rounded-2xl bg-charcoal-dark border border-primary/35 p-4 flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Pro</p>
+                <span className="text-[9px] font-extrabold text-charcoal-dark bg-primary px-1.5 py-0.5 rounded-full leading-none">BEST</span>
+              </div>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-3xl font-extrabold text-cream">$4.99</span>
+                <span className="text-[11px] text-cream/40">/mo</span>
+              </div>
+              <span className="text-[10px] text-cream/30 mt-0.5">Cancel anytime</span>
             </div>
-
-            {/* CTA */}
-            <button
-              onClick={handleUpgrade}
-              disabled={upgrading}
-              className="w-full py-4 rounded-2xl bg-primary text-charcoal-dark font-extrabold text-base hover:bg-primary/90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 relative overflow-hidden group disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {!upgrading && (
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-              )}
-              <span className="relative flex items-center justify-center gap-2">
-                {upgrading ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" />Redirecting to checkout…</>
-                ) : (
-                  <><Zap className="w-5 h-5" />Upgrade to Pro</>
-                )}
-              </span>
-            </button>
-
-            <p className="text-center text-[10px] text-cream/20 mt-3">
-              Secured by Stripe · 256-bit SSL encryption
-            </p>
           </div>
         </div>
 
+        {/* Feature comparison */}
+        <div className="rounded-2xl overflow-hidden border border-white/[0.07]">
+          {/* Column header row */}
+          <div className="grid grid-cols-[1fr_68px_68px] bg-white/[0.025] border-b border-white/[0.07]">
+            <div className="px-4 py-2.5" />
+            <div className="py-2.5 flex items-center justify-center">
+              <span className="text-[10px] font-bold text-cream/25 uppercase tracking-wider">Free</span>
+            </div>
+            <div className="py-2.5 flex items-center justify-center bg-primary/[0.07]">
+              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Pro</span>
+            </div>
+          </div>
+
+          {FEATURES.map(({ label, free, pro }, i) => (
+            <div
+              key={label}
+              className={`grid grid-cols-[1fr_68px_68px] ${i < FEATURES.length - 1 ? "border-b border-white/[0.04]" : ""}`}
+            >
+              <div className="px-4 py-3 flex items-center">
+                <span className="text-[11px] text-cream/55 leading-tight">{label}</span>
+              </div>
+              <div className="py-3 flex items-center justify-center border-l border-white/[0.04] px-1">
+                <FeatureValue value={free} isPro={false} />
+              </div>
+              <div className="py-3 flex items-center justify-center border-l border-white/[0.04] bg-primary/[0.04] px-1">
+                <FeatureValue value={pro} isPro={true} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA button */}
+        <button
+          onClick={handleUpgrade}
+          disabled={upgrading}
+          className="w-full py-4 rounded-2xl bg-primary text-charcoal-dark font-extrabold text-base hover:bg-primary/90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 relative overflow-hidden group disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          {!upgrading && (
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+          )}
+          <span className="relative flex items-center justify-center gap-2">
+            {upgrading
+              ? <><Loader2 className="w-5 h-5 animate-spin" />Redirecting to checkout…</>
+              : <><Zap className="w-5 h-5" />Upgrade to Pro — $4.99/mo</>
+            }
+          </span>
+        </button>
+        <p className="text-center text-[10px] text-cream/20 -mt-2">
+          Secured by Stripe · 256-bit SSL · Cancel anytime
+        </p>
+
         {/* Social proof */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 pb-2">
           <div className="flex justify-center -space-x-2">
             {["Alex", "Sam", "Jordan", "Drew", "Riley"].map((s) => (
               <img

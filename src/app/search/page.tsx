@@ -383,6 +383,13 @@ function SearchPageContent() {
   );
   const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
 
+  // ── Collectors tab state ──────────────────────────────────────────────────
+  const [dbCollectors,       setDbCollectors]       = useState<Collector[]>([]);
+  const [collectorsLoading,  setCollectorsLoading]  = useState(false);
+  const [collectorsCatFilter, setCollectorsCatFilter] = useState("");
+  const [collectorsMinValue,  setCollectorsMinValue]  = useState(0); // 0 = any
+  const collectorsLoadedRef = useRef(false);
+
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const itemId = searchParams.get("itemId");
   const autoOpen = searchParams.get("autoOpen");
@@ -895,8 +902,33 @@ function SearchPageContent() {
     });
   };
 
-  // Filter collectors by query (name, handle, or category)
-  const filteredCollectors = COLLECTORS.filter((c) => {
+  // ── Fetch real DB collectors when the tab is visible or filters change ───────
+  useEffect(() => {
+    if (activeTab !== "Collectors" || status === "loading") return;
+    if (status === "unauthenticated") return;
+    // Demo users see mocks only
+    const isDemo = status === "authenticated";
+    if (!isDemo) return;
+
+    // Avoid hammering the API on first render; use a ref to allow re-fetch on filter change
+    setCollectorsLoading(true);
+    const params = new URLSearchParams();
+    if (collectorsCatFilter) params.set("category", collectorsCatFilter);
+    if (collectorsMinValue > 0) params.set("minValue", String(collectorsMinValue));
+    fetch(`/api/users?${params.toString()}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { collectors: Collector[] } | null) => {
+        if (data?.collectors) setDbCollectors(data.collectors);
+      })
+      .catch(() => {})
+      .finally(() => setCollectorsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, status, collectorsCatFilter, collectorsMinValue]);
+
+  // Combined + client-filtered collector list:
+  // Real users see DB results; demo users see mock data
+  const allCollectors = dbCollectors.length > 0 ? dbCollectors : COLLECTORS;
+  const filteredCollectors = allCollectors.filter((c) => {
     if (!query.trim()) return true;
     const q = normalize(query);
     return (
@@ -1125,14 +1157,64 @@ function SearchPageContent() {
 
         {/* ── Collectors tab content ── */}
         {activeTab === "Collectors" && (
-          <div className="px-5 pb-6">
-            {/* Count */}
-            <p className="text-xs text-cream/30 font-medium mb-3">
-              {filteredCollectors.length} collector{filteredCollectors.length !== 1 ? "s" : ""}
-              {query.trim() ? ` matching "${query}"` : ""}
-            </p>
+          <div className="px-5 pb-6 space-y-3">
 
-            {filteredCollectors.length === 0 ? (
+            {/* ── Filters ──────────────────────────────────────────────── */}
+            <div className="space-y-2.5">
+              {/* Category interest pills */}
+              <div className="flex gap-2 overflow-x-auto scrollbar-none pb-0.5">
+                {["", "Pokémon TCG", "Sports Cards", "Funko Pop", "Lego", "Sneakers", "Watches", "Comics", "Coins"].map((cat) => (
+                  <button
+                    key={cat || "all"}
+                    onClick={() => setCollectorsCatFilter(cat)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
+                      collectorsCatFilter === cat
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "bg-white/[0.06] text-cream/40 border border-white/[0.06] hover:text-cream/60"
+                    }`}
+                  >
+                    {cat || "All Categories"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Vault value filter */}
+              <div className="flex gap-2 overflow-x-auto scrollbar-none pb-0.5">
+                {([
+                  { label: "Any Value",  value: 0       },
+                  { label: "$10k+",      value: 10000   },
+                  { label: "$25k+",      value: 25000   },
+                  { label: "$50k+",      value: 50000   },
+                  { label: "$100k+",     value: 100000  },
+                ] as { label: string; value: number }[]).map(({ label, value }) => (
+                  <button
+                    key={value}
+                    onClick={() => setCollectorsMinValue(value)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
+                      collectorsMinValue === value
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "bg-white/[0.06] text-cream/40 border border-white/[0.06] hover:text-cream/60"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Count + loading */}
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-cream/30 font-medium">
+                {collectorsLoading ? "Loading…" : (
+                  `${filteredCollectors.length} collector${filteredCollectors.length !== 1 ? "s" : ""}${query.trim() ? ` matching "${query}"` : ""}`
+                )}
+              </p>
+              {collectorsLoading && (
+                <Loader2 className="w-3 h-3 text-cream/30 animate-spin" />
+              )}
+            </div>
+
+            {filteredCollectors.length === 0 && !collectorsLoading ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="w-16 h-16 rounded-full bg-background-light flex items-center justify-center mb-4">
                   <Users className="w-8 h-8 text-cream/20" />

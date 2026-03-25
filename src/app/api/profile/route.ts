@@ -43,6 +43,7 @@ export async function PUT(request: Request) {
       shippingPreferences?: string[];
       interests?:           string[];
       tooltipSeen?:         boolean;
+      pinnedItemIds?:       string[];
     };
 
     const profile = await prisma.profile.upsert({
@@ -55,6 +56,7 @@ export async function PUT(request: Request) {
         paymentMethods:      body.paymentMethods      ?? [],
         shippingPreferences: body.shippingPreferences ?? [],
         interests:           body.interests           ?? [],
+        pinnedItemIds:       body.pinnedItemIds        ?? [],
         tooltipSeen:         body.tooltipSeen         ?? false,
       },
       update: {
@@ -64,6 +66,7 @@ export async function PUT(request: Request) {
         ...(body.paymentMethods      !== undefined && { paymentMethods:      body.paymentMethods }),
         ...(body.shippingPreferences !== undefined && { shippingPreferences: body.shippingPreferences }),
         ...(body.interests           !== undefined && { interests:           body.interests }),
+        ...(body.pinnedItemIds       !== undefined && { pinnedItemIds:       body.pinnedItemIds }),
         ...(body.tooltipSeen         !== undefined && { tooltipSeen:         body.tooltipSeen }),
       },
     });

@@ -28,6 +28,7 @@ model Profile {
   paymentMethods      String[]
   shippingPreferences String[]
   interests           String[]           // favorite categories from onboarding
+  pinnedItemIds       String[]           // item IDs pinned as Grails
   tooltipSeen         Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
