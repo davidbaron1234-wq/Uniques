@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { InventoryProvider } from "@/lib/InventoryContext";
 import { PreferencesProvider } from "@/lib/UserPreferencesContext";
 import { NotificationProvider } from "@/lib/NotificationContext";
 import { AchievementsProvider } from "@/lib/AchievementsContext";
 import AuthProvider from "@/components/AuthProvider";
+import RealtimeProvider from "@/components/RealtimeProvider";
 import ToastOverlay from "@/components/ToastOverlay";
 import TourCleanup from "@/components/TourCleanup";
+import UpgradeSuccessHandler from "@/components/UpgradeSuccessHandler";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -37,7 +40,11 @@ export default function RootLayout({
             <PreferencesProvider>
             <NotificationProvider>
               <AchievementsProvider>
+                <RealtimeProvider />
                 <TourCleanup />
+                <Suspense fallback={null}>
+                  <UpgradeSuccessHandler />
+                </Suspense>
                 {children}
                 <ToastOverlay />
               </AchievementsProvider>

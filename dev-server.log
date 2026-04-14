@@ -1,0 +1,44 @@
+
+> uniques-temp@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3001
+  - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 1859ms
+ ✓ Compiled /api/auth/register in 251ms (66 modules)
+ POST /api/auth/register 201 in 1024ms
+ ✓ Compiled in 22ms
+ ✓ Compiled /api/auth/register in 119ms (66 modules)
+ POST /api/auth/register 201 in 812ms
+ ✓ Compiled in 47ms (66 modules)
+ ✓ Compiled in 24ms
+ ✓ Compiled /api/auth/register in 287ms (97 modules)
+ POST /api/auth/register 400 in 1802ms
+ POST /api/auth/register 201 in 1042ms
+ ✓ Compiled in 1698ms (203 modules)
+ ✓ Compiled in 191ms (203 modules)
+ ✓ Compiled in 97ms (203 modules)
+ ✓ Compiled in 76ms (203 modules)
+ ✓ Compiled in 31ms (203 modules)
+ ✓ Compiled in 80ms (203 modules)
+ ✓ Compiled in 29ms (203 modules)
+ ✓ Compiled in 26ms (203 modules)
+ ✓ Compiled in 28ms (203 modules)
+ ✓ Compiled in 47ms (203 modules)
+ ✓ Compiled in 31ms (203 modules)
+ ✓ Compiled in 67ms (203 modules)
+ ✓ Compiled in 31ms (203 modules)
+ ✓ Compiled in 42ms (203 modules)
+ ✓ Compiled in 142ms (203 modules)
+ ✓ Compiled in 151ms (203 modules)
+ ✓ Compiled in 73ms (203 modules)
+   Reload env: .env.local
+ ✓ Compiled in 2.1s (203 modules)
+ ✓ Compiled in 37ms (203 modules)
+ ✓ Compiled in 89ms (203 modules)
+ ✓ Compiled in 34ms (203 modules)
+ ✓ Compiled in 65ms (203 modules)

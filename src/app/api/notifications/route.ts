@@ -40,6 +40,9 @@ export async function POST(request: Request) {
     if (!body.message) {
       return Response.json({ error: "message is required" }, { status: 400 });
     }
+    if (body.message.length > 500) {
+      return Response.json({ error: "Message must be 500 characters or fewer" }, { status: 400 });
+    }
 
     const notification = await prisma.notification.create({
       data: {

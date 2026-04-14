@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
+import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { isDemoUser } from "@/lib/demo";
 import { driver } from "driver.js";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
-import { AlertTriangle, Edit, MessageSquare, Search, X, Pin, PinOff, BellDot, Trash2, UserX, ShieldOff, Shield } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Edit, MessageSquare, Search, X, Pin, PinOff, BellDot, Trash2, UserX, ShieldOff, Shield } from "lucide-react";
 
 // ── Conversation type ─────────────────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ type Conv = {
   handle: string;
   avatar: string;
   lastMessage: string;
+  lastMessageType?: string; // "trade-offer" | "system" | "text"
   time: string;
   unread: number;
   hasDot: boolean;
@@ -437,9 +439,17 @@ function ConversationRow({
             </span>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <p className={`text-xs truncate ${matchSnippet ? "text-primary/70 italic" : hasActivity ? "text-cream/60 font-medium" : "text-cream/35"}`}>
-              {matchSnippet ?? conv.lastMessage}
-            </p>
+            {/* Trade proposal gets a distinct visual indicator instead of raw text */}
+            {!matchSnippet && conv.lastMessageType === "trade-offer" ? (
+              <span className="flex items-center gap-1 text-xs font-semibold text-primary/80 flex-1 truncate">
+                <ArrowLeftRight className="w-3 h-3 flex-shrink-0" />
+                Trade Proposal
+              </span>
+            ) : (
+              <p className={`text-xs truncate ${matchSnippet ? "text-primary/70 italic" : hasActivity ? "text-cream/60 font-medium" : "text-cream/35"}`}>
+                {matchSnippet ?? conv.lastMessage}
+              </p>
+            )}
             {/* Number badge for seed unread counts */}
             {conv.unread > 0 && (
               <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-charcoal-dark text-[10px] font-extrabold flex items-center justify-center leading-none">
@@ -524,62 +534,71 @@ export default function InboxPage() {
   const [ctxMenu,     setCtxMenu]     = useState<CtxMenu | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: "block" | "delete"; id: string } | null>(null);
 
-  // Convs start empty; seeded after auth resolves
-  const [convs, setConvs] = useState<Conv[]>([]);
+  // SWR for real-user conversations — user-scoped key prevents cross-user cache bleeding.
+  type ConvApiRow = { id: string; name: string; handle?: string; avatarUrl: string; lastMessage: string; lastMessageType?: string; lastMessageAt: string };
+  const { data: convsApiData, isLoading: convsSwrLoading } = useSWR<ConvApiRow[]>(
+    !isDemo && status === "authenticated" && session?.user?.id
+      ? ["/api/conversations", session.user.id] as const
+      : null,
+    ([url]: readonly [string, string]) => {
+      try { localStorage.removeItem("inbox_unread_real"); } catch { /* noop */ }
+      return fetch(url).then((r) => (r.ok ? r.json() : []));
+    },
+    { keepPreviousData: true, revalidateOnFocus: true },
+  );
+
+  // Derived Conv list for real users from SWR data
+  const dbConvs = useMemo<Conv[]>(() => {
+    if (!convsApiData) return [];
+    return convsApiData.map((c) => ({
+      id:              c.id,
+      name:            c.name,
+      handle:          c.handle ? `@${c.handle}` : `@${c.name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")}`,
+      avatar:          c.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.name}&backgroundColor=b6e3f4`,
+      lastMessage:     c.lastMessage,
+      lastMessageType: c.lastMessageType ?? "text",
+      time:            c.lastMessage ? new Date(c.lastMessageAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
+      unread:          0,
+      hasDot:          false,
+      online:          false,
+      pinned:          false,
+      sortTs:          new Date(c.lastMessageAt).getTime(),
+      messages:        [c.lastMessage].filter(Boolean),
+    }));
+  }, [convsApiData]);
+
+  // Convs: seed for demo, SWR for real users
+  const [convs,       setConvs]       = useState<Conv[]>([]);
+  const [convLoading, setConvLoading] = useState(true);
   const convSeeded = useRef(false);
 
+  // Demo seeding — one-time only
   useEffect(() => {
-    if (status === "loading" || convSeeded.current) return;
+    if (status === "loading" || !isDemo || convSeeded.current) return;
     convSeeded.current = true;
-
-    if (isDemo) {
-      // Demo account: restore seed conversations from localStorage state
-      if (typeof window === "undefined") return;
-      setConvs(
-        SEED
-          .filter((c) =>
-            !localStorage.getItem(`inbox_del_${c.id}`) &&
-            !localStorage.getItem(`inbox_block_${c.id}`)
-          )
-          .map((c) => {
-            const hasDot = !!localStorage.getItem(`inbox_dot_${c.id}`);
-            const isRead = !!localStorage.getItem(`inbox_read_${c.id}`);
-            return {
-              ...c,
-              pinned: !!localStorage.getItem(`inbox_pin_${c.id}`),
-              hasDot,
-              unread: hasDot || isRead ? 0 : c.unread,
-            };
-          })
-      );
-    } else {
-      // Real users: load conversations from DB
-      fetch("/api/conversations")
-        .then((r) => r.ok ? r.json() : [])
-        .then((data: Array<{
-          id: string; name: string; avatarUrl: string;
-          lastMessage: string; lastMessageAt: string;
-        }>) => {
-          setConvs(
-            data.map((c) => ({
-              id:          c.id,
-              name:        c.name,
-              handle:      `@${c.name.toLowerCase()}`,
-              avatar:      c.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.name}&backgroundColor=b6e3f4`,
-              lastMessage: c.lastMessage,
-              time:        c.lastMessage ? new Date(c.lastMessageAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
-              unread:      0,
-              hasDot:      false,
-              online:      false,
-              pinned:      false,
-              sortTs:      new Date(c.lastMessageAt).getTime(),
-              messages:    [c.lastMessage].filter(Boolean),
-            }))
-          );
+    if (typeof window === "undefined") return;
+    setConvs(
+      SEED
+        .filter((c) =>
+          !localStorage.getItem(`inbox_del_${c.id}`) &&
+          !localStorage.getItem(`inbox_block_${c.id}`)
+        )
+        .map((c) => {
+          const hasDot = !!localStorage.getItem(`inbox_dot_${c.id}`);
+          const isRead = !!localStorage.getItem(`inbox_read_${c.id}`);
+          return { ...c, pinned: !!localStorage.getItem(`inbox_pin_${c.id}`), hasDot, unread: hasDot || isRead ? 0 : c.unread };
         })
-        .catch(() => { /* network offline — stays empty */ });
-    }
+    );
+    setConvLoading(false);
   }, [status, isDemo]);
+
+  // Real users: sync convs from SWR, allow local mutations (pin, mark-read, etc.)
+  useEffect(() => {
+    if (isDemo || convsSwrLoading) return;
+    setConvs(dbConvs);
+    setConvLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbConvs, isDemo]);
 
   // Re-sync read state when page regains focus (chat room sets inbox_read_*)
   // Debounced to prevent race conditions on rapid tab switches
@@ -785,7 +804,21 @@ export default function InboxPage() {
 
         {/* ── Conversation list ── */}
         <div>
-          {filtered.length === 0 ? (
+          {convLoading ? (
+            /* Loading skeleton — shown while DB fetch is in-flight */
+            <div className="space-y-0">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-4">
+                  <div className="w-14 h-14 rounded-full bg-white/[0.06] animate-pulse flex-shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="h-3.5 bg-white/[0.06] rounded-full animate-pulse w-1/3" />
+                    <div className="h-3 bg-white/[0.04] rounded-full animate-pulse w-2/3" />
+                  </div>
+                  <div className="h-2.5 bg-white/[0.04] rounded-full animate-pulse w-8 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center py-16 gap-3">
               <MessageSquare className="w-8 h-8 text-cream/15" />
               <p className="text-sm text-cream/30 text-center px-6">

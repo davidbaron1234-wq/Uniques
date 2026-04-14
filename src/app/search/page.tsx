@@ -7,17 +7,21 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
+import MarketTicker from "@/components/MarketTicker";
 import CardDetailModal from "@/components/CardDetailModal";
 import ItemConfigForm, { ItemConfig } from "@/components/ItemConfigForm";
 import { formatValue } from "@/lib/format";
 import { MasterItem } from "@/lib/catalog/types";
 import { CollectibleItem } from "@/lib/types";
+import { useInventory } from "@/lib/InventoryContext";
 import { CATEGORIES, Category } from "@/lib/constants";
 import AdvancedFiltersModal, { ExploreFilters } from "@/components/AdvancedFiltersModal";
 import { usePreferences } from "@/lib/UserPreferencesContext";
+import { isDemoUser } from "@/lib/demo";
+import GuestAuthModal from "@/components/GuestAuthModal";
 import {
   Search, X, Loader2, Check, Save, ArrowLeft, AlertCircle,
-  Star, UserPlus, UserCheck, Users, SlidersHorizontal, Sparkles, Flame, Info,
+  Star, UserPlus, UserCheck, Users, SlidersHorizontal, Sparkles, Flame, Info, MessageSquare,
 } from "lucide-react";
 
 const PAGE_SIZE = 60;
@@ -110,78 +114,69 @@ type Collector = {
   avatar: string;
   trades: number;
   collectionValue: number;
+  itemCount?: number;
   categories: string[];
   trustScore: number;
   online: boolean;
+  isPro: boolean;
+  isNew?: boolean; // joined within the last 3 days (from API)
+  paymentMethods: string[];
+  shippingPreferences: string[];
 };
 
 const COLLECTORS: Collector[] = [
-  {
-    id: "user-drew",
-    name: "Drew",
-    handle: "drew",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Drew&backgroundColor=B5EAD7",
-    trades: 63,
-    collectionValue: 27000,
-    categories: ["Pokémon TCG", "Funko Pop"],
-    trustScore: 4.9,
-    online: true,
-  },
-  {
-    id: "user-ethan",
-    name: "Ethan",
-    handle: "ethan",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ethan&backgroundColor=FFDAC1",
-    trades: 38,
-    collectionValue: 31200,
-    categories: ["Sports Cards", "Lego", "Funko Pop"],
-    trustScore: 4.6,
-    online: true,
-  },
-  {
-    id: "user-sam",
-    name: "Sam",
-    handle: "sam",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sam&backgroundColor=FCF9D5",
-    trades: 91,
-    collectionValue: 14500,
-    categories: ["Pokémon TCG"],
-    trustScore: 4.8,
-    online: false,
-  },
-  {
-    id: "user-alex",
-    name: "Alex",
-    handle: "alex",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex&backgroundColor=AA95C5",
-    trades: 27,
-    collectionValue: 48000,
-    categories: ["Funko Pop"],
-    trustScore: 4.7,
-    online: false,
-  },
-  {
-    id: "user-jordan",
-    name: "Jordan",
-    handle: "jordan",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan&backgroundColor=CAE6CE",
-    trades: 44,
-    collectionValue: 9800,
-    categories: ["Sneakers"],
-    trustScore: 4.5,
-    online: false,
-  },
-  {
-    id: "user-riley",
-    name: "Riley",
-    handle: "riley",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Riley&backgroundColor=FFD9E8",
-    trades: 15,
-    collectionValue: 5600,
-    categories: ["Comics", "Video Games"],
-    trustScore: 4.3,
-    online: false,
-  },
+  // ── Original 6 ──────────────────────────────────────────────────────────
+  { id: "user-drew",   name: "Drew",   handle: "drew",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Drew&backgroundColor=B5EAD7",   trades: 63,  collectionValue: 27000,   categories: ["Pokémon TCG", "Funko Pop"],           trustScore: 4.9, online: true,  isPro: true,  paymentMethods: ["PayPal", "Crypto"],          shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-ethan",  name: "Ethan",  handle: "ethan",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ethan&backgroundColor=FFDAC1",  trades: 38,  collectionValue: 31200,   categories: ["Sports Cards", "Lego", "Funko Pop"], trustScore: 4.6, online: true,  isPro: false, paymentMethods: ["Bank Transfer"],             shippingPreferences: ["Local Pickup"] },
+  { id: "user-sam",    name: "Sam",    handle: "sam",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sam&backgroundColor=FCF9D5",    trades: 91,  collectionValue: 14500,   categories: ["Pokémon TCG"],                       trustScore: 4.8, online: false, isPro: true,  paymentMethods: ["PayPal"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-alex",   name: "Alex",   handle: "alex",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex&backgroundColor=AA95C5",   trades: 27,  collectionValue: 48000,   categories: ["Funko Pop"],                         trustScore: 4.7, online: false, isPro: true,  paymentMethods: ["PayPal", "Bank Transfer"],   shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-jordan", name: "Jordan", handle: "jordan", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan&backgroundColor=CAE6CE", trades: 44,  collectionValue: 9800,    categories: ["Sneakers"],                          trustScore: 4.5, online: false, isPro: false, paymentMethods: ["Crypto"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-riley",  name: "Riley",  handle: "riley",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Riley&backgroundColor=FFD9E8",  trades: 15,  collectionValue: 5600,    categories: ["Comics", "Video Games"],             trustScore: 4.3, online: false, isPro: false, paymentMethods: [],                            shippingPreferences: ["Worldwide Shipping"] },
+  // ── Expanded 44 ─────────────────────────────────────────────────────────
+  { id: "user-mia",    name: "Mia",    handle: "mia",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Mia&backgroundColor=ffd5dc",    trades: 112, collectionValue: 125000,  categories: ["Watches"],                           trustScore: 4.9, online: true,  isPro: true,  paymentMethods: ["PayPal", "Crypto"],          shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-carlos", name: "Carlos", handle: "carlos", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos&backgroundColor=b6e3f4", trades: 87,  collectionValue: 87000,   categories: ["Sports Cards"],                      trustScore: 4.8, online: true,  isPro: true,  paymentMethods: ["Bank Transfer"],             shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-zoe",    name: "Zoe",    handle: "zoe",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Zoe&backgroundColor=c0aede",    trades: 22,  collectionValue: 8500,    categories: ["Pokémon TCG"],                       trustScore: 4.4, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-marcus", name: "Marcus", handle: "marcus", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Marcus&backgroundColor=CAE6CE", trades: 204, collectionValue: 210000,  categories: ["Lego"],                              trustScore: 4.9, online: true,  isPro: true,  paymentMethods: ["Crypto"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-priya",  name: "Priya",  handle: "priya",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Priya&backgroundColor=FFD9E8",  trades: 11,  collectionValue: 4200,    categories: ["Comics"],                            trustScore: 4.1, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-tyler",  name: "Tyler",  handle: "tyler",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Tyler&backgroundColor=b6e3f4",  trades: 76,  collectionValue: 95000,   categories: ["Sneakers"],                          trustScore: 4.7, online: true,  isPro: true,  paymentMethods: ["PayPal", "Crypto"],          shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-sofia",  name: "Sofia",  handle: "sofia",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sofia&backgroundColor=ffd5dc",  trades: 319, collectionValue: 450000,  categories: ["Watches"],                           trustScore: 5.0, online: false, isPro: true,  paymentMethods: ["Bank Transfer"],             shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-jake",   name: "Jake",   handle: "jake",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jake&backgroundColor=FCF9D5",   trades: 8,   collectionValue: 3100,    categories: ["Video Games"],                       trustScore: 4.0, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-naomi",  name: "Naomi",  handle: "naomi",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Naomi&backgroundColor=AA95C5",  trades: 55,  collectionValue: 32000,   categories: ["Pokémon TCG"],                       trustScore: 4.8, online: true,  isPro: true,  paymentMethods: ["PayPal"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-darius", name: "Darius", handle: "darius", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Darius&backgroundColor=b6e3f4", trades: 143, collectionValue: 156000,  categories: ["Sports Cards"],                      trustScore: 4.9, online: true,  isPro: true,  paymentMethods: ["Bank Transfer", "Crypto"],   shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-emma",   name: "Emma",   handle: "emma",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Emma&backgroundColor=FFD9E8",   trades: 19,  collectionValue: 7800,    categories: ["Funko Pop"],                         trustScore: 4.2, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-kai",    name: "Kai",    handle: "kai",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Kai&backgroundColor=CAE6CE",    trades: 61,  collectionValue: 67000,   categories: ["Lego"],                              trustScore: 4.6, online: false, isPro: true,  paymentMethods: ["Crypto"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-aria",   name: "Aria",   handle: "aria",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Aria&backgroundColor=c0aede",   trades: 98,  collectionValue: 89000,   categories: ["Comics"],                            trustScore: 4.8, online: true,  isPro: true,  paymentMethods: ["PayPal", "Bank Transfer"],   shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-noah",   name: "Noah",   handle: "noah",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Noah&backgroundColor=FCF9D5",   trades: 7,   collectionValue: 2300,    categories: ["Sneakers"],                          trustScore: 3.9, online: false, isPro: false, paymentMethods: [],                            shippingPreferences: ["Local Pickup"] },
+  { id: "user-luna",   name: "Luna",   handle: "luna",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Luna&backgroundColor=ffd5dc",   trades: 441, collectionValue: 1200000, categories: ["Watches"],                           trustScore: 4.9, online: true,  isPro: true,  paymentMethods: ["PayPal", "Crypto", "Bank Transfer"], shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-felix",  name: "Felix",  handle: "felix",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=B5EAD7",  trades: 33,  collectionValue: 11000,   categories: ["Pokémon TCG"],                       trustScore: 4.5, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-zara",   name: "Zara",   handle: "zara",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Zara&backgroundColor=AA95C5",   trades: 188, collectionValue: 325000,  categories: ["Coins"],                             trustScore: 4.8, online: false, isPro: true,  paymentMethods: ["Bank Transfer"],             shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-hunter", name: "Hunter", handle: "hunter", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Hunter&backgroundColor=b6e3f4", trades: 24,  collectionValue: 6400,    categories: ["Sports Cards"],                      trustScore: 4.3, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-isla",   name: "Isla",   handle: "isla",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Isla&backgroundColor=FFD9E8",   trades: 72,  collectionValue: 78000,   categories: ["Pokémon TCG"],                       trustScore: 4.9, online: true,  isPro: true,  paymentMethods: ["PayPal", "Crypto"],          shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-river",  name: "River",  handle: "river",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=River&backgroundColor=CAE6CE",  trades: 16,  collectionValue: 4800,    categories: ["Sneakers"],                          trustScore: 4.1, online: false, isPro: false, paymentMethods: ["Crypto"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-sage",   name: "Sage",   handle: "sage",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sage&backgroundColor=c0aede",   trades: 14,  collectionValue: 5200,    categories: ["Comics"],                            trustScore: 4.2, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-quinn",  name: "Quinn",  handle: "quinn",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Quinn&backgroundColor=ffd5dc",  trades: 49,  collectionValue: 43000,   categories: ["Funko Pop"],                         trustScore: 4.7, online: true,  isPro: true,  paymentMethods: ["PayPal"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-devon",  name: "Devon",  handle: "devon",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Devon&backgroundColor=FCF9D5",  trades: 5,   collectionValue: 1800,    categories: ["Video Games"],                       trustScore: 3.8, online: false, isPro: false, paymentMethods: [],                            shippingPreferences: ["Local Pickup"] },
+  { id: "user-skylar", name: "Skylar", handle: "skylar", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Skylar&backgroundColor=B5EAD7", trades: 95,  collectionValue: 112000,  categories: ["Lego"],                              trustScore: 4.8, online: false, isPro: true,  paymentMethods: ["Bank Transfer"],             shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-remy",   name: "Remy",   handle: "remy",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Remy&backgroundColor=AA95C5",   trades: 267, collectionValue: 580000,  categories: ["Watches"],                           trustScore: 5.0, online: true,  isPro: true,  paymentMethods: ["PayPal", "Bank Transfer"],   shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-casey",  name: "Casey",  handle: "casey",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Casey&backgroundColor=b6e3f4",  trades: 31,  collectionValue: 9100,    categories: ["Sports Cards"],                      trustScore: 4.4, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-morgan", name: "Morgan", handle: "morgan", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Morgan&backgroundColor=CAE6CE", trades: 177, collectionValue: 245000,  categories: ["Pokémon TCG"],                       trustScore: 4.9, online: true,  isPro: true,  paymentMethods: ["Crypto"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-avery",  name: "Avery",  handle: "avery",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Avery&backgroundColor=ffd5dc",  trades: 28,  collectionValue: 7200,    categories: ["Sneakers"],                          trustScore: 4.3, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-brett",  name: "Brett",  handle: "brett",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Brett&backgroundColor=FCF9D5",  trades: 66,  collectionValue: 67000,   categories: ["Comics"],                            trustScore: 4.6, online: false, isPro: true,  paymentMethods: ["Bank Transfer", "Crypto"],   shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-hana",   name: "Hana",   handle: "hana",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Hana&backgroundColor=FFD9E8",   trades: 42,  collectionValue: 15000,   categories: ["Coins"],                             trustScore: 4.5, online: false, isPro: false, paymentMethods: ["Bank Transfer"],             shippingPreferences: ["Local Pickup"] },
+  { id: "user-leo",    name: "Leo",    handle: "leo",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Leo&backgroundColor=c0aede",    trades: 9,   collectionValue: 3400,    categories: ["Lego"],                              trustScore: 4.0, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-vera",   name: "Vera",   handle: "vera",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Vera&backgroundColor=AA95C5",   trades: 388, collectionValue: 890000,  categories: ["Watches"],                           trustScore: 4.9, online: true,  isPro: true,  paymentMethods: ["PayPal", "Crypto"],          shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-omar",   name: "Omar",   handle: "omar",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Omar&backgroundColor=b6e3f4",   trades: 121, collectionValue: 134000,  categories: ["Sports Cards"],                      trustScore: 4.7, online: false, isPro: true,  paymentMethods: ["Bank Transfer"],             shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-chloe",  name: "Chloe",  handle: "chloe",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Chloe&backgroundColor=ffd5dc",  trades: 20,  collectionValue: 6800,    categories: ["Pokémon TCG"],                       trustScore: 4.2, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-finn",   name: "Finn",   handle: "finn",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Finn&backgroundColor=CAE6CE",   trades: 53,  collectionValue: 42000,   categories: ["Video Games"],                       trustScore: 4.6, online: true,  isPro: true,  paymentMethods: ["Crypto", "PayPal"],          shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-jade",   name: "Jade",   handle: "jade",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jade&backgroundColor=B5EAD7",   trades: 134, collectionValue: 185000,  categories: ["Sneakers"],                          trustScore: 4.8, online: true,  isPro: true,  paymentMethods: ["PayPal", "Bank Transfer"],   shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-marco",  name: "Marco",  handle: "marco",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Marco&backgroundColor=FCF9D5",  trades: 211, collectionValue: 475000,  categories: ["Coins"],                             trustScore: 4.9, online: false, isPro: true,  paymentMethods: ["Bank Transfer", "Crypto"],   shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-nora",   name: "Nora",   handle: "nora",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Nora&backgroundColor=FFD9E8",   trades: 10,  collectionValue: 2900,    categories: ["Comics"],                            trustScore: 4.1, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-theo",   name: "Theo",   handle: "theo",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Theo&backgroundColor=c0aede",   trades: 79,  collectionValue: 89000,   categories: ["Lego"],                              trustScore: 4.7, online: false, isPro: true,  paymentMethods: ["PayPal", "Crypto"],          shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-elise",  name: "Elise",  handle: "elise",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Elise&backgroundColor=ffd5dc",  trades: 37,  collectionValue: 18000,   categories: ["Watches"],                           trustScore: 4.4, online: false, isPro: false, paymentMethods: ["PayPal"],                    shippingPreferences: ["Local Pickup"] },
+  { id: "user-caden",  name: "Caden",  handle: "caden",  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Caden&backgroundColor=AA95C5",  trades: 58,  collectionValue: 64000,   categories: ["Funko Pop"],                         trustScore: 4.6, online: true,  isPro: true,  paymentMethods: ["Bank Transfer"],             shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-ivy",    name: "Ivy",    handle: "ivy",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ivy&backgroundColor=B5EAD7",    trades: 503, collectionValue: 1500000, categories: ["Pokémon TCG"],                       trustScore: 5.0, online: true,  isPro: true,  paymentMethods: ["PayPal", "Crypto", "Bank Transfer"], shippingPreferences: ["Worldwide Shipping"] },
+  { id: "user-ash",    name: "Ash",    handle: "ash",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ash&backgroundColor=b6e3f4",    trades: 13,  collectionValue: 4100,    categories: ["Sports Cards"],                      trustScore: 3.7, online: false, isPro: false, paymentMethods: [],                            shippingPreferences: ["Local Pickup"] },
+  { id: "user-max",    name: "Max",    handle: "max",    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Max&backgroundColor=CAE6CE",    trades: 156, collectionValue: 230000,  categories: ["Sneakers"],                          trustScore: 4.8, online: true,  isPro: true,  paymentMethods: ["Crypto", "PayPal"],          shippingPreferences: ["Worldwide Shipping"] },
 ];
 
 // ── Collector card ─────────────────────────────────────────────────────────────
@@ -190,11 +185,13 @@ function CollectorCard({
   collector,
   followed,
   onFollow,
+  onMessage,
   index,
 }: {
   collector: Collector;
   followed: boolean;
   onFollow: () => void;
+  onMessage?: () => void;
   index: number;
 }) {
   return (
@@ -225,8 +222,14 @@ function CollectorCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 mb-0.5">
             <p className="text-sm font-bold text-cream truncate">{collector.name}</p>
-            <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 flex-shrink-0" />
-            <span className="text-[10px] text-cream/40 font-semibold flex-shrink-0">{collector.trustScore}</span>
+            {collector.trustScore > 0 ? (
+              <>
+                <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 flex-shrink-0" />
+                <span className="text-[10px] text-cream/40 font-semibold flex-shrink-0">{collector.trustScore}</span>
+              </>
+            ) : collector.isNew ? (
+              <span className="text-[10px] text-primary/70 font-semibold flex-shrink-0 bg-primary/10 px-1.5 py-0.5 rounded-full border border-primary/20">New</span>
+            ) : null}
           </div>
           <p className="text-[10px] text-cream/30 font-medium">@{collector.handle}</p>
           <p className="text-[10px] text-cream/25 mt-1">
@@ -245,8 +248,15 @@ function CollectorCard({
         </div>
       </Link>
 
-      {/* Follow button — outside the Link to avoid nested interactive elements */}
-      <div className="pr-4 flex-shrink-0">
+      {/* Action buttons — outside the Link to avoid nested interactive elements */}
+      <div className="pr-4 flex-shrink-0 flex items-center gap-2">
+        <button
+          onClick={onMessage}
+          className="p-2 rounded-xl bg-white/[0.06] text-cream/40 border border-white/[0.06] hover:bg-white/[0.12] hover:text-cream/70 transition-all"
+          aria-label={`Message ${collector.name}`}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+        </button>
         <button
           onClick={onFollow}
           className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95 ${
@@ -274,11 +284,11 @@ function TrendingCard({ item, onClick }: { item: MasterItem; onClick: () => void
       onClick={onClick}
       className="flex-shrink-0 w-[140px] bg-white/5 rounded-2xl border border-white/10 overflow-hidden text-left hover:bg-white/[0.08] transition-colors group"
     >
-      <div className="w-full h-[100px] flex items-center justify-center bg-white/[0.03] p-2">
+      <div className="w-full aspect-square overflow-hidden">
         <img
           src={item.imageSmall}
           alt={item.name}
-          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
         />
       </div>
@@ -377,18 +387,55 @@ function PersonalizeFeedModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 function SearchPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
+  const { addFromCatalog, removeItem: removeInventoryItem, showToast: showInventoryToast } = useInventory();
   const [activeTab, setActiveTab] = useState<"Market" | "Collectors">(
     searchParams.get("tab") === "Collectors" ? "Collectors" : "Market",
   );
   const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+  const isGuest = !session?.user?.id && status !== "loading";
+  const [guestContext, setGuestContext] = useState<string | null>(null);
 
   // ── Collectors tab state ──────────────────────────────────────────────────
   const [dbCollectors,       setDbCollectors]       = useState<Collector[]>([]);
   const [collectorsLoading,  setCollectorsLoading]  = useState(false);
-  const [collectorsCatFilter, setCollectorsCatFilter] = useState("");
-  const [collectorsMinValue,  setCollectorsMinValue]  = useState(0); // 0 = any
+  const [collectorsCatFilter,    setCollectorsCatFilter]    = useState("");
+  const [collectorsMinValue,     setCollectorsMinValue]     = useState(0); // 0 = any
+  const [collectorsQuery,          setCollectorsQuery]          = useState("");
+  const [collectorsPaymentFilter, setCollectorsPaymentFilter] = useState<Set<string>>(new Set());
+  const [collectorsShippingFilter, setCollectorsShippingFilter] = useState<Set<string>>(new Set());
+  const [collectorsProOnly,      setCollectorsProOnly]      = useState(false);
+  const [collectorsMinRating,    setCollectorsMinRating]    = useState(0); // 0 = any
   const collectorsLoadedRef = useRef(false);
+
+  // For real users, find-or-create a conversation and navigate to its ID.
+  // For demo users, navigate directly by handle (matches CHAT_DATA keys).
+  const handleMessage = async (collector: Collector) => {
+    if (isGuest) { setGuestContext("send a message"); return; }
+    if (isDemoUser(session?.user?.email) || !session?.user?.id) {
+      router.push(`/inbox/${collector.handle}`);
+      return;
+    }
+    try {
+      const res = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientId:     collector.id,
+          recipientName:   collector.name,
+          recipientAvatar: collector.avatar,
+        }),
+      });
+      const data = await res.json() as { id?: string };
+      if (data.id) {
+        router.push(`/inbox/${data.id}`);
+      } else {
+        router.push(`/inbox/${collector.handle}`);
+      }
+    } catch {
+      router.push(`/inbox/${collector.handle}`);
+    }
+  };
 
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const itemId = searchParams.get("itemId");
@@ -838,6 +885,7 @@ function SearchPageContent() {
   }, [filteredResults.length, page, totalPages, loading, loadingMore, query, selectedCategory, fetchResults, fetchBrowseAll]);
 
   const handleStartAdd = (item: MasterItem) => {
+    if (isGuest) { setGuestContext("add items to your vault"); return; }
     setViewItem(null);
     setAddItem(item);
     setConfig({
@@ -854,61 +902,85 @@ function SearchPageContent() {
 
   const handleSaveToInventory = () => {
     if (!addItem) return;
-    if (typeof window === 'undefined') return;
 
-    try {
-        const newItem: CollectibleItem = {
-            id: `new-${Date.now()}`,
-            masterId: addItem.id,
-            name: addItem.name,
-            category: mapCatalogCategory(addItem.category),
-            imageUrl: addItem.imageLarge || addItem.imageSmall,
-            estimatedValue: config.askingPrice,
-            condition: config.condition,
-            status: config.status,
-            upForTrade: config.status === "For Trade",
-            notes: config.notes,
-            graded: config.graded,
-            grader: config.graded ? config.grader : undefined,
-            gradeNum: config.graded ? config.gradeNum : undefined,
-            year: config.year,
-            pieces: config.pieces,
-            customImage: config.customImage
-        };
+    // Optimistic update via InventoryContext (updates shared state + localStorage cache)
+    addFromCatalog(addItem, {
+      askingPrice: config.askingPrice,
+      condition:   config.condition,
+      status:      config.status,
+      notes:       config.notes,
+      customImage: config.customImage,
+    });
 
-        const currentInventoryString = localStorage.getItem("uniques_inventory");
-        let currentInventory: CollectibleItem[] = [];
-        if (currentInventoryString) {
-          try { currentInventory = JSON.parse(currentInventoryString); } catch { /* corrupt data, use empty */ }
-        }
-        localStorage.setItem("uniques_inventory", JSON.stringify([newItem, ...currentInventory]));
+    setAddItem(null);
 
-        setAddItem(null);
-        setLocalToast({ msg: `${addItem.name} added successfully!`, type: 'success' });
-        setTimeout(() => setLocalToast(null), 3000);
-
-    } catch (e) {
-        console.error("LocalStorage Save error:", e);
-        setLocalToast({ msg: "Memory full! Try removing old items or a smaller image.", type: 'error' });
-        setTimeout(() => setLocalToast(null), 5000);
+    // Persist to DB for real users
+    if (!isDemoUser(session?.user?.email) && status === "authenticated") {
+      const imageUrl = config.customImage || addItem.imageLarge || addItem.imageSmall || "";
+      fetch("/api/items", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          title:          addItem.name,
+          category:       mapCatalogCategory(addItem.category),
+          imageUrl,
+          estimatedValue: config.askingPrice ?? null,
+          upForTrade:     config.status === "For Trade",
+          status:         "VAULT",
+        }),
+      })
+        .then(async (r) => {
+          if (r.status === 403) {
+            const d = await r.json() as { code?: string };
+            if (d.code === "UPGRADE_REQUIRED") {
+              router.push("/upgrade");
+            }
+          }
+        })
+        .catch(() => {});
     }
   };
 
   const toggleFollow = (id: string) => {
+    if (isGuest) { setGuestContext("follow collectors"); return; }
+    const isFollowing = followedIds.has(id);
+    // Optimistic update
     setFollowedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      isFollowing ? next.delete(id) : next.add(id);
       return next;
     });
+    // Sync to DB
+    if (isFollowing) {
+      fetch(`/api/follow?userId=${id}`, { method: "DELETE" }).catch(() => {});
+    } else {
+      fetch("/api/follow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ followingId: id }),
+      }).catch(() => {});
+    }
   };
+
+  // ── Load initial follow list from DB ─────────────────────────────────────
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    fetch("/api/follow?list=following")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { follows: Array<{ followingId: string }> } | null) => {
+        if (data?.follows) {
+          setFollowedIds(new Set(data.follows.map((f) => f.followingId)));
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   // ── Fetch real DB collectors when the tab is visible or filters change ───────
   useEffect(() => {
     if (activeTab !== "Collectors" || status === "loading") return;
     if (status === "unauthenticated") return;
-    // Demo users see mocks only
-    const isDemo = status === "authenticated";
-    if (!isDemo) return;
+    // All authenticated users fetch from DB (demo users see mocks + any DB results)
 
     // Avoid hammering the API on first render; use a ref to allow re-fetch on filter change
     setCollectorsLoading(true);
@@ -918,30 +990,35 @@ function SearchPageContent() {
     fetch(`/api/users?${params.toString()}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data: { collectors: Collector[] } | null) => {
-        if (data?.collectors) setDbCollectors(data.collectors);
+        // Always update DB state (even empty array) — null means fetch failed
+        if (data !== null) setDbCollectors(data.collectors ?? []);
       })
       .catch(() => {})
       .finally(() => setCollectorsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, status, collectorsCatFilter, collectorsMinValue]);
 
-  // Combined + client-filtered collector list:
-  // Real users see DB results; demo users see mock data
-  const allCollectors = dbCollectors.length > 0 ? dbCollectors : COLLECTORS;
+  // Always show DB users first, mocks fill remaining slots (no duplicate handles)
+  const dbHandleSet = new Set(dbCollectors.map((c) => c.handle));
+  const allCollectors = [...dbCollectors, ...COLLECTORS.filter((c) => !dbHandleSet.has(c.handle))];
   const filteredCollectors = allCollectors.filter((c) => {
-    if (!query.trim()) return true;
-    const q = normalize(query);
-    return (
-      normalize(c.name).includes(q) ||
-      normalize(c.handle).includes(q) ||
-      c.categories.some((cat) => normalize(cat).includes(q))
-    );
+    if (collectorsQuery.trim()) {
+      const q = normalize(collectorsQuery);
+      const nameMatch =
+        normalize(c.name).includes(q) ||
+        normalize(c.handle).includes(q) ||
+        c.categories.some((cat) => normalize(cat).includes(q));
+      if (!nameMatch) return false;
+    }
+    if (collectorsCatFilter && !c.categories.some((cat) => normalize(cat).includes(normalize(collectorsCatFilter)))) return false;
+    if (collectorsMinValue > 0 && c.collectionValue < collectorsMinValue) return false;
+    if (collectorsPaymentFilter.size > 0 && !c.paymentMethods.some((m) => collectorsPaymentFilter.has(m))) return false;
+    if (collectorsShippingFilter.size > 0 && !c.shippingPreferences.some((s) => collectorsShippingFilter.has(s))) return false;
+    if (collectorsProOnly && !c.isPro) return false;
+    if (collectorsMinRating > 0 && c.trustScore < collectorsMinRating) return false;
+    return true;
   });
 
-  if (status === "unauthenticated") {
-    router.replace("/api/auth/signin");
-    return null;
-  }
   if (status === "loading") return null;
 
   return (
@@ -949,6 +1026,9 @@ function SearchPageContent() {
       <Header />
 
       <main className="max-w-lg mx-auto" data-tour="explore-feed">
+
+        {/* ── Global Market Ticker ── */}
+        <MarketTicker />
 
         {/* ── Tab toggle ── */}
         <div className="px-5 pt-4 pb-3">
@@ -1121,15 +1201,11 @@ function SearchPageContent() {
                         className="rounded-2xl overflow-hidden bg-background-light shadow-soft card-hover group animate-scale-in text-left"
                         style={{ animationDelay: `${Math.min(i, 20) * 0.03}s`, animationFillMode: "both" }}
                       >
-                        <div className={`aspect-square flex items-center justify-center ${
-                          item.category === "Lego" || item.category === "Funko Pop"
-                            ? "bg-white p-2"
-                            : "bg-white/[0.05] p-3"
-                        }`}>
+                        <div className="aspect-square overflow-hidden">
                           <img
                             src={item.imageSmall}
                             alt={item.name}
-                            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             loading="lazy"
                           />
                         </div>
@@ -1159,8 +1235,30 @@ function SearchPageContent() {
         {activeTab === "Collectors" && (
           <div className="px-5 pb-6 space-y-3">
 
+            {/* ── Collector search input ─────────────────────────────── */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/25 pointer-events-none" />
+              <input
+                type="text"
+                value={collectorsQuery}
+                onChange={(e) => setCollectorsQuery(e.target.value)}
+                placeholder="Search by name or @handle…"
+                className="w-full pl-10 pr-4 py-3 rounded-2xl bg-background-light border border-white/[0.07] text-sm text-cream placeholder:text-cream/25 focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
+              />
+              {collectorsQuery && (
+                <button
+                  onClick={() => setCollectorsQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-cream/30 hover:text-cream/60"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
             {/* ── Filters ──────────────────────────────────────────────── */}
-            <div className="space-y-2.5">
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-cream/25 uppercase tracking-widest">Filter Collectors By</p>
+
               {/* Category interest pills */}
               <div className="flex gap-2 overflow-x-auto scrollbar-none pb-0.5">
                 {["", "Pokémon TCG", "Sports Cards", "Funko Pop", "Lego", "Sneakers", "Watches", "Comics", "Coins"].map((cat) => (
@@ -1178,27 +1276,122 @@ function SearchPageContent() {
                 ))}
               </div>
 
-              {/* Vault value filter */}
-              <div className="flex gap-2 overflow-x-auto scrollbar-none pb-0.5">
-                {([
-                  { label: "Any Value",  value: 0       },
-                  { label: "$10k+",      value: 10000   },
-                  { label: "$25k+",      value: 25000   },
-                  { label: "$50k+",      value: 50000   },
-                  { label: "$100k+",     value: 100000  },
-                ] as { label: string; value: number }[]).map(({ label, value }) => (
+              {/* Vault value slider */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-cream/40 font-medium">Min Vault Value</span>
+                  <span className="text-[11px] font-bold text-primary">
+                    {collectorsMinValue === 0 ? "Any" : `$${(collectorsMinValue / 1000).toFixed(0)}k+`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100000}
+                  step={5000}
+                  value={collectorsMinValue}
+                  onChange={(e) => setCollectorsMinValue(Number(e.target.value))}
+                  className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-primary bg-white/[0.08]"
+                />
+                <div className="flex justify-between text-[9px] text-cream/20 font-medium">
+                  <span>Any</span>
+                  <span>$25k</span>
+                  <span>$50k</span>
+                  <span>$100k+</span>
+                </div>
+              </div>
+
+              {/* Advanced filters */}
+              <div className="rounded-2xl bg-white/[0.025] border border-white/[0.06] p-4 space-y-3">
+                <p className="text-[9px] font-bold text-cream/25 uppercase tracking-widest">Advanced</p>
+
+                {/* Payment multi-select pills — matches EditProfileModal PAYMENT_OPTIONS */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-cream/35 uppercase tracking-wide">Payment</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {["PayPal", "Venmo", "Cash", "Bank Transfer", "Crypto", "Trade Only"].map((method) => {
+                      const active = collectorsPaymentFilter.has(method);
+                      return (
+                        <button
+                          key={method}
+                          onClick={() => setCollectorsPaymentFilter((prev) => {
+                            const next = new Set(prev);
+                            active ? next.delete(method) : next.add(method);
+                            return next;
+                          })}
+                          className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all border ${
+                            active
+                              ? "bg-primary/20 text-primary border-primary/30"
+                              : "bg-white/[0.05] text-cream/40 border-white/[0.07] hover:text-cream/60 hover:bg-white/[0.09]"
+                          }`}
+                        >
+                          {method}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Shipping multi-select pills — matches EditProfileModal SHIPPING_OPTIONS */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-cream/35 uppercase tracking-wide">Shipping</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {["Worldwide Shipping", "Local Pickup", "Convention Meetup", "Insured Shipping", "Middleman Service"].map((pref) => {
+                      const active = collectorsShippingFilter.has(pref);
+                      return (
+                        <button
+                          key={pref}
+                          onClick={() => setCollectorsShippingFilter((prev) => {
+                            const next = new Set(prev);
+                            active ? next.delete(pref) : next.add(pref);
+                            return next;
+                          })}
+                          className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all border ${
+                            active
+                              ? "bg-primary/20 text-primary border-primary/30"
+                              : "bg-white/[0.05] text-cream/40 border-white/[0.07] hover:text-cream/60 hover:bg-white/[0.09]"
+                          }`}
+                        >
+                          {pref}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Toggle chips row */}
+                <div className="flex items-center gap-2 mt-1">
                   <button
-                    key={value}
-                    onClick={() => setCollectorsMinValue(value)}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
-                      collectorsMinValue === value
-                        ? "bg-primary/20 text-primary border border-primary/30"
-                        : "bg-white/[0.06] text-cream/40 border border-white/[0.06] hover:text-cream/60"
+                    onClick={() => setCollectorsProOnly((v) => !v)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border flex-1 justify-center ${
+                      collectorsProOnly
+                        ? "bg-primary/20 text-primary border-primary/30 shadow-sm shadow-primary/10"
+                        : "bg-white/[0.04] text-cream/40 border-white/[0.07] hover:bg-white/[0.08] hover:text-cream/60"
                     }`}
                   >
-                    {label}
+                    <Sparkles className="w-3 h-3" />
+                    Pro Only
                   </button>
-                ))}
+                  <button
+                    onClick={() => setCollectorsMinRating((v) => v === 4 ? 0 : 4)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border flex-1 justify-center ${
+                      collectorsMinRating >= 4
+                        ? "bg-primary/20 text-primary border-primary/30 shadow-sm shadow-primary/10"
+                        : "bg-white/[0.04] text-cream/40 border-white/[0.07] hover:bg-white/[0.08] hover:text-cream/60"
+                    }`}
+                  >
+                    <Star className="w-3 h-3" />
+                    4+ Stars
+                  </button>
+                  {(collectorsPaymentFilter.size > 0 || collectorsShippingFilter.size > 0 || collectorsProOnly || collectorsMinRating > 0) && (
+                    <button
+                      onClick={() => { setCollectorsPaymentFilter(new Set()); setCollectorsShippingFilter(new Set()); setCollectorsProOnly(false); setCollectorsMinRating(0); }}
+                      className="px-2.5 py-1.5 rounded-xl text-[10px] text-cream/30 hover:text-cream/60 border border-white/[0.06] hover:border-white/[0.12] transition-all"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1206,7 +1399,7 @@ function SearchPageContent() {
             <div className="flex items-center gap-2">
               <p className="text-xs text-cream/30 font-medium">
                 {collectorsLoading ? "Loading…" : (
-                  `${filteredCollectors.length} collector${filteredCollectors.length !== 1 ? "s" : ""}${query.trim() ? ` matching "${query}"` : ""}`
+                  `${filteredCollectors.length} collector${filteredCollectors.length !== 1 ? "s" : ""}${collectorsQuery.trim() ? ` matching "${collectorsQuery}"` : ""}`
                 )}
               </p>
               {collectorsLoading && (
@@ -1230,6 +1423,7 @@ function SearchPageContent() {
                     collector={c}
                     followed={followedIds.has(c.id)}
                     onFollow={() => toggleFollow(c.id)}
+                    onMessage={() => handleMessage(c)}
                     index={i}
                   />
                 ))}
@@ -1324,6 +1518,12 @@ function SearchPageContent() {
       <PersonalizeFeedModal
         isOpen={personalizeOpen}
         onClose={() => setPersonalizeOpen(false)}
+      />
+
+      <GuestAuthModal
+        isOpen={!!guestContext}
+        onClose={() => setGuestContext(null)}
+        context={guestContext ?? undefined}
       />
 
       <BottomNav />

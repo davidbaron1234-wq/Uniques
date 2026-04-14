@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { X, Camera, Trash2, ImagePlus, Save, Wallet, Truck, ShieldCheck, Info } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { X, Camera, Trash2, ImagePlus, Save, Wallet, Truck, ShieldCheck, Info, AtSign } from "lucide-react";
+import ImageCropModal from "@/components/ImageCropModal";
 
 export interface UserProfile {
   name: string;
+  handle?: string;
   bio: string;
   avatar: string;
   joinDate: string;
@@ -92,18 +94,34 @@ export default function EditProfileModal({
   isPro = false,
 }: EditProfileModalProps) {
   const [name, setName] = useState(profile.name);
+  const [handle, setHandle] = useState(profile.handle ?? "");
+  const [handleStatus, setHandleStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const [bio, setBio] = useState(profile.bio);
   const [avatar, setAvatar] = useState(profile.avatar);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(profile.paymentMethods || []);
   const [shippingPreferences, setShippingPreferences] = useState<string[]>(profile.shippingPreferences || []);
   const [nameLocked, setNameLocked] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState(0);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Lock body scroll when modal is open to prevent background scroll bleed on mobile
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [isOpen]);
 
   // Sync form when profile prop changes (e.g. modal re-opens)
   useEffect(() => {
     if (isOpen) {
       setName(profile.name);
+      setHandle(profile.handle ?? "");
+      setHandleStatus("idle");
       setBio(profile.bio);
       setAvatar(profile.avatar);
       setPaymentMethods(profile.paymentMethods || []);
@@ -127,22 +145,48 @@ export default function EditProfileModal({
     }
   }, [isOpen, profile]);
 
+  // Debounced handle availability check
+  const checkHandle = useCallback((val: string) => {
+    if (handleDebounce.current) clearTimeout(handleDebounce.current);
+    if (!val) { setHandleStatus("idle"); return; }
+    if (!/^[a-z0-9_]{3,20}$/.test(val)) { setHandleStatus("invalid"); return; }
+    setHandleStatus("checking");
+    handleDebounce.current = setTimeout(() => {
+      fetch(`/api/profile/handle-check?handle=${encodeURIComponent(val)}`)
+        .then((r) => r.json())
+        .then((d: { available?: boolean }) => setHandleStatus(d.available ? "available" : "taken"))
+        .catch(() => setHandleStatus("idle"));
+    }, 500);
+  }, []);
+
   if (!isOpen) return null;
 
   const handleFileUpload = (file: File) => {
     if (!file.type.startsWith("image/")) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be under 5 MB");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Image must be under 10 MB");
       return;
     }
+    // Read to data URL and open the cropper — compression happens after crop
     const reader = new FileReader();
-    reader.onloadend = () => setAvatar(reader.result as string);
+    reader.onloadend = () => setCropSrc(reader.result as string);
     reader.readAsDataURL(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFileUpload(file);
+    // Reset so the same file can be re-selected after a cancel
+    e.target.value = "";
+  };
+
+  const handleCropDone = (croppedDataUrl: string) => {
+    setAvatar(croppedDataUrl);
+    setCropSrc(null);
+  };
+
+  const handleCropCancel = () => {
+    setCropSrc(null);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -153,12 +197,14 @@ export default function EditProfileModal({
 
   const handleSave = () => {
     if (!name.trim()) return;
+    if (handleStatus === "taken" || handleStatus === "invalid") return;
     const nameChanged = name.trim() !== profile.name;
     if (nameChanged && !nameLocked) {
       localStorage.setItem(NAME_CHANGE_KEY, String(Date.now()));
     }
     onSave({
       name: name.trim(),
+      handle: handle.trim() || undefined,
       bio: bio.trim(),
       avatar,
       joinDate: profile.joinDate,
@@ -168,15 +214,29 @@ export default function EditProfileModal({
     onClose();
   };
 
-  const isValid = name.trim().length > 0 && name.trim().length <= 16;
+  const isValid =
+    name.trim().length > 0 &&
+    name.trim().length <= 16 &&
+    handleStatus !== "taken" &&
+    handleStatus !== "invalid" &&
+    handleStatus !== "checking";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-4 pb-20 sm:p-4">
+    <>
+    {cropSrc && (
+      <ImageCropModal
+        imageSrc={cropSrc}
+        onCropComplete={handleCropDone}
+        onCancel={handleCropCancel}
+      />
+    )}
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in" onClick={onClose} />
 
-      <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl shadow-2xl border border-white/10 animate-slide-up overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-none">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+      {/* Modal shell — flex column so header+footer are sticky while body scrolls */}
+      <div className="relative w-full max-w-md bg-charcoal-dark rounded-3xl shadow-2xl border border-white/10 animate-slide-up flex flex-col max-h-[85dvh]">
+        {/* Sticky header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
           <h2 className="text-lg font-bold text-cream">Edit Profile</h2>
           <button
             onClick={onClose}
@@ -187,6 +247,8 @@ export default function EditProfileModal({
           </button>
         </div>
 
+        {/* Scrollable body — inherits global 4px lilac webkit scrollbar; thin on Firefox */}
+        <div className="overflow-y-auto flex-1 [scrollbar-width:thin] [scrollbar-color:#AA95C5_transparent]">
         <div className="p-5 space-y-5">
           {/* ── Avatar Upload ──────────────────────────────────── */}
           <div className="flex flex-col items-center">
@@ -285,6 +347,49 @@ export default function EditProfileModal({
             )}
           </div>
 
+          {/* ── Handle ─────────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-semibold text-cream/70">Username</label>
+              {handleStatus === "available" && (
+                <span className="text-[10px] font-bold text-green-400">Available</span>
+              )}
+              {handleStatus === "taken" && (
+                <span className="text-[10px] font-bold text-red-400">Already taken</span>
+              )}
+              {handleStatus === "checking" && (
+                <span className="text-[10px] text-cream/30">Checking…</span>
+              )}
+            </div>
+            <div className="relative">
+              <AtSign className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/30 pointer-events-none" />
+              <input
+                type="text"
+                value={handle}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
+                  setHandle(val);
+                  checkHandle(val);
+                }}
+                placeholder="your_handle"
+                maxLength={20}
+                className={`w-full pl-9 pr-12 py-3 rounded-2xl bg-background-light text-cream placeholder:text-cream/25 focus:outline-none transition-all ${
+                  handleStatus === "taken" || handleStatus === "invalid"
+                    ? "ring-2 ring-red-500/40"
+                    : handleStatus === "available"
+                    ? "ring-2 ring-green-500/40"
+                    : "focus:ring-2 focus:ring-surface/30"
+                }`}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-cream/25 pointer-events-none tabular-nums">
+                {handle.length}/20
+              </span>
+            </div>
+            <p className="text-[10px] text-cream/30 mt-1.5 px-1">
+              3–20 chars · lowercase letters, numbers, underscores only
+            </p>
+          </div>
+
           {/* ── Bio ────────────────────────────────────────────── */}
           <div>
             <label className="block text-sm font-semibold text-cream/70 mb-2">
@@ -327,9 +432,10 @@ export default function EditProfileModal({
             />
           </div>
         </div>
+        </div>{/* end scrollable body */}
 
-        {/* Actions */}
-        <div className="flex gap-3 px-5 pb-5 pt-1">
+        {/* Sticky footer */}
+        <div className="flex gap-3 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
           <button
             onClick={onClose}
             className="flex-1 py-3 rounded-2xl bg-background-light text-cream/60 font-bold text-sm hover:bg-charcoal-light/50 active:scale-[0.97] transition-all"
@@ -351,5 +457,6 @@ export default function EditProfileModal({
         </div>
       </div>
     </div>
+    </>
   );
 }

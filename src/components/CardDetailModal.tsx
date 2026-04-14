@@ -11,6 +11,9 @@ import { formatValue } from "@/lib/format";
 import MarketplaceModal, { MarketplaceItem } from "./MarketplaceModal";
 import { useNotifications } from "@/lib/NotificationContext";
 import { useInventory } from "@/lib/InventoryContext";
+import { useCheckout } from "@/lib/useCheckout";
+import { Loader2, AlertCircle } from "lucide-react";
+import GuestAuthModal from "./GuestAuthModal";
 
 interface CardDetailModalProps {
   item: MasterItem | null;
@@ -118,7 +121,6 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 
 type MarketTabProps = {
   isFree: boolean;
-  onUpgrade: () => void;
   priceHistory: { date: string; price: number }[];
   firstPrice: number;
   lastPrice: number;
@@ -131,9 +133,11 @@ type MarketTabProps = {
 };
 
 function MarketTabContent({
-  isFree, onUpgrade, priceHistory, firstPrice, lastPrice,
+  isFree, priceHistory, firstPrice, lastPrice,
   isUp, chartColor, monthChange, monthChangePct, allTimeHigh, listedMedian,
 }: MarketTabProps) {
+  const { goCheckout, isLoading: isCheckingOut, error: checkoutError } = useCheckout();
+
   return (
     <div className="relative space-y-3">
       {/* Pro lock overlay */}
@@ -149,11 +153,21 @@ function MarketTabContent({
             </p>
           </div>
           <button
-            onClick={onUpgrade}
-            className="px-5 py-2.5 rounded-2xl bg-primary text-charcoal-dark text-xs font-bold hover:bg-primary/90 active:scale-95 transition-all shadow-lg shadow-primary/20"
+            onClick={() => goCheckout(window.location.pathname)}
+            disabled={isCheckingOut}
+            className="px-5 py-2.5 rounded-2xl bg-primary text-charcoal-dark text-xs font-bold hover:bg-primary/90 active:scale-95 transition-all shadow-lg shadow-primary/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
-            Unlock Pro — $4.99/mo
+            {isCheckingOut
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Redirecting…</>
+              : "Unlock Pro — $4.99/mo"
+            }
           </button>
+          {checkoutError && (
+            <div className="flex items-start gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 max-w-[220px]">
+              <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-[10px] text-red-400 leading-relaxed">{checkoutError}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -239,34 +253,75 @@ const MOCK_COLLECTORS = [
 ];
 
 export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }: CardDetailModalProps) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const isGuest = !session?.user?.id && status !== "loading";
   const router = useRouter();
   const isFree = !session?.user?.tier || session.user.tier === "free";
   const [imageLoaded, setImageLoaded] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [activeTab, setActiveTab] = useState<"trade" | "market">("trade");
+  const [guestContext, setGuestContext] = useState<string | null>(null);
+
+  // ── Market analytics — live snapshots with cold-start fallback ──────────
+  // priceHistory is seeded from real DB data when available; falls back to
+  // the deterministic generator so the chart is never blank on Day Zero.
+  const [priceHistory, setPriceHistory] = useState<{ date: string; price: number }[]>([]);
+
+  useEffect(() => {
+    if (!item) return;
+    const effectivePrice = item.marketPrice > 0 ? item.marketPrice : 50;
+
+    // Load official catalog snapshots (cron-written) for this item.
+    // We look up by ebayId first (item.id = eBay epid or itemId from catalog search).
+    // Falls back to mock generator if no catalog data exists yet (Day Zero).
+    fetch(`/api/market/snapshots?type=catalog&ebayId=${encodeURIComponent(item.id)}&days=90`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { snapshots: Array<{ bucket: string; value: number }> } | null) => {
+        const raw = data?.snapshots ?? [];
+        if (raw.length >= 2) {
+          // Deduplicate to one point per week for the 7-point chart
+          const weekMap = new Map<string, number>();
+          for (const s of raw) {
+            const d   = new Date(s.bucket);
+            const key = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            weekMap.set(key, s.value);
+          }
+          // Keep at most 7 points for legibility, ensure last = market price
+          const pts = Array.from(weekMap.entries())
+            .slice(-7)
+            .map(([date, price]) => ({ date, price }));
+          pts[pts.length - 1].price = effectivePrice;
+          setPriceHistory(pts);
+        } else {
+          setPriceHistory(generatePriceHistory(effectivePrice));
+        }
+      })
+      .catch(() => setPriceHistory(generatePriceHistory(effectivePrice)));
+  }, [item?.id, item?.marketPrice]);
 
   // When the deep-link includes action=trade, skip the details view and go
   // straight to the marketplace/trade panel once an item is loaded.
+  // Guard: guests cannot auto-open the trade panel.
   useEffect(() => {
-    if (autoOpenTrade && item) setShowMarketplace(true);
-  }, [autoOpenTrade, item]);
+    if (autoOpenTrade && item && !isGuest) setShowMarketplace(true);
+  }, [autoOpenTrade, item, isGuest]);
   const { addNotification } = useNotifications();
   const { showToast } = useInventory();
 
   if (!item) return null;
 
-  // ── Market analytics data (always generated — fallback price if none set) ──
-  const effectivePrice = item.marketPrice > 0 ? item.marketPrice : Math.floor(Math.random() * 100) + 10;
-  const priceHistory   = generatePriceHistory(effectivePrice);
-  const firstPrice     = priceHistory[0]?.price ?? 0;
-  const lastPrice      = priceHistory[priceHistory.length - 1]?.price ?? 0;
-  const prevMonthPrice = priceHistory[priceHistory.length - 2]?.price ?? lastPrice;
+  // ── Derive chart stats from (possibly async) priceHistory ──────────────
+  const effectivePrice = item.marketPrice > 0 ? item.marketPrice : 50;
+  const history        = priceHistory.length >= 2 ? priceHistory : generatePriceHistory(effectivePrice);
+
+  const firstPrice     = history[0]?.price ?? 0;
+  const lastPrice      = history[history.length - 1]?.price ?? 0;
+  const prevMonthPrice = history[history.length - 2]?.price ?? lastPrice;
   const isUp           = lastPrice >= firstPrice;
   const chartColor     = isUp ? "#22c55e" : "#ef4444";
   const monthChange    = lastPrice - prevMonthPrice;
   const monthChangePct = prevMonthPrice > 0 ? (monthChange / prevMonthPrice) * 100 : 0;
-  const allTimeHigh    = Math.max(...priceHistory.map((d) => d.price));
+  const allTimeHigh    = Math.max(...history.map((d) => d.price));
   const listedMedian   = Math.round(lastPrice * 1.07 * 100) / 100;
 
   const tier = getRarityTier(item.rarity);
@@ -318,11 +373,12 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
 
         {/* ── Card Detail View ─────────────────────────────── */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
-          {/* Image section */}
-          <div className="relative flex items-center justify-center px-6 pt-6 pb-3">
+          {/* Image section — square crop, capped height so title/price/actions stay above fold */}
+          <div className="relative aspect-square max-h-[35vh] sm:max-h-[350px] w-full overflow-hidden">
+            {/* Rarity ambient glow */}
             {tier !== "common" && (
               <div
-                className={`absolute inset-0 opacity-30 blur-3xl ${
+                className={`absolute inset-0 opacity-30 blur-3xl z-0 ${
                   tier === "secret"
                     ? "bg-gradient-to-br from-yellow-400/40 to-amber-500/20"
                     : tier === "ultra"
@@ -333,18 +389,20 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
                 }`}
               />
             )}
+            {/* Blur-up placeholder while hi-res loads */}
             {!imageLoaded && (
               <img
                 src={item.imageSmall}
                 alt=""
-                className="absolute inset-0 w-full h-full object-contain blur-lg scale-110 opacity-40"
+                className="absolute inset-0 w-full h-full object-cover blur-lg scale-110 opacity-40 z-[1]"
                 aria-hidden="true"
               />
             )}
+            {/* Main image — fills the fixed container edge-to-edge */}
             <img
               src={item.imageLarge || item.imageSmall}
               alt={item.name}
-              className={`relative max-h-[42vh] w-auto max-w-full object-contain drop-shadow-2xl transition-opacity duration-300 ${
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 z-[2] ${
                 imageLoaded ? "opacity-100" : "opacity-0"
               }`}
               onLoad={() => setImageLoaded(true)}
@@ -435,8 +493,7 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
             {/* ── Market tab ── */}
             {activeTab === "market" && <MarketTabContent
               isFree={isFree}
-              onUpgrade={() => { handleClose(); router.push("/upgrade"); }}
-              priceHistory={priceHistory}
+              priceHistory={history}
               firstPrice={firstPrice}
               lastPrice={lastPrice}
               isUp={isUp}
@@ -453,7 +510,11 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
         {/* Bottom action bar */}
         <div className="flex gap-2 px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
           <button
-            onClick={(e) => { e.stopPropagation(); setShowMarketplace(true); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isGuest) { setGuestContext("trade offers"); return; }
+              setShowMarketplace(true);
+            }}
             className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-surface/10 text-surface-light/60 font-bold text-sm hover:bg-surface/20 active:scale-[0.97] transition-all"
           >
             <ArrowLeftRight className="w-4 h-4" />
@@ -461,6 +522,7 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
           </button>
           <button
             onClick={() => {
+              if (isGuest) { setGuestContext("radar alerts"); return; }
               addNotification({
                 id: Date.now().toString(),
                 type: "alert",
@@ -488,7 +550,10 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
             Radar
           </button>
           <button
-            onClick={onAdd}
+            onClick={() => {
+              if (isGuest) { setGuestContext("add items to your vault"); return; }
+              onAdd();
+            }}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/20 text-primary font-bold text-sm hover:bg-primary/30 active:scale-[0.97] transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -503,6 +568,13 @@ export default function CardDetailModal({ item, onClose, onAdd, autoOpenTrade }:
       isOpen={showMarketplace}
       onClose={() => setShowMarketplace(false)}
       item={marketplaceItem}
+    />
+
+    {/* Guest auth gate — shown when unauthenticated user taps Trade/Radar/Add */}
+    <GuestAuthModal
+      isOpen={!!guestContext}
+      onClose={() => setGuestContext(null)}
+      context={guestContext ?? undefined}
     />
     </>
   );

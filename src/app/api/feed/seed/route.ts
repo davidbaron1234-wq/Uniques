@@ -12,7 +12,17 @@ import { ALL_CATEGORIES, CATEGORY_QUERIES, seedCategories } from "@/lib/feedSeed
 export const runtime     = "nodejs";
 export const maxDuration = 60;
 
+function isAuthorized(req: NextRequest): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false; // require secret to be set
+  const authHeader = req.headers.get("authorization");
+  return authHeader === `Bearer ${cronSecret}`;
+}
+
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = await req.json().catch(() => ({})) as { categories?: string[] };
   const cats  = (body.categories ?? ALL_CATEGORIES).filter((c) => CATEGORY_QUERIES[c]);
   const result = await seedCategories(cats);

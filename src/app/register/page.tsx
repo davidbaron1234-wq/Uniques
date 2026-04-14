@@ -13,8 +13,10 @@ export default function RegisterPage() {
   const [email,     setEmail]     = useState("");
   const [password,  setPassword]  = useState("");
   const [showPass,  setShowPass]  = useState(false);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState("");
+  const [loading,        setLoading]        = useState(false);
+  const [googleLoading,  setGoogleLoading]  = useState(false);
+  const [agreedToTerms,  setAgreedToTerms]  = useState(false);
+  const [error,          setError]          = useState("");
 
   const handleComplete = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,13 +84,26 @@ export default function RegisterPage() {
         </div>
 
         <div className="glass border border-white/[0.08] rounded-3xl p-6 space-y-5 shadow-2xl">
+            <div className="space-y-2">
             <button
               type="button"
-              className="w-full flex items-center justify-center gap-3 py-3 rounded-2xl bg-white/[0.06] border border-white/[0.08] text-cream/70 text-sm font-semibold hover:bg-white/[0.1] active:scale-[0.98] transition-all"
+              disabled={googleLoading}
+              onClick={() => { setGoogleLoading(true); signIn("google", { callbackUrl: "/" }); }}
+              className="w-full flex items-center justify-center gap-3 py-3 rounded-2xl bg-white/[0.06] border border-white/[0.08] text-cream/70 text-sm font-semibold hover:bg-white/[0.1] active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <GoogleIcon />
-              Continue with Google
+              {googleLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <><GoogleIcon />Continue with Google</>
+              )}
             </button>
+            <p className="text-center text-[10px] text-cream/25 leading-relaxed px-2">
+              By continuing, you agree to our{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary/50 hover:text-primary underline underline-offset-2 transition-colors">Terms of Service</a>
+              {" "}and{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary/50 hover:text-primary underline underline-offset-2 transition-colors">Privacy Policy</a>.
+            </p>
+            </div>
 
             <div className="flex items-center gap-3">
               <div className="flex-1 h-px bg-white/[0.06]" />
@@ -142,16 +157,26 @@ export default function RegisterPage() {
 
               {error && <p className="text-xs text-red-400 px-1">{error}</p>}
 
-              <p className="text-[10px] text-cream/25 px-1 leading-relaxed">
-                By continuing you agree to our{" "}
-                <span className="text-primary/60 cursor-pointer hover:text-primary transition-colors">Terms</span>
-                {" "}and{" "}
-                <span className="text-primary/60 cursor-pointer hover:text-primary transition-colors">Privacy Policy</span>.
-              </p>
+              {/* Mandatory terms checkbox — form cannot submit without this */}
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  required
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded accent-primary flex-shrink-0 cursor-pointer"
+                />
+                <span className="text-[11px] text-cream/40 leading-relaxed group-hover:text-cream/60 transition-colors">
+                  I agree to the{" "}
+                  <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors">Terms of Service</a>
+                  {" "}and{" "}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors">Privacy Policy</a>
+                </span>
+              </label>
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !agreedToTerms}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-primary text-charcoal-dark text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
               >
                 {loading ? (

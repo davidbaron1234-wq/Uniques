@@ -57,6 +57,7 @@ const ALL_COLLECTORS = socialUsers.map((s) => s.user);
 export default function Header() {
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const [headerQuery, setHeaderQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
 
@@ -148,6 +149,38 @@ export default function Header() {
 
   return (
     <>
+      {/* ── Support ticket modal ─────────────────────────────────────────────── */}
+      {supportOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-5">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSupportOpen(false)} />
+          <div className="relative w-full max-w-sm bg-[#1A1818] border border-white/[0.08] rounded-3xl shadow-2xl p-6 animate-slide-up">
+            <button onClick={() => setSupportOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-xl active:bg-white/10 transition-colors" aria-label="Close">
+              <X className="w-5 h-5 text-cream/50" />
+            </button>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <HelpCircle className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-cream">Help &amp; Support</h2>
+                <p className="text-xs text-cream/40">We typically reply within 24 hours</p>
+              </div>
+            </div>
+            <p className="text-sm text-cream/60 mb-5 leading-relaxed">
+              Have a question, found a bug, or need help with a trade? Tap below to send us an email and we&apos;ll get back to you.
+            </p>
+            <a
+              href="mailto:davidbaron1234@gmail.com?subject=Uniques%20Support"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#CAE6CE] text-[#1A1818] font-bold text-sm active:scale-[0.98] transition-all"
+              onClick={() => setSupportOpen(false)}
+            >
+              <HelpCircle className="w-4 h-4" />
+              Contact Support
+            </a>
+          </div>
+        </div>
+      )}
+
       <header className="sticky top-0 z-50 h-[58px] bg-background shadow-[0_2px_12px_rgba(0,0,0,0.4)]">
         {/* `relative` so the overlay can be absolutely positioned beneath */}
         <div className="relative flex items-center h-full px-[13px] gap-[9px] max-w-lg mx-auto">
@@ -300,13 +333,9 @@ export default function Header() {
                   </span>
                 </Link>
               ) : (
-                <Link
-                  href="/login"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex-1 text-sm font-semibold text-primary active:opacity-70 transition-opacity"
-                >
-                  Sign In
-                </Link>
+                <span className="flex-1 text-sm font-semibold text-cream tracking-tight">
+                  Uniques
+                </span>
               )}
 
               <button
@@ -318,45 +347,67 @@ export default function Header() {
               </button>
             </div>
 
-            {/* Nav items — iOS-style with dividers */}
+            {/* Nav items — hide auth-gated items for guests */}
             <nav className="flex-1 px-3">
               {[
-                { icon: RotateCcw,  label: "Trade History",  href: "/history"  },
-                { icon: Settings,   label: "Settings",       href: "/settings" },
-                { icon: HelpCircle, label: "Help & Support", href: null        },
-              ].map((item, idx, arr) => (
-                <button
-                  key={item.label}
-                  className={`w-full flex items-center gap-3 px-3 py-3.5 text-cream/60 active:bg-white/10 active:scale-[0.98] active:text-cream transition-all ${
-                    idx < arr.length - 1 ? "border-b border-white/[0.05]" : ""
-                  }`}
-                  onClick={() => { setMenuOpen(false); if (item.href) router.push(item.href); }}
-                >
-                  <item.icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="font-semibold text-sm tracking-wide">{item.label}</span>
-                </button>
-              ))}
+                session?.user ? { icon: RotateCcw, label: "Trade History", href: "/history"  } : null,
+                session?.user ? { icon: Settings,  label: "Settings",      href: "/settings" } : null,
+                { icon: HelpCircle, label: "Help & Support", href: null },
+              ].filter(Boolean).map((item, idx, arr) => {
+                const it = item!;
+                return (
+                  <button
+                    key={it.label}
+                    className={`w-full flex items-center gap-3 px-3 py-3.5 text-cream/60 active:bg-white/10 active:scale-[0.98] active:text-cream transition-all ${
+                      idx < arr.length - 1 ? "border-b border-white/[0.05]" : ""
+                    }`}
+                    onClick={() => {
+                    if (it.label === "Help & Support") { setMenuOpen(false); setSupportOpen(true); return; }
+                    setMenuOpen(false); if (it.href) router.push(it.href);
+                  }}
+                  >
+                    <it.icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="font-semibold text-sm tracking-wide">{it.label}</span>
+                  </button>
+                );
+              })}
             </nav>
 
-            {/* Sign out */}
+            {/* Legal links — always visible at bottom */}
+            <div className="px-3 pb-2 flex items-center justify-center gap-4">
+              <Link href="/terms" onClick={() => setMenuOpen(false)} className="text-[10px] text-cream/20 hover:text-cream/40 transition-colors">Terms of Service</Link>
+              <span className="text-cream/10 text-[10px]">·</span>
+              <Link href="/privacy" onClick={() => setMenuOpen(false)} className="text-[10px] text-cream/20 hover:text-cream/40 transition-colors">Privacy Policy</Link>
+            </div>
+
+            {/* Bottom — sign-out for auth users; prominent Sign In + Register for guests */}
             <div className="border-t border-white/[0.06] p-3">
               {session?.user ? (
                 <button
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-white/40 active:bg-white/[0.06] active:text-white/70 transition-colors"
-                  onClick={() => { setMenuOpen(false); signOut({ callbackUrl: "/login" }); }}
+                  onClick={() => { setMenuOpen(false); localStorage.clear(); signOut({ callbackUrl: "/login" }); }}
                 >
                   <LogOut className="w-4 h-4" />
                   <span className="font-semibold text-sm tracking-wide">Sign Out</span>
                 </button>
               ) : (
-                <Link
-                  href="/register"
-                  onClick={() => setMenuOpen(false)}
-                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-cream/40 active:bg-white/[0.06] active:text-cream transition-colors"
-                >
-                  <User className="w-4 h-4" />
-                  <span className="font-medium text-sm">Create Account</span>
-                </Link>
+                <div className="flex flex-col gap-2">
+                  <Link
+                    href="/register"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-2xl bg-[#CAE6CE] text-[#1A1818] font-bold text-sm active:scale-[0.98] transition-all"
+                  >
+                    <User className="w-4 h-4" />
+                    Create Free Account
+                  </Link>
+                  <Link
+                    href="/login"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center justify-center px-3 py-1.5 text-cream/40 font-medium text-xs hover:text-cream/60 transition-colors"
+                  >
+                    Already have an account? Sign In
+                  </Link>
+                </div>
               )}
             </div>
           </div>

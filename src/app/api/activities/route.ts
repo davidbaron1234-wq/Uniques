@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
   const { type, title, imageUrl, itemId, metadata } = body;
 
   if (!type || !title) return NextResponse.json({ error: "type and title required" }, { status: 400 });
+  if (title.length > 200) return NextResponse.json({ error: "Title must be 200 characters or fewer" }, { status: 400 });
 
   const activity = await prisma.activity.create({
     data: {

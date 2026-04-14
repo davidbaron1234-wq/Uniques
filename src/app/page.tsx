@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { driver } from "driver.js";
 import { useSession } from "next-auth/react";
+import useSWR from "swr";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import TradeCard from "@/components/TradeCard";
+import GuestAuthModal from "@/components/GuestAuthModal";
 import ProposeTradeModal from "@/components/ProposeTradeModal";
 import { tradeOffers, tradeHistory as staticHistory } from "@/lib/data";
 import { useInventory } from "@/lib/InventoryContext";
@@ -740,6 +742,7 @@ const PAGE_SIZE = 5;
 /** Renders a single FY/Following static feed card (same shape as before). */
 function FeedCard({
   event, index, likedIds, toggleLike, setActiveCommentPost, postedComments, setFeedOfferTarget,
+  isGuest, onGuestAction,
 }: {
   event: NetworkEvent;
   index: number;
@@ -748,6 +751,8 @@ function FeedCard({
   setActiveCommentPost: (id: string) => void;
   postedComments: Record<string, unknown[]>;
   setFeedOfferTarget: (t: { user: { name: string; avatar: string }; item?: import("@/lib/types").CollectibleItem }) => void;
+  isGuest: boolean;
+  onGuestAction: (ctx: string) => void;
 }) {
   const meta        = EVENT_META[event.type as EventType] ?? EVENT_META.added_grail;
   const isLiked     = likedIds.has(event.id);
@@ -821,10 +826,14 @@ function FeedCard({
       {!isMilestone && event.item && (
         <>
           <button
-            onClick={() => event.item && setFeedOfferTarget({
-              user: { name: event.user.name, avatar: event.user.avatar },
-              item: { id: event.id, name: event.item.name, category: "Other" as import("@/lib/constants").Category, imageUrl: event.item.imageUrl, estimatedValue: event.item.estimatedValue, upForTrade: true },
-            })}
+            onClick={() => {
+              if (!event.item) return;
+              if (isGuest) { onGuestAction("trade offers"); return; }
+              setFeedOfferTarget({
+                user: { name: event.user.name, avatar: event.user.avatar },
+                item: { id: event.id, name: event.item.name, category: "Other" as import("@/lib/constants").Category, imageUrl: event.item.imageUrl, estimatedValue: event.item.estimatedValue, upForTrade: true },
+              });
+            }}
             className="mx-4 rounded-xl overflow-hidden bg-white/[0.04] h-48 w-[calc(100%-2rem)] block active:brightness-90 transition-all"
           >
             <img src={event.item.imageUrl} alt={event.item.name} className="w-full h-full object-cover" loading="lazy" />
@@ -841,7 +850,7 @@ function FeedCard({
           <Heart className={`w-4 h-4 transition-all duration-150 ${isLiked ? "fill-red-500 text-red-500" : "text-cream/30"}`} />
           <span className="text-[11px] text-cream/40 font-medium">{likes}</span>
         </button>
-        <button onClick={() => setActiveCommentPost(event.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
+        <button onClick={() => isGuest ? onGuestAction("comment on posts") : setActiveCommentPost(event.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95 text-cream/30">
           <MessageCircle className="w-4 h-4" />
           <span className="text-[11px] text-cream/40 font-medium">{commCount}</span>
         </button>
@@ -850,10 +859,13 @@ function FeedCard({
         </button>
         {(event.item || isRadar) && (
           <button
-            onClick={() => setFeedOfferTarget({
-              user: { name: event.user.name, avatar: event.user.avatar },
-              item: event.item ? { id: event.id, name: event.item.name, category: "Other" as import("@/lib/constants").Category, imageUrl: event.item.imageUrl, estimatedValue: event.item.estimatedValue, upForTrade: true } : undefined,
-            })}
+            onClick={() => {
+              if (isGuest) { onGuestAction(isRadar ? "radar alerts" : "trade offers"); return; }
+              setFeedOfferTarget({
+                user: { name: event.user.name, avatar: event.user.avatar },
+                item: event.item ? { id: event.id, name: event.item.name, category: "Other" as import("@/lib/constants").Category, imageUrl: event.item.imageUrl, estimatedValue: event.item.estimatedValue, upForTrade: true } : undefined,
+              });
+            }}
             className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#CAE6CE]/10 border border-[#CAE6CE]/20 text-[#CAE6CE] text-[11px] font-semibold hover:bg-[#CAE6CE]/20 transition-colors active:scale-95"
           >
             <ArrowLeftRight className="w-3.5 h-3.5" />
@@ -867,7 +879,7 @@ function FeedCard({
 
 /** Card for DB-backed following feed items (activities from followed users). */
 function FollowingFeedCard({
-  item, index, dbLikedIds, dbLikeCounts, onLike, setFeedOfferTarget,
+  item, index, dbLikedIds, dbLikeCounts, onLike, setFeedOfferTarget, isGuest, onGuestAction,
 }: {
   item: { id: string; userName: string; userAvatar: string; userHandle: string; type: string; title: string; imageUrl: string; createdAt: string; likes: number; isLiked: boolean };
   index: number;
@@ -875,6 +887,8 @@ function FollowingFeedCard({
   dbLikeCounts: Record<string, number>;
   onLike: (id: string, liked: boolean) => void;
   setFeedOfferTarget: (t: { user: { name: string; avatar: string }; item?: import("@/lib/types").CollectibleItem }) => void;
+  isGuest: boolean;
+  onGuestAction: (ctx: string) => void;
 }) {
   const isLiked = dbLikedIds.has(item.id) ?? item.isLiked;
   const likes   = dbLikeCounts[item.id] ?? item.likes;
@@ -917,10 +931,13 @@ function FollowingFeedCard({
       {item.imageUrl && (
         <>
           <button
-            onClick={() => setFeedOfferTarget({
-              user: { name: item.userName, avatar: item.userAvatar },
-              item: { id: item.id, name: item.title, category: "Other" as import("@/lib/constants").Category, imageUrl: item.imageUrl, estimatedValue: undefined, upForTrade: true },
-            })}
+            onClick={() => {
+              if (isGuest) { onGuestAction("trade offers"); return; }
+              setFeedOfferTarget({
+                user: { name: item.userName, avatar: item.userAvatar },
+                item: { id: item.id, name: item.title, category: "Other" as import("@/lib/constants").Category, imageUrl: item.imageUrl, estimatedValue: undefined, upForTrade: true },
+              });
+            }}
             className="mx-4 rounded-xl overflow-hidden bg-white/[0.04] h-48 w-[calc(100%-2rem)] block active:brightness-90 transition-all"
           >
             <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
@@ -932,7 +949,7 @@ function FollowingFeedCard({
       )}
 
       <div className="flex items-center gap-1 px-3 py-3 mt-1">
-        <button onClick={() => onLike(item.id, isLiked)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95">
+        <button onClick={() => isGuest ? onGuestAction("like posts") : onLike(item.id, isLiked)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors active:scale-95">
           <Heart className={`w-4 h-4 transition-all duration-150 ${isLiked ? "fill-red-500 text-red-500" : "text-cream/30"}`} />
           <span className="text-[11px] text-cream/40 font-medium">{likes}</span>
         </button>
@@ -941,10 +958,13 @@ function FollowingFeedCard({
         </button>
         {item.imageUrl && (
           <button
-            onClick={() => setFeedOfferTarget({
-              user: { name: item.userName, avatar: item.userAvatar },
-              item: { id: item.id, name: item.title, category: "Other" as import("@/lib/constants").Category, imageUrl: item.imageUrl, estimatedValue: undefined, upForTrade: true },
-            })}
+            onClick={() => {
+              if (isGuest) { onGuestAction("trade offers"); return; }
+              setFeedOfferTarget({
+                user: { name: item.userName, avatar: item.userAvatar },
+                item: { id: item.id, name: item.title, category: "Other" as import("@/lib/constants").Category, imageUrl: item.imageUrl, estimatedValue: undefined, upForTrade: true },
+              });
+            }}
             className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#CAE6CE]/10 border border-[#CAE6CE]/20 text-[#CAE6CE] text-[11px] font-semibold hover:bg-[#CAE6CE]/20 transition-colors active:scale-95"
           >
             <ArrowLeftRight className="w-3.5 h-3.5" />Make Offer
@@ -1154,11 +1174,8 @@ export default function HomePage() {
     avatar: session?.user?.image  ?? CURRENT_USER.avatar,
   }), [session?.user?.name, session?.user?.image]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.replace("/login");
-    }
-  }, [status, router]);
+  const isGuest = !session?.user?.id && status !== "loading";
+  const [guestContext, setGuestContext] = useState<string | null>(null);
 
   const {
     items, totalValue,
@@ -1285,6 +1302,7 @@ export default function HomePage() {
   const toggleLike = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isGuest) { setGuestContext("like posts"); return; }
     setLikedIds((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
@@ -1451,7 +1469,7 @@ export default function HomePage() {
   const [activityFeed,    setActivityFeed]    = useState<ActivityFeedItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   useEffect(() => {
-    if (feedTab !== "activity" || isDemo) return;
+    if (feedTab !== "activity" || isDemo || isGuest) return;
     setActivityLoading(true);
     fetch("/api/activities")
       .then((r) => r.ok ? r.json() : null)
@@ -1482,7 +1500,7 @@ export default function HomePage() {
   const followingLoadedRef = useRef(false);
 
   useEffect(() => {
-    if (feedTab !== "following" || isDemo || followingLoadedRef.current) return;
+    if (feedTab !== "following" || isDemo || isGuest || followingLoadedRef.current) return;
     followingLoadedRef.current = true;
     setFollowingLoading(true);
     fetch("/api/feed/following")
@@ -1609,7 +1627,7 @@ export default function HomePage() {
 
   // Re-fetch page 1 whenever categories change; also reset and fetch trending
   useEffect(() => {
-    if (isDemo) return;
+    if (isDemo || isGuest) return;
     const cats = preferences.favoriteCategories; // empty = API uses all categories
     const key  = cats.join(",");
     if (key === prevCatsRef.current) return;
@@ -1624,7 +1642,7 @@ export default function HomePage() {
     setFyTrendingHasMore(true);
     fetchMoreTrending([], 1, true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDemo, preferences.favoriteCategories]);
+  }, [isDemo, isGuest, preferences.favoriteCategories]);
 
   // IntersectionObserver for infinite horizontal trending scroll
   useEffect(() => {
@@ -1668,18 +1686,21 @@ export default function HomePage() {
     }
   };
 
+  // Guest feed wall — guests see first 5 posts then a conversion block
+  const GUEST_POST_LIMIT = 5;
+
   // Pool + visible posts
-  // Demo: static FY_POOL with visibleCount pagination (client-side slice).
+  // Guest / Demo: static FY_POOL with visibleCount pagination (client-side slice).
   // Real users: fyDiscovered grows as pages are fetched; all fetched posts are visible.
   const pool = useMemo(() => {
     if (feedTab === "following" || feedTab === "activity") return [];
-    return isDemo ? FY_POOL : fyDiscovered;
-  }, [feedTab, isDemo, fyDiscovered]);
+    return (isGuest || isDemo) ? FY_POOL : fyDiscovered;
+  }, [feedTab, isGuest, isDemo, fyDiscovered]);
 
-  // For demo, paginate client-side; for real users, all fetched pages are visible
-  const visiblePosts = isDemo ? pool.slice(0, visibleCount) : pool;
-  // Only FY tab has more-to-load; other tabs have their own finite content
-  const hasMore      = feedTab === "foryou" && (isDemo ? (visibleCount < pool.length) : fyHasMore);
+  // For guest/demo, paginate client-side; for real users, all fetched pages are visible
+  const visiblePosts = (isGuest || isDemo) ? pool.slice(0, isGuest ? GUEST_POST_LIMIT : visibleCount) : pool;
+  // Guests never load more (5-post wall); demo paginates; real users use API hasMore
+  const hasMore      = !isGuest && feedTab === "foryou" && (isDemo ? (visibleCount < pool.length) : fyHasMore);
 
   // Reset pagination when switching tabs
   useEffect(() => {
@@ -1731,20 +1752,102 @@ export default function HomePage() {
     [tradeHistoryEntries]
   );
 
+  // SWR — trades data with instant cache so the home screen never flashes empty.
+  type HomeTradeApiRow = {
+    id: string; isSender: boolean; isActionRequired: boolean; status: string; createdAt: string;
+    offerData: {
+      fromUser?: { id?: string; name: string; avatar: string };
+      toUser?:   { id?: string; name: string; avatar: string };
+      fromItems?: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+      toItems?:   Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+      fromCash?: number; toCash?: number;
+    };
+  };
+  const homeSwrKey = !isDemo && !isGuest && session?.user?.id ? ["/api/trades", session.user.id] as const : null;
+  const { data: homeTradesData, mutate: mutateHomeTrades } = useSWR<{ trades: HomeTradeApiRow[] }>(
+    homeSwrKey,
+    ([url]: readonly [string, string]) => fetch(url).then((r) => r.json()),
+    { keepPreviousData: false, revalidateOnFocus: true },
+  );
+
+  // Realtime trade-updated → SWR mutate for instant re-fetch
+  useEffect(() => {
+    const handler = () => mutateHomeTrades();
+    window.addEventListener("uniques:trade-updated", handler);
+    return () => window.removeEventListener("uniques:trade-updated", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Derive pending action-required entries from SWR data
+  const dbPendingEntries = useMemo<TradeHistoryEntry[]>(() => {
+    if (!homeTradesData?.trades || !session?.user?.id) return [];
+    const myAvatar = session?.user?.image ?? "";
+    return homeTradesData.trades
+      .filter((t) => t.status === "pending" && t.isActionRequired) // any trade that needs MY action
+      .map((t) => {
+        const od       = t.offerData;
+        const fromUser = od.fromUser ?? { id: undefined, name: "Collector", avatar: "" };
+        const toUser   = od.toUser   ?? { id: undefined, name: "Collector", avatar: "" };
+        return {
+          id:               t.id,
+          from:             t.isSender ? { name: "You", avatar: myAvatar } : { name: fromUser.name, avatar: fromUser.avatar },
+          to:               t.isSender ? { name: toUser.name, avatar: toUser.avatar } : { name: "You", avatar: myAvatar },
+          fromUserId:       fromUser.id,
+          toUserId:         toUser.id,
+          fromItems:        (od.fromItems ?? []).map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+          toItems:          (od.toItems   ?? []).map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+          fromCash:         od.fromCash ?? 0,
+          toCash:           od.toCash   ?? 0,
+          status:           "pending" as const,
+          isActionRequired: true,
+          createdAt:        t.createdAt,
+        };
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeTradesData, session?.user?.id, session?.user?.image]);
+
   // Convert pending tradeOffers into TradeHistoryEntry for the shared TradeCard.
-  // Exclude any offer already in the context (accepted, completed, etc.).
-  // Demo account shows mock offers; real users start with no pending offers.
+  // Demo account shows mock offers; real users get DB-fetched pending received trades.
   const pendingEntries = isDemo
     ? tradeOffers
         .filter((o) => o.status === "pending" && !dismissedIds.has(o.id) && !handledTradeIds.has(o.id))
         .map(offerToEntry)
         .slice(0, 3)
-    : [];
+    : dbPendingEntries.filter((e) => !dismissedIds.has(e.id)).slice(0, 3);
 
-  // Accepted trades awaiting fulfillment (from context, not yet completed)
-  const acceptedPending = tradeHistoryEntries.filter(
-    (e) => e.status === "accepted" && !e.completedAt && !completedAtMap[e.id]
-  );
+  // Accepted trades awaiting completion.
+  // Real users: derive from DB (authoritative). Demo: use context (localStorage).
+  const dbAcceptedEntries = useMemo<TradeHistoryEntry[]>(() => {
+    if (!homeTradesData?.trades || !session?.user?.id) return [];
+    const myAvatar = session?.user?.image ?? "";
+    return homeTradesData.trades
+      .filter((t) => t.status === "accepted" && t.isActionRequired)
+      .map((t) => {
+        const od       = t.offerData;
+        const fromUser = od.fromUser ?? { id: undefined, name: "Collector", avatar: "" };
+        const toUser   = od.toUser   ?? { id: undefined, name: "Collector", avatar: "" };
+        return {
+          id:                   t.id,
+          from:                 t.isSender ? { name: "You", avatar: myAvatar } : { name: fromUser.name, avatar: fromUser.avatar },
+          to:                   t.isSender ? { name: toUser.name, avatar: toUser.avatar } : { name: "You", avatar: myAvatar },
+          fromUserId:           fromUser.id,
+          toUserId:             toUser.id,
+          fromItems:            (od.fromItems ?? []).map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+          toItems:              (od.toItems   ?? []).map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+          fromCash:             od.fromCash ?? 0,
+          toCash:               od.toCash   ?? 0,
+          status:               "accepted" as const,
+          isActionRequired:     true,
+          createdAt:            t.createdAt,
+          completedAt:          undefined,
+        };
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeTradesData, session?.user?.id, session?.user?.image]);
+
+  const acceptedPending = isDemo
+    ? tradeHistoryEntries.filter((e) => e.status === "accepted" && !e.completedAt && !completedAtMap[e.id])
+    : dbAcceptedEntries.filter((e) => !dismissedIds.has(e.id));
 
   // Combined actionable entries — max 3 shown
   const actionEntries = [...pendingEntries, ...acceptedPending].slice(0, 3);
@@ -1777,8 +1880,8 @@ export default function HomePage() {
       .slice(0, 3);
   }, [tradeHistoryEntries, dismissedIds, isDemo]);
 
-  // ── Early return — MUST come after all hooks ─────────────────────────────
-  if (status === "loading" || status === "unauthenticated") {
+  // ── Early return — only during loading (unauthenticated = guest, show feed) ─
+  if (status === "loading") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
@@ -1786,8 +1889,14 @@ export default function HomePage() {
     );
   }
 
-  const handlePartyClick = (name: string) => {
-    if (!isMe(name)) router.push(`/u/${name.toLowerCase()}`);
+  const handlePartyClick = (name: string, entry?: TradeHistoryEntry) => {
+    if (isMe(name)) return;
+    // Route by userId so handle changes never break links
+    const userId = entry
+      ? (name === entry.from.name ? entry.fromUserId : entry.toUserId)
+      : undefined;
+    if (!isDemo && userId) router.push(`/u/${userId}`);
+    else router.push(`/u/${name.toLowerCase()}`);
   };
 
   // Accept a pending offer: persist as accepted entry, lock the user's items, remove from pending view
@@ -1803,6 +1912,10 @@ export default function HomePage() {
     }
     dismiss(entry.id);
     showToast("Trade accepted! Mark as complete once pieces have been exchanged.");
+    // Sync to DB for real users (fire-and-forget)
+    if (!isDemo) {
+      fetch(`/api/trades?id=${entry.id}&action=accept`, { method: "PATCH" }).catch(() => {});
+    }
   };
 
   // Complete an accepted trade: atomic inventory swap + persist completion timestamp
@@ -1911,7 +2024,14 @@ export default function HomePage() {
                   }
                   onCancel={
                     entry.status === "pending"
-                      ? () => { addTradeHistory({ ...entry, status: "declined" }); dismiss(entry.id); }
+                      ? () => {
+                          addTradeHistory({ ...entry, status: "declined" });
+                          dismiss(entry.id);
+                          if (!isDemo) {
+                            const action = isMe(entry.from.name) ? "cancel" : "decline";
+                            fetch(`/api/trades?id=${entry.id}&action=${action}`, { method: "PATCH" }).catch(() => {});
+                          }
+                        }
                       : undefined
                   }
                   onCounter={
@@ -1922,8 +2042,46 @@ export default function HomePage() {
                   onMessage={
                     entry.status === "pending"
                       ? () => {
-                          const other = isMe(entry.from.name) ? entry.to : entry.from;
-                          router.push(`/inbox/${other.name.toLowerCase()}`);
+                          const other     = isMe(entry.from.name) ? entry.to : entry.from;
+                          const myItems   = isMe(entry.from.name) ? entry.fromItems : entry.toItems;
+                          const theirItems = isMe(entry.from.name) ? entry.toItems : entry.fromItems;
+                          const myCash    = isMe(entry.from.name) ? entry.fromCash : entry.toCash;
+                          const theirCash = isMe(entry.from.name) ? entry.toCash : entry.fromCash;
+                          if (!isDemo && entry.fromUserId && entry.toUserId) {
+                            const otherUserId = isMe(entry.from.name) ? entry.toUserId : entry.fromUserId;
+                            fetch("/api/conversations", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ recipientId: otherUserId, recipientName: other.name, recipientAvatar: other.avatar }),
+                            })
+                              .then((r) => r.ok ? r.json() : null)
+                              .then((data: { id?: string } | null) => {
+                                if (data?.id) {
+                                  try {
+                                    sessionStorage.setItem("injected_trade", JSON.stringify({
+                                      targetUser:     data.id,
+                                      offeredItems:   myItems.map((i) => ({ name: i.name, imageUrl: i.imageUrl })),
+                                      requestedItems: theirItems.map((i) => ({ name: i.name, imageUrl: i.imageUrl })),
+                                      cashOffer:      myCash ?? 0,
+                                      theirCashOffer: theirCash ?? 0,
+                                    }));
+                                  } catch { /* noop */ }
+                                  router.push(`/inbox/${data.id}`);
+                                }
+                              })
+                              .catch(() => {});
+                          } else {
+                            try {
+                              sessionStorage.setItem("injected_trade", JSON.stringify({
+                                targetUser:     other.name.toLowerCase(),
+                                offeredItems:   myItems.map((i) => ({ name: i.name, imageUrl: i.imageUrl })),
+                                requestedItems: theirItems.map((i) => ({ name: i.name, imageUrl: i.imageUrl })),
+                                cashOffer:      myCash ?? 0,
+                                theirCashOffer: theirCash ?? 0,
+                              }));
+                            } catch { /* noop */ }
+                            router.push(`/inbox/${other.name.toLowerCase()}`);
+                          }
                         }
                       : undefined
                   }
@@ -1933,7 +2091,7 @@ export default function HomePage() {
                       : undefined
                   }
                   itemsMissing={tradeItemsMissing(entry)}
-                  onPartyClick={handlePartyClick}
+                  onPartyClick={(name) => handlePartyClick(name, entry)}
                 />
               ))}
             </div>
@@ -2068,6 +2226,7 @@ export default function HomePage() {
                     setActiveCommentPost={setActiveCommentPost}
                     postedComments={postedComments}
                     setFeedOfferTarget={setFeedOfferTarget}
+                    isGuest={isGuest} onGuestAction={setGuestContext}
                   />
                 ))}
 
@@ -2101,6 +2260,7 @@ export default function HomePage() {
                     dbLikedIds={dbLikedIds} dbLikeCounts={dbLikeCounts}
                     onLike={handleDbLike}
                     setFeedOfferTarget={setFeedOfferTarget}
+                    isGuest={isGuest} onGuestAction={setGuestContext}
                   />
                 ))}
 
@@ -2154,8 +2314,45 @@ export default function HomePage() {
                 setActiveCommentPost={setActiveCommentPost}
                 postedComments={postedComments}
                 setFeedOfferTarget={setFeedOfferTarget}
+                isGuest={isGuest} onGuestAction={setGuestContext}
               />
             ))}
+
+            {/* ── Guest 5-post scroll wall ──────────────────────────── */}
+            {isGuest && feedTab === "foryou" && (
+              <div className="relative mt-2 rounded-3xl overflow-hidden border border-white/[0.08] bg-gradient-to-b from-[#1A1818] to-[#111010]">
+                {/* Blurred ghost of a post underneath */}
+                <div className="h-40 blur-sm opacity-30 pointer-events-none">
+                  <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                    <div className="w-9 h-9 rounded-xl bg-white/[0.08]" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-28 rounded-full bg-white/[0.08]" />
+                      <div className="h-2.5 w-44 rounded-full bg-white/[0.05]" />
+                    </div>
+                  </div>
+                  <div className="mx-4 h-24 rounded-xl bg-white/[0.06]" />
+                </div>
+                {/* CTA overlay */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center px-6 py-8 text-center bg-gradient-to-t from-[#111010]/95 via-[#111010]/70 to-transparent">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                  </div>
+                  <p className="text-base font-extrabold text-cream mb-1.5">Curious to see more?</p>
+                  <p className="text-xs text-cream/45 leading-relaxed mb-5 max-w-[240px]">
+                    Join thousands of collectors trading rare grails. It&apos;s free to get started.
+                  </p>
+                  <Link
+                    href="/register"
+                    className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#CAE6CE] text-[#1A1818] font-bold text-sm active:scale-[0.97] transition-all shadow-[0_4px_16px_rgba(202,230,206,0.25)]"
+                  >
+                    Create Free Account
+                  </Link>
+                  <Link href="/login" className="mt-3 text-xs text-cream/30 hover:text-cream/50 transition-colors">
+                    Already a member? Sign in
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* FY tab: skeleton loading state (shown while seeding) */}
@@ -2658,6 +2855,12 @@ export default function HomePage() {
           </div>
         );
       })()}
+
+      <GuestAuthModal
+        isOpen={!!guestContext}
+        onClose={() => setGuestContext(null)}
+        context={guestContext ?? undefined}
+      />
     </div>
   );
 }

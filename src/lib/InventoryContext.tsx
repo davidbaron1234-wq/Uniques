@@ -20,6 +20,7 @@ type DBItem = {
   upForTrade:     boolean;
   description:    string;
   status:         string;
+  masterId:       string | null;
 };
 
 // Shape returned by GET /api/trades
@@ -41,6 +42,7 @@ function dbItemToCollectible(i: DBItem): CollectibleItem {
     customImage:    i.imageUrl || undefined,
     estimatedValue: i.estimatedValue ?? undefined,
     upForTrade:     i.upForTrade,
+    masterId:       i.masterId ?? undefined,
   };
 }
 

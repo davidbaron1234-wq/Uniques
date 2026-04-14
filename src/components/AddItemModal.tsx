@@ -9,7 +9,8 @@ import {
 import { CATEGORIES, Category, mapCatalogCategory } from "@/lib/constants";
 import { MasterItem } from "@/lib/catalog/types";
 import { identifyCard } from "@/lib/ximilarService";
-import { identifyItemWithGemini } from "@/lib/gemini"; 
+import { identifyItemWithGemini } from "@/lib/gemini";
+import ImageCropModal from "@/components/ImageCropModal";
 import ItemConfigForm, { ItemConfig } from "./ItemConfigForm";
 
 interface AddItemModalProps {
@@ -76,8 +77,13 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     gradeNum: "10"
   });
   
+  const [cropSrc,  setCropSrc]  = useState<string | null>(null);
+  const [cropMode, setCropMode] = useState<"photo" | "scan">("photo");
+
   const scanInputRef       = useRef<HTMLInputElement>(null);
-  const photoInputRef      = useRef<HTMLInputElement>(null);
+  const galleryInputRef    = useRef<HTMLInputElement>(null);
+  // Keep photoInputRef as alias so nothing else breaks
+  const photoInputRef      = galleryInputRef;
   const debounceRef        = useRef<ReturnType<typeof setTimeout>>();
   const searchWrapperRef   = useRef<HTMLDivElement>(null);
 
@@ -95,7 +101,14 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   // ── מנוע מחירים (Sniper) ──
   const fetchMarketPrice = async (query: string, cat: Category, setCode?: string, cardNum?: string) => {
       setPriceStatus({ msg: "Checking market data...", type: 'loading' });
-      
+
+      // Helper: generate a stable catalog slug so the Market Trajectory chart renders
+      // for any item that gets a real price from TCGDex or eBay.
+      const applyMarketMasterId = (q: string, c: string) => {
+        const slug = `ai-${c.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${q.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50)}`;
+        setMasterId(slug);
+      };
+
       const lowerQuery = query.toLowerCase();
       // המגן לקופסאות סגורות (שלא נשלח בטעות למנוע של קלפים בודדים)
       const isSealedProduct = lowerQuery.includes("box") || lowerQuery.includes("etb") || lowerQuery.includes("booster") || lowerQuery.includes("pack") || lowerQuery.includes("tin");
@@ -127,6 +140,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   if (price) {
                     setPriceStatus({ msg: `TCG Market Price: $${price}`, type: 'success' });
                     setConfig(prev => ({ ...prev, askingPrice: price }));
+                    applyMarketMasterId(targetId, cat); // TCGDex card ID is the canonical masterId
                     return;
                   }
                 }
@@ -144,13 +158,14 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
           } else {
              cleanQuery = query.replace("Funko Pop", "").trim() + ` ${cat === 'Funko Pop' ? 'Funko Pop' : ''}`;
           }
-          
+
           const res = await fetch(`/api/ebay/pricing?q=${encodeURIComponent(cleanQuery)}`);
           const data = await res.json();
-          
+
           if (data.price) {
               setPriceStatus({ msg: `eBay Avg Price: $${data.price}`, type: 'success' });
               setConfig(prev => ({ ...prev, askingPrice: data.price }));
+              applyMarketMasterId(query, cat); // eBay price confirms market identity
           } else {
               // 🔥 התיקון: הודעה ידידותית במקום שגיאה
               setPriceStatus({ msg: "Market data unavailable. Set your price!", type: 'manual' });
@@ -304,51 +319,53 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     setCategory(mapCatalogCategory(item.category));
   };
 
-  // ── Plain photo attach (no AI) — available to all users ──────────────────
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !file.type.startsWith("image/")) return;
+  // ── Shared file-picker handler — opens crop modal before processing ─────
+  const openCropFor = (file: File, mode: "photo" | "scan") => {
+    if (!file.type.startsWith("image/")) return;
+    setCropMode(mode);
     const reader = new FileReader();
-    reader.onloadend = () => {
-      const img = new Image();
-      img.src = reader.result as string;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX = 800;
-        const scale = img.width > MAX ? MAX / img.width : 1;
-        canvas.width  = Math.round(img.width  * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const b64 = canvas.toDataURL("image/jpeg", 0.75);
-        setScannedImage(b64);
-        setConfig((prev) => ({ ...prev, customImage: b64 }));
-      };
-    };
+    reader.onloadend = () => setCropSrc(reader.result as string);
     reader.readAsDataURL(file);
-    // reset so same file can be re-selected
+  };
+
+  const handleGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) openCropFor(file, "photo");
     e.target.value = "";
   };
 
-  // ── מנוע סריקה ראשי ──
-  const handleScanUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScanFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+    // Reset AI scan state before opening cropper
     setName(""); setCategory(""); setScanError(null); setPriceStatus(null);
     setBarcodeInput("");
-    setConfig(prev => ({ 
-        ...prev, 
-        customImage: undefined, askingPrice: undefined, notes: "", 
-        year: "", pieces: "", graded: false, gradeNum: "10" 
+    setConfig(prev => ({
+      ...prev,
+      customImage: undefined, askingPrice: undefined, notes: "",
+      year: "", pieces: "", graded: false, gradeNum: "10",
     }));
+    openCropFor(file, "scan");
+    e.target.value = "";
+  };
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64 = reader.result as string;
-      setScannedImage(base64);
-      setIsScanning(true);
-      setPriceStatus({ msg: "AI Analyzing...", type: 'loading' });
-      setConfig(prev => ({ ...prev, customImage: base64 }));
+  // ── After crop confirmed — route to photo-attach or AI-scan ─────────────
+  const handleItemCropDone = (croppedDataUrl: string) => {
+    setCropSrc(null);
+    if (cropMode === "photo") {
+      setScannedImage(croppedDataUrl);
+      setConfig((prev) => ({ ...prev, customImage: croppedDataUrl }));
+    } else {
+      runAiScan(croppedDataUrl);
+    }
+  };
+
+  // ── AI scan engine (called with the already-cropped base64) ──────────────
+  const runAiScan = async (base64: string) => {
+    setScannedImage(base64);
+    setIsScanning(true);
+    setPriceStatus({ msg: "AI Analyzing...", type: "loading" });
+    setConfig(prev => ({ ...prev, customImage: base64 }));
 
       try {
         const geminiResult = await identifyItemWithGemini(base64);
@@ -371,30 +388,18 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
 
         if (geminiResult.visual) {
             const visual = geminiResult.visual;
-            const lowerName = visual.name.toLowerCase();
 
-            // לוגיקת קטגוריות
-            let detectedCategory: Category = "Other";
-            
-            const isYugioh = lowerName.includes("yu-gi-oh") || lowerName.includes("yugioh") || lowerName.includes("magic") || lowerName.includes("mtg") || lowerName.includes("digimon") || lowerName.includes("lorcana");
-            const isSports = lowerName.includes("baseball") || lowerName.includes("basketball") || lowerName.includes("football") || lowerName.includes("soccer") || lowerName.includes("nba") || lowerName.includes("nfl") || lowerName.includes("fleer") || lowerName.includes("upper deck") || lowerName.includes("jordan") || lowerName.includes("lebron");
-            const isPokemon = lowerName.includes("pokemon") || lowerName.includes("charizard") || lowerName.includes("pikachu");
-
-            if (isSports) detectedCategory = "Sports Cards";
-            else if (isYugioh) detectedCategory = "Other TCG";
-            else if (isPokemon) detectedCategory = "Pokémon TCG";
-            else if (lowerName.includes("funko")) detectedCategory = "Funko Pop";
-            else if (lowerName.includes("lego")) detectedCategory = "Lego";
-            else if (lowerName.includes("sneaker")) detectedCategory = "Sneakers";
-            else if (lowerName.includes("coin") || lowerName.includes("dollar") || lowerName.includes("cent")) detectedCategory = "Coins";
-            else if (lowerName.includes("watch") || lowerName.includes("rolex")) detectedCategory = "Watches";
-            else if (visual.category === "Pokémon TCG") detectedCategory = "Pokémon TCG";
-            else detectedCategory = mapCatalogCategory(visual.category);
+            // Trust the AI's visual classification directly — it has already reasoned
+            // from form factor (shoe vs. card vs. figure) via the system prompt, and
+            // the server has validated it against the allowed category list.
+            // Cast directly; "Other" is the server-side fallback for any unknown value.
+            const detectedCategory: Category = (visual.category as Category) || "Other";
 
             setCategory(detectedCategory);
             setName(visual.name);
 
-            // לוגיקת קופסאות
+            // Sealed product detection (Pokémon booster boxes, ETBs, etc.)
+            const lowerName = visual.name.toLowerCase();
             const isSealed = lowerName.includes("box") || lowerName.includes("etb") || lowerName.includes("booster") || lowerName.includes("pack") || lowerName.includes("tin") || lowerName.includes("collection");
 
             if (detectedCategory === "Pokémon TCG" && visual.isCard && !isSealed) {
@@ -426,8 +431,6 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
       } finally {
         setIsScanning(false);
       }
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleNextStep = () => setStep("configure");
@@ -481,6 +484,16 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   if (!isOpen) return null;
 
   return (
+    <>
+    {cropSrc && (
+      <ImageCropModal
+        imageSrc={cropSrc}
+        cropShape="rect"
+        outputSize={800}
+        onCropComplete={handleItemCropDone}
+        onCancel={() => setCropSrc(null)}
+      />
+    )}
     <div
       role="dialog"
       aria-modal="true"
@@ -511,26 +524,25 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               <h2 className="text-lg font-bold text-cream">Curate a Piece</h2>
             </div>
             <div className="flex-1 overflow-y-auto scrollbar-none p-5 space-y-4">
-              {/* Two action buttons: upload (free) + AI scan (pro) */}
+              {/* Photo buttons — single manual photo + AI scan */}
               <div className="grid grid-cols-2 gap-3">
-                {/* ── Upload Photo — everyone ── */}
+                {/* ── Add Manual Photo — OS handles camera vs gallery choice ── */}
                 <button
                   type="button"
-                  onClick={() => photoInputRef.current?.click()}
+                  onClick={() => galleryInputRef.current?.click()}
                   className="flex flex-col items-center gap-2 px-3 py-4 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] hover:border-white/20 transition-all active:scale-95"
                 >
                   <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center">
                     <ImagePlus className="w-5 h-5 text-cream/50" />
                   </div>
                   <div className="text-center">
-                    <p className="text-xs font-bold text-cream/70">Upload Photo</p>
-                    <p className="text-[9px] text-cream/30 mt-0.5">Free · Any image</p>
+                    <p className="text-xs font-bold text-cream/70">Add Manual Photo</p>
+                    <p className="text-[9px] text-cream/30 mt-0.5">Enter details manually</p>
                   </div>
                 </button>
 
                 {/* ── Magic AI Scan — pro only (premium styling) ── */}
                 <div className="relative group">
-                  {/* Animated glow border — always visible for free to entice, brighter for pro */}
                   <div className={`absolute -inset-[1.5px] rounded-2xl bg-gradient-to-br from-purple-500 via-violet-400 to-fuchsia-500 transition-opacity duration-300 ${
                     isFree ? "opacity-40 animate-pulse" : "opacity-70 group-hover:opacity-100"
                   }`} />
@@ -559,7 +571,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                         )}
                       </div>
                       <p className="text-[9px] text-purple-400/60 mt-0.5">
-                        {isFree ? "Tap to unlock" : "Auto-identify & price"}
+                        {isFree ? "Tap to unlock" : "Instantly identify & price your item"}
                       </p>
                     </div>
                   </button>
@@ -567,8 +579,8 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </div>
 
               {/* Hidden file inputs */}
-              <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-              <input ref={scanInputRef}  type="file" accept="image/*" capture="environment" onChange={handleScanUpload} className="hidden" />
+              <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleGalleryChange}  className="hidden" />
+              <input ref={scanInputRef}    type="file" accept="image/*" onChange={handleScanFileChange} className="hidden" />
 
               <div className="flex gap-2">
                  <div className="relative flex-1">
@@ -696,7 +708,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </div>
             </div>
             <div className="flex-1 overflow-y-auto scrollbar-none p-5">
-              <ItemConfigForm config={config} onChange={handleConfigChange} category={category as string} isManualEntry={!masterId} />
+              <ItemConfigForm config={config} onChange={handleConfigChange} category={category as string} isManualEntry={!masterId && priceStatus?.type !== 'success'} />
             </div>
             <div className="px-5 pb-5 pt-3 border-t border-white/[0.06] flex-shrink-0">
               <div className="flex gap-3">
@@ -739,7 +751,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             </div>
 
             <button
-              onClick={() => window.open("/upgrade", "_blank")}
+              onClick={() => { window.location.href = "/upgrade"; }}
               className="relative w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-extrabold text-sm hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-purple-500/20 mb-3 overflow-hidden group"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
@@ -760,5 +772,6 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
 
       </div>
     </div>
+    </>
   );
 }

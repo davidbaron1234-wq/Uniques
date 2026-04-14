@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
 
 // ── POST /api/identify ─────────────────────────────────────────────────────
 // Server-side proxy for Ximilar visual AI card recognition.
 // Uses the TCG-specific endpoint for better card identification.
 
-const XIMILAR_API_KEY = "fd7cb18664eabef30a2de9ca37d8bcd4c15ef948";
 const XIMILAR_ENDPOINT = "https://api.ximilar.com/collectibles/v2/tcg_id";
+const MAX_B64_LEN = 2_000_000; // ~1.5 MB
 
 export async function POST(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  const ximilarApiKey = process.env.XIMILAR_API_KEY;
+  if (!ximilarApiKey) {
+    return NextResponse.json({ success: false, error: "Identify service not configured" }, { status: 503 });
+  }
+
   try {
     const body = await request.json();
     const { base64Image } = body as { base64Image?: string };
@@ -19,6 +31,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (base64Image.length > MAX_B64_LEN) {
+      return NextResponse.json({ success: false, error: "Image too large" }, { status: 413 });
+    }
+
     // Strip the data URL prefix if present (e.g. "data:image/jpeg;base64,")
     const base64Data = base64Image.includes(",")
       ? base64Image.split(",")[1]
@@ -28,7 +44,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Token ${XIMILAR_API_KEY}`,
+        Authorization: `Token ${ximilarApiKey}`,
       },
       body: JSON.stringify({
         records: [{ _base64: base64Data }],

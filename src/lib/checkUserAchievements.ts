@@ -1,146 +1,78 @@
-import { prisma } from "@/lib/prisma";
+/**
+ * Backward-compatible wrappers around the Achievement Engine v2.
+ * All achievement logic now lives in achievementEngine.ts.
+ * These exports exist so existing call-sites in items/route.ts and trades/route.ts
+ * don't need to be refactored in bulk.
+ */
+import { runAchievementEngine } from "@/lib/achievementEngine";
 
-// Server-safe metadata (no Lucide imports)
+// Server-safe metadata map — kept here so callers that import ACHIEVEMENT_META still work.
 export const ACHIEVEMENT_META: Record<string, { title: string; description: string }> = {
-  "heavyweight":      { title: "The Heavyweight",   description: "Surpass $50,000 in total collection value" },
-  "dealmaker":        { title: "Dealmaker",          description: "Complete 10 successful trades" },
-  "first-blood":      { title: "First Blood",        description: "Complete your very first trade" },
-  "high-roller":      { title: "High Roller",        description: "Propose a trade with a total value over $10,000" },
-  "early-adopter":    { title: "Early Adopter",      description: "Joined Uniques during the Beta phase" },
-  "curator":          { title: "The Curator",        description: "Add 50 items to your collection" },
-  "trendsetter":      { title: "Trendsetter",        description: "Receive 100 total likes across your Feed posts" },
-  "diamond-hands":    { title: "Diamond Hands",      description: "Hold an item for over 1 year without trading it" },
-  "whale-watcher":    { title: "Whale Watcher",      description: "Follow 5 users with large collections" },
-  "flawless":         { title: "Flawless",           description: "Own 10 items graded PSA 10 or BGS 9.5+" },
-  "mint-condition":   { title: "Mint Condition",     description: "Add 5 PSA 10 graded items to your collection" },
-  "sniper":           { title: "The Sniper",         description: "Secure a Grail directly from your Radar" },
-  "worldwide":        { title: "Mr. Worldwide",      description: "Complete an international trade" },
-  "the-negotiator":   { title: "The Negotiator",     description: "Successfully counter-offer and close a deal" },
-  "completionist":    { title: "Completionist",      description: "Complete a full Pokémon set from a single era" },
+  "first-relic":         { title: "First Relic",         description: "Add your first item to the vault" },
+  "growing-collection":  { title: "Growing Collection",  description: "Add 10 items to your vault" },
+  "curator":             { title: "The Curator",         description: "Add 50 items to your collection" },
+  "century-club":        { title: "Century Club",        description: "Add 100 items to your vault" },
+  "five-figures":        { title: "Five Figures",        description: "Vault value reaches $10,000" },
+  "heavyweight":         { title: "The Heavyweight",     description: "Surpass $50,000 in total collection value" },
+  "six-figure-vault":    { title: "Six-Figure Vault",    description: "Vault value reaches $100,000" },
+  "category-curious":    { title: "Category Curious",    description: "Own items in 3 different categories" },
+  "category-connoisseur":{ title: "Category Connoisseur",description: "Own items in 5 different categories" },
+  "pokemon-purist":      { title: "Pokémon Purist",      description: "Own 20+ Pokémon TCG items" },
+  "sneakerhead":         { title: "Sneakerhead",         description: "Own 10+ sneaker items" },
+  "brick-architect":     { title: "Brick Architect",     description: "Own 10+ LEGO sets" },
+  "sports-fan":          { title: "Sports Fan",          description: "Own 10+ sports cards" },
+  "funko-fanatic":       { title: "Funko Fanatic",       description: "Own 10+ Funko Pops" },
+  "bulk-upload":         { title: "Bulk Upload",         description: "Add 10 items in a single day" },
+  "speedrunner":         { title: "Speedrunner",         description: "Add 25 items in a single week" },
+  "early-adopter":       { title: "Early Adopter",       description: "Joined Uniques during the Beta phase" },
+  "diamond-hands":       { title: "Diamond Hands",       description: "Hold an item for over 1 year without trading it" },
+  "trendsetter":         { title: "Trendsetter",         description: "Receive 100 total likes across your Feed posts" },
+  "high-roller":         { title: "High Roller",         description: "Propose a trade with a total value over $10,000" },
+  "first-offer":         { title: "First Offer",         description: "Send your first trade offer to someone" },
+  "popular-vault":       { title: "Popular Vault",       description: "Receive 5 trade offers in a single week" },
+  "first-blood":         { title: "First Blood",         description: "Complete your very first trade" },
+  "on-a-roll":           { title: "On a Roll",           description: "Complete 5 successful trades" },
+  "dealmaker":           { title: "Dealmaker",           description: "Complete 10 successful trades" },
+  "trading-machine":     { title: "Trading Machine",     description: "Complete 25 successful trades" },
+  "mega-deal":           { title: "Mega Deal",           description: "Complete a trade with total value over $25,000" },
+  "first-follow":        { title: "First Follow",        description: "Follow your first fellow collector" },
+  "social-butterfly":    { title: "Social Butterfly",    description: "Follow 25 collectors" },
+  "whale-watcher":       { title: "Whale Watcher",       description: "Follow 5 collectors with large collections" },
+  "influencer":          { title: "Influencer",          description: "Reach 50 followers" },
+  "first-scan":          { title: "First Scan",          description: "Use Magic AI Scan for the first time" },
+  "scanner":             { title: "Scanner",             description: "Scan 10 items with Magic AI" },
+  "ai-addict":           { title: "AI Addict",           description: "Scan 50 items with Magic AI" },
+  "grail-detected":      { title: "Grail Detected",      description: "Scan an item identified as worth $1,000+" },
+  "first-impression":    { title: "First Impression",    description: "Complete your profile with avatar, bio, and handle" },
+  "pro-collector":       { title: "Pro Collector",       description: "Upgrade to Uniques Pro" },
+  "the-negotiator":      { title: "The Negotiator",      description: "Successfully counter-offer and close a deal" },
+  "mint-condition":      { title: "Mint Condition",      description: "Add 5 PSA 10 graded items to your collection" },
+  "flawless":            { title: "Flawless",            description: "Own 10 items graded PSA 10 or BGS 9.5+" },
+  "sniper":              { title: "The Sniper",          description: "Secure a Grail directly from your Radar" },
+  "worldwide":           { title: "Mr. Worldwide",       description: "Complete an international trade" },
+  "completionist":       { title: "Completionist",       description: "Complete a full Pokémon set from a single era" },
 };
 
 /**
- * Unlock an achievement if not already unlocked.
- * Creates a UserAchievement record + Activity post.
- * Does NOT create a Notification — the frontend handles that via addNotification
- * to avoid the server/client double-notification bug.
- * Returns true if this was a new unlock.
+ * Check all "item.saved" achievements for a user.
+ * Called from POST/PATCH/DELETE /api/items.
  */
-async function unlockIfNew(
-  userId:       string,
-  achievementId: string,
-  unlockedSet:  Set<string>,
+export async function checkUserAchievements(
+  userId:      string,
   catalystItem?: { name: string; imageUrl: string },
-): Promise<boolean> {
-  if (unlockedSet.has(achievementId)) return false;
-
-  await prisma.userAchievement.create({
-    data: {
-      userId,
-      achievementId,
-      catalystName:  catalystItem?.name  ?? null,
-      catalystImage: catalystItem?.imageUrl ?? null,
-    },
-  });
-  unlockedSet.add(achievementId);
-
-  // Post to social "My Activity" feed
-  const meta = ACHIEVEMENT_META[achievementId];
-  if (meta) {
-    prisma.activity.create({
-      data: {
-        userId,
-        type:     "achievement_unlocked",
-        title:    `Unlocked: ${meta.title}`,
-        imageUrl: catalystItem?.imageUrl ?? "",
-        metadata: { achievementId, description: meta.description },
-      },
-    }).catch(() => {});
-  }
-
-  return true;
+): Promise<string[]> {
+  return runAchievementEngine("item.saved", userId, { catalystItem });
 }
 
 /**
- * Server-side achievement engine.
- * Run after any vault mutation (add / edit / delete).
- * Returns IDs of achievements newly unlocked this call.
- *
- * Implemented (11/15):
- *   heavyweight, curator, early-adopter, diamond-hands, trendsetter,
- *   whale-watcher  ← server-side (this function)
- *   first-blood, dealmaker, high-roller, flawless, mint-condition
- *                  ← client-side via unlockAchievement() in AchievementsContext
- *
- * Pending infrastructure (4/15):
- *   sniper, worldwide, the-negotiator, completionist
+ * Check High Roller at trade-proposal time.
+ * Kept as a named export so the existing POST /api/trades call-site still compiles.
  */
-export async function checkUserAchievements(
-  userId: string,
+export async function checkHighRoller(
+  userId:     string,
+  tradeValue: number,
   catalystItem?: { name: string; imageUrl: string },
-): Promise<string[]> {
-  // Single query to get all already-unlocked achievements (dedup guard)
-  const alreadyUnlocked = await prisma.userAchievement.findMany({
-    where:  { userId },
-    select: { achievementId: true },
-  });
-  const unlockedSet = new Set(alreadyUnlocked.map((a) => a.achievementId));
-
-  // Parallel data fetch for all server-side checks
-  const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
-  const [vaultAgg, itemCount, user, oldItem, activities, followCount] = await Promise.all([
-    prisma.item.aggregate({
-      where: { userId, status: { not: "TRADED" } },
-      _sum:  { estimatedValue: true },
-    }),
-    prisma.item.count({ where: { userId, status: { not: "TRADED" } } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } }),
-    prisma.item.findFirst({
-      where: { userId, status: { not: "TRADED" }, createdAt: { lte: oneYearAgo } },
-      select: { id: true },
-    }),
-    prisma.activity.findMany({ where: { userId }, select: { id: true } }),
-    prisma.follow.count({ where: { followerId: userId } }),
-  ]);
-
-  const totalValue = vaultAgg._sum.estimatedValue ?? 0;
-  const newlyUnlocked: string[] = [];
-
-  // ── The Heavyweight: $50k total vault value ──────────────────────────────
-  if (totalValue >= 50_000) {
-    if (await unlockIfNew(userId, "heavyweight", unlockedSet, catalystItem))
-      newlyUnlocked.push("heavyweight");
-  }
-
-  // ── The Curator: 50+ items in vault ─────────────────────────────────────
-  if (itemCount >= 50) {
-    if (await unlockIfNew(userId, "curator", unlockedSet)) newlyUnlocked.push("curator");
-  }
-
-  // ── Early Adopter: joined before beta cutoff (Sep 1, 2025) ───────────────
-  if (user && user.createdAt < new Date("2025-09-01T00:00:00Z")) {
-    if (await unlockIfNew(userId, "early-adopter", unlockedSet)) newlyUnlocked.push("early-adopter");
-  }
-
-  // ── Diamond Hands: holds any item for 1+ year ────────────────────────────
-  if (oldItem) {
-    if (await unlockIfNew(userId, "diamond-hands", unlockedSet)) newlyUnlocked.push("diamond-hands");
-  }
-
-  // ── Trendsetter: 100+ likes on user's activity posts ─────────────────────
-  if (activities.length > 0) {
-    const likeCount = await prisma.like.count({
-      where: { targetId: { in: activities.map((a) => a.id) } },
-    });
-    if (likeCount >= 100) {
-      if (await unlockIfNew(userId, "trendsetter", unlockedSet)) newlyUnlocked.push("trendsetter");
-    }
-  }
-
-  // ── Whale Watcher: follows 5+ users ──────────────────────────────────────
-  if (followCount >= 5) {
-    if (await unlockIfNew(userId, "whale-watcher", unlockedSet)) newlyUnlocked.push("whale-watcher");
-  }
-
-  return newlyUnlocked;
+): Promise<boolean> {
+  const ids = await runAchievementEngine("trade.proposed", userId, { tradeValue, catalystItem });
+  return ids.includes("high-roller");
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { prisma } from "@/lib/prisma";
+import { runAchievementEngine } from "@/lib/achievementEngine";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -61,6 +62,10 @@ export async function POST(req: NextRequest) {
       href:    "/",
     },
   }).catch(() => {});
+
+  // Achievement checks: follower's milestones + followed user's influencer check
+  runAchievementEngine("follow.created", session.user.id).catch(() => {});
+  runAchievementEngine("follow.created", followingId).catch(() => {});
 
   return NextResponse.json({ success: true });
 }

@@ -29,7 +29,31 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "asc" },
     });
 
-    return Response.json(messages);
+    // Live-join Profile so senderName is always current (never stale from stored message field)
+    const senderSet = new Set<string>(messages.map((m) => m.senderId));
+    const senderIds = Array.from(senderSet);
+    const liveProfiles = await prisma.profile.findMany({
+      where:  { userId: { in: senderIds } },
+      select: { userId: true, name: true, avatar: true },
+    });
+    const profileMap = new Map(liveProfiles.map((p) => [p.userId, p]));
+
+    return Response.json(messages.map((m) => {
+      const liveProfile = profileMap.get(m.senderId);
+      const liveName    = liveProfile?.name ?? m.senderName;
+
+      // For trade-offer messages, also stamp the live sender name into metadata.proposer
+      // so the chat bubble never shows "undefined proposed a trade"
+      let metadata = m.metadata;
+      if (m.type === "trade-offer" && liveName) {
+        const meta = m.metadata as Record<string, unknown> | null;
+        if (meta) {
+          metadata = { ...meta, proposer: liveName } as typeof m.metadata;
+        }
+      }
+
+      return { ...m, senderName: liveName, metadata };
+    }));
   } catch (err) {
     console.error("[GET /api/messages]", err);
     return Response.json({ error: "Internal server error" }, { status: 500 });
@@ -54,6 +78,9 @@ export async function POST(request: Request) {
 
     if (!body.conversationId || !body.content) {
       return Response.json({ error: "conversationId and content required" }, { status: 400 });
+    }
+    if (typeof body.content !== "string" || body.content.length > 2000) {
+      return Response.json({ error: "Message content must be 2000 characters or fewer" }, { status: 400 });
     }
 
     // Verify the current user is a participant

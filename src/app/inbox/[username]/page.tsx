@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { mutate as swrMutate } from "swr";
 import { ArrowLeft, ArrowLeftRight, Check, CheckCheck, RefreshCw, Send, Smile, X } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useInventory } from "@/lib/InventoryContext";
@@ -24,9 +25,10 @@ type EmbeddedTradeOffer = {
   fromCash?: number; // cash proposer is adding
   toCash?:   number; // cash proposer is requesting
   isCounter?: boolean; // true when this card is itself a counter-offer
+  tradeId?: string;  // DB trade ID for Accept/Decline/Counter API calls
 };
 
-type TradeStatus = "pending" | "accepted" | "declined" | "countered";
+type TradeStatus = "pending" | "accepted" | "my_completion_pending" | "their_completion_pending" | "completed" | "declined" | "countered";
 
 type Msg = {
   id: string;
@@ -36,6 +38,10 @@ type Msg = {
   tradeOffer?: EmbeddedTradeOffer;
   /** When true, rendered as a centred system announcement pill */
   system?: boolean;
+  /** For system messages — the DB trade ID this event refers to */
+  tradeId?: string;
+  /** For system messages — the lifecycle event type (accepted, declined, cancelled, completed…) */
+  eventType?: string;
 };
 
 type ConvMeta = {
@@ -284,6 +290,50 @@ function TypingIndicator({ avatar, name }: { avatar: string; name: string }) {
   );
 }
 
+// ── Derive initial tradeStatuses from a loaded message list ──────────────────
+
+function buildTradeStatuses(msgs: Msg[]): Record<string, TradeStatus> {
+  const statuses: Record<string, TradeStatus> = {};
+
+  // Group trade-offer message IDs by tradeId (preserving order)
+  const offerIdsByTradeId: Record<string, string[]> = {};
+  msgs.forEach((m) => {
+    const tid = m.tradeOffer?.tradeId;
+    if (tid) {
+      if (!offerIdsByTradeId[tid]) offerIdsByTradeId[tid] = [];
+      offerIdsByTradeId[tid].push(m.id);
+    }
+  });
+
+  // All offers start pending; earlier ones for the same tradeId are countered
+  Object.values(offerIdsByTradeId).forEach((ids) => {
+    ids.forEach((id, i) => {
+      statuses[id] = i < ids.length - 1 ? "countered" : "pending";
+    });
+  });
+
+  // Apply system message events to override statuses
+  msgs.forEach((m) => {
+    if (!m.system || !m.tradeId || !m.eventType) return;
+    const ids = offerIdsByTradeId[m.tradeId] ?? [];
+    const latestId = ids[ids.length - 1];
+    if (!latestId) return;
+    if (m.eventType === "accepted") {
+      statuses[latestId] = "accepted";
+    } else if (m.eventType === "completion_pending") {
+      // m.from === "me" means I sent the confirmation → waiting for partner.
+      // m.from === "them" means partner confirmed first → I need to act.
+      statuses[latestId] = m.from === "me" ? "my_completion_pending" : "their_completion_pending";
+    } else if (m.eventType === "completed") {
+      statuses[latestId] = "completed";
+    } else if (["declined", "cancelled"].includes(m.eventType)) {
+      statuses[latestId] = "declined";
+    }
+  });
+
+  return statuses;
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
@@ -321,9 +371,15 @@ export default function ChatPage() {
   // The trade-offer message the user wants to counter; drives the counter ProposeTradeModal
   const [counterMsg,      setCounterMsg]      = useState<Msg | null>(null);
   // For real conversations: the other participant's metadata
-  const [convMeta,        setConvMeta]        = useState<{ name: string; avatar: string } | null>(null);
+  const [convMeta,        setConvMeta]        = useState<{ name: string; handle: string; avatar: string; userId?: string } | null>(null);
+
+  // Ref to the messages-fetch function so event listeners can re-trigger it without stale closures
+  const fetchMsgsRef = useRef<(() => void) | null>(null);
 
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror messages in a ref so Realtime handlers can read current state without stale closures
+  const messagesRef = useRef<Msg[]>([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   const bottomRef  = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
@@ -338,39 +394,65 @@ export default function ChatPage() {
   // Load real messages + conversation metadata from DB for non-demo conversations
   useEffect(() => {
     if (!isRealConversation || !conversationId) return;
-    // Fetch messages
-    fetch(`/api/messages?conversationId=${conversationId}`)
-      .then((r) => r.ok ? r.json() : [])
-      .then((data: Array<{
-        id: string; senderId: string; senderName: string;
-        content: string; type: string; metadata: unknown; createdAt: string;
-      }>) => {
-        setMessages(
-          data.map((m) => ({
-            id:   m.id,
-            from: m.senderId === session?.user?.id ? "me" : "them" as "me" | "them",
-            time: new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-            text: m.type === "text" ? m.content : undefined,
-            tradeOffer: m.type === "trade-offer" ? (m.metadata as EmbeddedTradeOffer) : undefined,
-            system: m.type === "system",
-          }))
-        );
-      })
-      .catch(() => { /* offline — empty chat */ });
-    // Fetch conversation metadata for the header
+
+    const myId = session?.user?.id;
+
+    const doFetchMsgs = () => {
+      fetch(`/api/messages?conversationId=${conversationId}`)
+        .then((r) => r.ok ? r.json() : [])
+        .then((data: Array<{
+          id: string; senderId: string; senderName: string;
+          content: string; type: string; metadata: unknown; createdAt: string;
+        }>) => {
+          const mapped: Msg[] = data.map((m) => {
+            const meta = m.metadata as Record<string, unknown> | null;
+            return {
+              id:         m.id,
+              from:       (m.senderId === myId ? "me" : "them") as "me" | "them",
+              time:       new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+              text:       (m.type === "text" || m.type === "system") ? m.content : undefined,
+              tradeOffer: m.type === "trade-offer" ? (m.metadata as EmbeddedTradeOffer) : undefined,
+              system:     m.type === "system",
+              tradeId:    meta?.tradeId    as string | undefined,
+              eventType:  meta?.eventType  as string | undefined,
+            };
+          });
+          setMessages(mapped);
+          setTradeStatuses(buildTradeStatuses(mapped));
+        })
+        .catch(() => { /* offline — empty chat */ });
+    };
+
+    // Store so event listeners can re-trigger without stale closures
+    fetchMsgsRef.current = doFetchMsgs;
+    doFetchMsgs();
+
+    // Fetch conversation metadata for the header (live names/handles — no CUID in header)
     fetch(`/api/conversations`)
       .then((r) => r.ok ? r.json() : [])
-      .then((data: Array<{ id: string; name: string; avatarUrl: string }>) => {
+      .then((data: Array<{ id: string; userId?: string; name: string; handle?: string; avatarUrl: string }>) => {
         const found = data.find((c) => c.id === conversationId);
-        if (found) setConvMeta({ name: found.name, avatar: found.avatarUrl });
+        if (found) setConvMeta({ name: found.name, handle: found.handle ?? found.name.toLowerCase().replace(/\s+/g, "_"), avatar: found.avatarUrl, userId: found.userId });
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRealConversation, conversationId, session?.user?.id]);
 
-  // ── Supabase Realtime: live-subscribe to new messages in this conversation ───
-  // Fires for INSERT events on the Message table; skips own messages (already
-  // shown optimistically) and appends remote messages instantly without a refresh.
+  // Re-fetch messages when a trade update fires — fixes tradeId desync on optimistic messages.
+  // Two passes: immediate (catches already-committed system messages) +
+  // delayed at 800ms (catches system messages that committed after the Trade UPDATE).
+  useEffect(() => {
+    const handler = () => {
+      fetchMsgsRef.current?.();
+      setTimeout(() => fetchMsgsRef.current?.(), 800);
+    };
+    window.addEventListener("uniques:trade-updated", handler);
+    return () => window.removeEventListener("uniques:trade-updated", handler);
+  }, []);
+
+  // ── Supabase Realtime: messages + typing broadcasts ──────────────────────────
+  const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => {
     if (!isRealConversation || !conversationId || !session?.user?.id) return;
 
@@ -386,33 +468,104 @@ export default function ChatPage() {
         },
         (payload) => {
           const row = payload.new as {
-            id:             string;
-            senderId:       string;
-            content:        string;
-            type:           string;
-            metadata:       unknown;
-            createdAt:      string;
+            id: string; senderId: string; content: string;
+            type: string; metadata: unknown; createdAt: string;
           };
-          // Skip own messages — already shown via optimistic update
+          const meta = row.metadata as Record<string, unknown> | null;
+          const rowTime = new Date(row.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+          // ── System messages (injected by server, not tied to a user's send) ──
+          if (row.type === "system") {
+            const tradeId   = meta?.tradeId   as string | undefined;
+            const eventType = meta?.eventType as string | undefined;
+            setMessages((prev) => [...prev, {
+              id: row.id, from: "them" as const, time: rowTime,
+              text: row.content, system: true, tradeId, eventType,
+            }]);
+            if (tradeId && eventType) {
+              // Primary: find the trade-offer message by DB tradeId
+              const offerMsgs = messagesRef.current.filter(m => m.tradeOffer?.tradeId === tradeId);
+              let latestId    = offerMsgs[offerMsgs.length - 1]?.id;
+
+              // Fallback: proposer's side may have an optimistic message with a local temp ID.
+              // If no match by tradeId, find the most recent unresolved trade-offer message.
+              if (!latestId) {
+                const allOffers = messagesRef.current.filter(m => m.tradeOffer && !m.system);
+                latestId = allOffers[allOffers.length - 1]?.id;
+              }
+
+              if (latestId) {
+                let newStatus: TradeStatus = "pending";
+                if (eventType === "accepted") {
+                  newStatus = "accepted";
+                } else if (eventType === "completion_pending") {
+                  // row.senderId = the one who confirmed delivery
+                  newStatus = row.senderId === session?.user?.id
+                    ? "my_completion_pending"
+                    : "their_completion_pending";
+                } else if (eventType === "completed") {
+                  newStatus = "completed";
+                  // Bust vault for the other party when trade completes live
+                  window.dispatchEvent(new Event("uniques:inventory-updated"));
+                } else if (["declined", "cancelled"].includes(eventType)) {
+                  newStatus = "declined";
+                }
+                setTradeStatuses((ts) => ({ ...ts, [latestId!]: newStatus }));
+              }
+              // Also trigger SWR mutation so Trade History page updates instantly
+              swrMutate((key) => key === "/api/trades" || (Array.isArray(key) && key[0] === "/api/trades"));
+              // Re-fetch messages to replace any optimistic messages with DB messages
+              // (delayed to let server finish any async injectChatMessage calls)
+              setTimeout(() => fetchMsgsRef.current?.(), 300);
+            }
+            return;
+          }
+
+          // Skip own non-system messages
           if (row.senderId === session.user!.id) return;
+          try { localStorage.setItem("inbox_unread_real", "1"); } catch { /* noop */ }
+          // Hide typing indicator when new message arrives
+          setIsTyping(false);
+          if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+
+          // ── New trade-offer from other party: mark previous offer for same tradeId as countered ──
+          const incomingTradeOffer = row.type === "trade-offer" ? (row.metadata as EmbeddedTradeOffer) : undefined;
+          if (incomingTradeOffer?.tradeId) {
+            const prevOffer = [...messagesRef.current].reverse().find(
+              m => m.tradeOffer?.tradeId === incomingTradeOffer.tradeId
+            );
+            if (prevOffer) {
+              setTradeStatuses((ts) => ({ ...ts, [prevOffer.id]: "countered" }));
+            }
+          }
+
           setMessages((prev) => [
             ...prev,
             {
-              id:   row.id,
-              from: "them" as const,
-              time: new Date(row.createdAt).toLocaleTimeString("en-US", {
-                hour: "numeric", minute: "2-digit",
-              }),
-              text:       row.type === "text"         ? row.content                           : undefined,
-              tradeOffer: row.type === "trade-offer"  ? (row.metadata as EmbeddedTradeOffer)  : undefined,
-              system:     row.type === "system",
+              id:         row.id,
+              from:       "them" as const,
+              time:       rowTime,
+              text:       row.type === "text" ? row.content : undefined,
+              tradeOffer: incomingTradeOffer,
+              system:     false,
             },
           ]);
         },
       )
+      // Listen for broadcast "typing" events from the other user
+      .on("broadcast", { event: "typing" }, (payload: { payload?: { userId?: string } }) => {
+        if (payload?.payload?.userId === session.user!.id) return; // skip own
+        setIsTyping(true);
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => setIsTyping(false), 3000);
+      })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    chatChannelRef.current = channel;
+    return () => {
+      supabase.removeChannel(channel);
+      chatChannelRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRealConversation, conversationId, session?.user?.id]);
 
@@ -482,8 +635,25 @@ export default function ChatPage() {
     ]);
   };
 
-  const handleAcceptOffer = (msgId: string) => {
-    setTradeStatuses((prev) => ({ ...prev, [msgId]: "accepted" }));
+  // Invalidates both string-key and array-key SWR instances so Trade History
+  // updates instantly for both parties (RealtimeProvider handles the other user).
+  const invalidateTrades = () => {
+    swrMutate((key) => key === "/api/trades" || (Array.isArray(key) && key[0] === "/api/trades"));
+    window.dispatchEvent(new Event("uniques:trade-updated"));
+  };
+
+  const handleAcceptOffer = async (msg: Msg) => {
+    const tradeId = msg.tradeOffer?.tradeId;
+    if (!isDemo && isRealConversation && tradeId) {
+      try {
+        const res = await fetch(`/api/trades?id=${encodeURIComponent(tradeId)}&action=accept`, {
+          method: "PATCH",
+        });
+        if (!res.ok) { console.error("[handleAcceptOffer] API error"); return; }
+        invalidateTrades();
+      } catch { return; }
+    }
+    setTradeStatuses((prev) => ({ ...prev, [msg.id]: "accepted" }));
     confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
     appendSystemMsg("Trade Accepted! 🎉");
     addNotification({
@@ -496,14 +666,61 @@ export default function ChatPage() {
     });
   };
 
-  const handleDeclineOffer = (msgId: string) => {
-    setTradeStatuses((prev) => ({ ...prev, [msgId]: "declined" }));
+  const handleDeclineOffer = async (msg: Msg) => {
+    const tradeId = msg.tradeOffer?.tradeId;
+    if (!isDemo && isRealConversation && tradeId) {
+      try {
+        await fetch(`/api/trades?id=${encodeURIComponent(tradeId)}&action=decline`, {
+          method: "PATCH",
+        });
+        invalidateTrades();
+      } catch { /* non-fatal */ }
+    }
+    setTradeStatuses((prev) => ({ ...prev, [msg.id]: "declined" }));
     appendSystemMsg("Trade Declined.");
   };
 
-  const handleCancelSentOffer = (msgId: string) => {
-    setTradeStatuses((prev) => ({ ...prev, [msgId]: "declined" }));
+  const handleCancelSentOffer = async (msg: Msg) => {
+    const tradeId = msg.tradeOffer?.tradeId;
+    if (!isDemo && isRealConversation && tradeId) {
+      try {
+        await fetch(`/api/trades?id=${encodeURIComponent(tradeId)}&action=cancel`, {
+          method: "PATCH",
+        });
+        invalidateTrades();
+      } catch { /* non-fatal */ }
+    }
+    setTradeStatuses((prev) => ({ ...prev, [msg.id]: "declined" }));
     appendSystemMsg("Offer cancelled.");
+  };
+
+  const handleCompleteOffer = async (msg: Msg) => {
+    const tradeId = msg.tradeOffer?.tradeId;
+    if (!isDemo && isRealConversation && tradeId) {
+      try {
+        const res = await fetch(`/api/trades?id=${encodeURIComponent(tradeId)}&action=complete`, {
+          method: "PATCH",
+        });
+        if (!res.ok) { console.error("[handleCompleteOffer] API error"); return; }
+        const data = await res.json() as { waiting?: boolean; completed?: boolean };
+        invalidateTrades();
+        if (data.completed) {
+          setTradeStatuses((prev) => ({ ...prev, [msg.id]: "completed" }));
+          confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+          appendSystemMsg("Trade Complete! Items exchanged. 🎉");
+          window.dispatchEvent(new Event("uniques:inventory-updated"));
+          router.refresh(); // bust Next.js router cache so vault + profile reflect the swap
+        } else if (data.waiting) {
+          setTradeStatuses((prev) => ({ ...prev, [msg.id]: "my_completion_pending" }));
+          appendSystemMsg("Waiting for partner...");
+        }
+      } catch { /* non-fatal */ }
+    } else {
+      // Demo / offline fallback
+      setTradeStatuses((prev) => ({ ...prev, [msg.id]: "completed" }));
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+      appendSystemMsg("Trade Complete! 🎉");
+    }
   };
 
   // ── Standard send ─────────────────────────────────────────────────────────
@@ -565,6 +782,7 @@ export default function ChatPage() {
         fromCash:  entry.fromCash || undefined,
         toCash:    entry.toCash   || undefined,
         isCounter,
+        tradeId:   entry.id || undefined,
       },
     };
 
@@ -587,7 +805,7 @@ export default function ChatPage() {
   // ── Not found — only applies to demo key lookups, real conv IDs are valid ──────
   if (!demoConv && !isRealConversation) {
     return (
-      <div className="flex flex-col h-screen bg-background pb-16">
+      <div className="flex flex-col h-dvh overflow-hidden bg-background">
         <Header />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
           <p className="text-5xl">💬</p>
@@ -612,13 +830,14 @@ export default function ChatPage() {
   const knownMeta = CHAT_DATA[username];
   const conv = demoConv ?? {
     name:   convMeta?.name   ?? knownMeta?.name   ?? "...",
-    handle: convMeta ? `@${username}` : (knownMeta?.handle ?? ""),
+    // Use the live handle from the API — not the raw URL param which is a conversationId (CUID)
+    handle: convMeta?.handle ? `@${convMeta.handle}` : (knownMeta?.handle ?? ""),
     avatar: convMeta?.avatar ?? knownMeta?.avatar ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}&backgroundColor=b6e3f4`,
     online: false,
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background pb-16">
+    <div className="flex flex-col h-dvh overflow-hidden bg-background">
       <Header />
 
       {/* ── Chat-specific sub-header (back + user info) ── */}
@@ -633,7 +852,12 @@ export default function ChatPage() {
           </button>
 
           <button
-            onClick={() => router.push(`/u/${username}`)}
+            onClick={() => {
+              // Prefer the live handle; fall back to userId if known; raw username last
+              // (raw username is the conversationId CUID which would cause "Profile not found")
+              const dest = convMeta?.handle || convMeta?.userId || username;
+              router.push(`/u/${dest}`);
+            }}
             className="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity text-left"
           >
             <div className="relative flex-shrink-0">
@@ -770,15 +994,42 @@ export default function ChatPage() {
 
                       {/* ── CTA section — changes based on direction + status ── */}
                       <div className="px-3 pb-3">
-                        {/* ── SETTLED: accepted — clickable link to Trade History ── */}
+                        {/* ── SETTLED: accepted — both parties need to confirm delivery ── */}
                         {tradeStatus === "accepted" && (
                           <button
-                            onClick={() => router.push("/history")}
-                            className="flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-green-500/15 border border-green-500/20 hover:bg-green-500/25 hover:border-green-500/35 active:scale-[0.97] transition-all cursor-pointer"
+                            onClick={() => handleCompleteOffer(msg)}
+                            className="flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-primary/15 border border-primary/20 hover:bg-primary/25 hover:border-primary/35 active:scale-[0.97] transition-all cursor-pointer"
                           >
-                            <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-                            <span className="text-xs font-bold text-green-400">Trade Accepted · View History</span>
+                            <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                            <span className="text-xs font-bold text-primary">Complete Trade</span>
                           </button>
+                        )}
+
+                        {/* ── COMPLETION PENDING: I confirmed, waiting for partner ── */}
+                        {tradeStatus === "my_completion_pending" && (
+                          <div className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                            <CheckCheck className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-amber-400">Waiting for partner...</span>
+                          </div>
+                        )}
+
+                        {/* ── COMPLETION PENDING: Partner confirmed, I need to confirm ── */}
+                        {tradeStatus === "their_completion_pending" && (
+                          <button
+                            onClick={() => handleCompleteOffer(msg)}
+                            className="flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-primary/15 border border-primary/20 hover:bg-primary/25 hover:border-primary/35 active:scale-[0.97] transition-all cursor-pointer"
+                          >
+                            <ArrowLeftRight className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                            <span className="text-xs font-bold text-primary">Complete Trade</span>
+                          </button>
+                        )}
+
+                        {/* ── COMPLETED: both confirmed, swap done ── */}
+                        {tradeStatus === "completed" && (
+                          <div className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-green-500/15 border border-green-500/20">
+                            <CheckCheck className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                            <span className="text-xs font-bold text-green-400">Trade Complete 🎉</span>
+                          </div>
                         )}
 
                         {/* ── SETTLED: declined / cancelled ── */}
@@ -795,7 +1046,7 @@ export default function ChatPage() {
                         {tradeStatus === "countered" && (
                           <div className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
                             <RefreshCw className="w-3.5 h-3.5 text-cream/40" />
-                            <span className="text-xs font-semibold text-cream/40">Offer Countered 🔄</span>
+                            <span className="text-xs font-semibold text-cream/40">Offer Countered</span>
                           </div>
                         )}
 
@@ -804,7 +1055,7 @@ export default function ChatPage() {
                           <div className="flex gap-1.5">
                             {/* Accept */}
                             <button
-                              onClick={() => handleAcceptOffer(msg.id)}
+                              onClick={() => handleAcceptOffer(msg)}
                               className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-green-500 text-white text-[11px] font-bold active:scale-95 hover:bg-green-400 transition-all shadow-sm"
                             >
                               <Check className="w-3 h-3" />
@@ -819,7 +1070,7 @@ export default function ChatPage() {
                             </button>
                             {/* Decline */}
                             <button
-                              onClick={() => handleDeclineOffer(msg.id)}
+                              onClick={() => handleDeclineOffer(msg)}
                               className="flex-1 flex items-center justify-center py-2 rounded-xl bg-red-500/15 border border-red-500/20 text-red-400 text-[11px] font-bold active:scale-95 hover:bg-red-500/25 transition-all"
                             >
                               Decline
@@ -831,10 +1082,10 @@ export default function ChatPage() {
                         {tradeStatus === "pending" && isMe && (
                           <div className="flex items-center gap-2">
                             <span className="flex-1 text-center text-[10px] font-bold text-cream/30 uppercase tracking-wider">
-                              Pending Response…
+                              Waiting for partner
                             </span>
                             <button
-                              onClick={() => handleCancelSentOffer(msg.id)}
+                              onClick={() => handleCancelSentOffer(msg)}
                               className="px-2.5 py-1.5 rounded-xl border border-white/[0.08] text-cream/35 text-[10px] font-bold hover:bg-white/[0.06] active:scale-95 transition-all"
                             >
                               Cancel
@@ -873,8 +1124,8 @@ export default function ChatPage() {
         </div>
       </main>
 
-      {/* ── Input bar ── */}
-      <div className="flex-shrink-0 bg-charcoal-dark border-t border-white/[0.06]">
+      {/* ── Input bar — extra pb clears the fixed BottomNav (≈56px) ── */}
+      <div className="flex-shrink-0 bg-charcoal-dark border-t border-white/[0.06] pb-[max(4.5rem,calc(env(safe-area-inset-bottom)+4rem))]">
 
         {/* ── Emoji picker panel ── */}
         {showEmoji && (
@@ -942,7 +1193,7 @@ export default function ChatPage() {
         )}
 
         {/* ── Input row ── */}
-        <div className="flex items-center gap-2 px-4 py-3 max-w-lg mx-auto">
+        <div className="flex items-center gap-2 px-4 py-3 max-w-lg mx-auto w-full">
           {/* Toggle emoji picker */}
           <button
             ref={smileRef}
@@ -973,12 +1224,21 @@ export default function ChatPage() {
           <input
             ref={inputRef}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              // Broadcast typing event to the other participant
+              if (isRealConversation && chatChannelRef.current && session?.user?.id) {
+                chatChannelRef.current.send({
+                  type: "broadcast", event: "typing",
+                  payload: { userId: session.user.id },
+                }).catch(() => {});
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
             placeholder={`Message ${conv.name}…`}
-            className="flex-1 px-4 py-2.5 rounded-2xl bg-background-light text-sm text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
+            className="flex-1 min-w-0 px-4 py-2.5 rounded-2xl bg-background-light text-sm text-cream placeholder:text-cream/25 focus:outline-none focus:ring-2 focus:ring-surface/30 transition-all"
           />
 
           {/* Send */}
@@ -998,7 +1258,7 @@ export default function ChatPage() {
         <ProposeTradeModal
           isOpen={isTradeModalOpen}
           onClose={() => setIsTradeModalOpen(false)}
-          targetUser={{ name: conv.name, avatar: conv.avatar }}
+          targetUser={{ name: conv.name, avatar: conv.avatar, id: convMeta?.userId }}
           targetItem={null}
           onTradeSent={handleTradeSent}
           skipNavigation
@@ -1022,17 +1282,29 @@ export default function ChatPage() {
           <ProposeTradeModal
             isOpen={!!counterMsg}
             onClose={() => setCounterMsg(null)}
-            targetUser={{ name: conv.name, avatar: conv.avatar }}
+            targetUser={{ name: conv.name, avatar: conv.avatar, id: convMeta?.userId }}
             targetItem={null}
             prefill={{
               targetItem:     counterTarget ?? undefined,
               cashOffer:      offer.fromCash ?? 0,
               theirCashOffer: offer.toCash   ?? 0,
             }}
+            editTradeId={!isDemo && offer.tradeId ? offer.tradeId : undefined}
             onTradeSent={(entry) => {
-              // Mark original offer as countered, then append the new card
+              // Mark all previous offers for the same tradeId as countered, then append new card
               if (counterMsg) {
-                setTradeStatuses((prev) => ({ ...prev, [counterMsg.id]: "countered" }));
+                const tid = counterMsg.tradeOffer?.tradeId;
+                setTradeStatuses((prev) => {
+                  const updates: Record<string, TradeStatus> = { [counterMsg.id]: "countered" };
+                  if (tid) {
+                    messagesRef.current.forEach((m) => {
+                      if (m.tradeOffer?.tradeId === tid && m.id !== counterMsg.id) {
+                        updates[m.id] = "countered";
+                      }
+                    });
+                  }
+                  return { ...prev, ...updates };
+                });
               }
               handleTradeSent(entry, true);
               setCounterMsg(null);

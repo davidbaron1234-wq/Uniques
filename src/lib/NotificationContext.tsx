@@ -23,6 +23,8 @@ interface NotificationContextValue {
   markAllAsRead: () => void;
   markAsRead: (id: string) => void;
   addNotification: (n: Notification) => void;
+  /** Push a notification that already exists in DB — no re-POST to DB */
+  injectNotification: (n: Notification) => void;
 }
 
 // ── Seed data (demo account only) ─────────────────────────────────────────────
@@ -169,8 +171,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, [session?.user?.email]);
 
+  // In-memory only — used by RealtimeProvider to push DB-delivered notifications
+  // without triggering a second DB write.
+  const injectNotification = useCallback((notif: Notification) => {
+    setNotifications((prev) => {
+      if (prev.some((n) => n.id === notif.id)) return prev; // idempotent
+      return [notif, ...prev];
+    });
+  }, []);
+
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAllAsRead, markAsRead, addNotification }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAllAsRead, markAsRead, addNotification, injectNotification }}>
       {children}
     </NotificationContext.Provider>
   );

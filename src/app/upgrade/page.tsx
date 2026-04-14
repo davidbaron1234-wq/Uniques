@@ -3,21 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, X, Zap, ArrowLeft, Sparkles, Loader2 } from "lucide-react";
+import { Check, X, Zap, ArrowLeft, Sparkles, Loader2, AlertCircle } from "lucide-react";
 import Logo from "@/components/Logo";
 
 type FeatureRow = { label: string; free: string | boolean; pro: string | boolean };
 
 const FEATURES: FeatureRow[] = [
-  { label: "Vault capacity",           free: "10 items",   pro: "Unlimited"  },
-  { label: "Grail Slots",              free: "3 slots",    pro: "Unlimited"  },
-  { label: "Full Trophy Room",         free: false,        pro: true         },
-  { label: "AI Auto-Scanner",          free: false,        pro: true         },
-  { label: "Market Analytics",         free: false,        pro: true         },
-  { label: "Verified Pro Badge",       free: false,        pro: true         },
-  { label: "Priority trade matching",  free: false,        pro: true         },
-  { label: "Collector profile",        free: true,         pro: true         },
-  { label: "Trade messaging",          free: true,         pro: true         },
+  // Shared checkmarks — users see what they already have
+  { label: "Collector profile",        free: true,          pro: true         },
+  { label: "Trade messaging",          free: true,          pro: true         },
+  // Premium checkmarks — locked for free
+  { label: "AI Auto-Scanner",          free: false,         pro: true         },
+  { label: "Full Trophy Room",         free: false,         pro: true         },
+  { label: "Market Analytics",         free: false,         pro: true         },
+  { label: "Verified Pro Badge",       free: false,         pro: true         },
+  // Text-value rows at bottom
+  { label: "Vault capacity",           free: "10 items",    pro: "Unlimited"  },
+  { label: "Custom Grail Selection",   free: "Auto",        pro: "Custom"     },
 ];
 
 function FeatureValue({ value, isPro }: { value: string | boolean; isPro: boolean }) {
@@ -37,20 +39,28 @@ function FeatureValue({ value, isPro }: { value: string | boolean; isPro: boolea
 export default function UpgradePage() {
   const router = useRouter();
   const { status } = useSession();
-  const [upgrading, setUpgrading] = useState(false);
+  const [upgrading, setUpgrading]   = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   if (status === "unauthenticated") { router.replace("/api/auth/signin"); return null; }
   if (status === "loading") return null;
 
   const handleUpgrade = async () => {
     setUpgrading(true);
+    setCheckoutError(null);
     try {
       const res  = await fetch("/api/stripe/checkout", { method: "POST" });
-      const data = await res.json() as { url?: string; fallback?: boolean };
-      if (data.url) { window.location.href = data.url; }
-      else          { router.push("/checkout"); }
-    } catch { router.push("/checkout"); }
-    finally  { setUpgrading(false); }
+      const data = await res.json() as { url?: string; error?: string };
+      if (data.url) {
+        window.location.href = data.url; // ← hard-navigate to Stripe-hosted checkout
+        return;
+      }
+      setCheckoutError(data.error ?? "Could not start checkout. Please try again.");
+    } catch {
+      setCheckoutError("Network error. Please check your connection and try again.");
+    } finally {
+      setUpgrading(false);
+    }
   };
 
   return (
@@ -167,6 +177,12 @@ export default function UpgradePage() {
         <p className="text-center text-[10px] text-cream/20 -mt-2">
           Secured by Stripe · 256-bit SSL · Cancel anytime
         </p>
+        {checkoutError && (
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 -mt-1">
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-red-400 leading-relaxed">{checkoutError}</p>
+          </div>
+        )}
 
         {/* Social proof */}
         <div className="text-center space-y-2 pb-2">

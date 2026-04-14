@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeftRight, Star, TrendingDown, Trophy } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { ArrowLeftRight, Star, TrendingDown, Trophy, Handshake, RefreshCw, CheckCircle, XCircle } from "lucide-react";
+import GuestAuthModal from "@/components/GuestAuthModal";
 
 function BellIcon({ className }: { className?: string }) {
   return (
@@ -16,51 +18,75 @@ import type { NotifType } from "@/lib/NotificationContext";
 
 // ── Per-type visual config ─────────────────────────────────────────────────────
 
-const TYPE_META: Record<
-  NotifType,
-  {
-    Icon: React.ComponentType<{ className?: string }>;
-    chipBg: string;
-    iconClass: string;
-    unreadDot: string;
-  }
-> = {
+type IconConfig = {
+  Icon:      React.ComponentType<{ className?: string }>;
+  chipBg:    string;
+  iconClass: string;
+  unreadDot: string;
+};
+
+const TYPE_META: Record<NotifType, IconConfig> = {
   trade: {
-    Icon: ArrowLeftRight,
-    chipBg:    "bg-green-400/10",
-    iconClass: "text-green-400",
-    unreadDot: "bg-green-400",
+    Icon:      Handshake,        // overridden per-message below
+    chipBg:    "bg-[#00E676]/15",
+    iconClass: "text-[#00E676]",
+    unreadDot: "bg-[#00E676]",
   },
   match: {
-    Icon: Star,
-    chipBg:    "bg-violet-500/10",
+    Icon:      Star,
+    chipBg:    "bg-violet-500/15",
     iconClass: "text-violet-400",
     unreadDot: "bg-violet-400",
   },
   alert: {
-    Icon: TrendingDown,
-    chipBg:    "bg-surface/10",
-    iconClass: "text-surface-light",
-    unreadDot: "bg-surface",
+    Icon:      TrendingDown,
+    chipBg:    "bg-slate-400/10",
+    iconClass: "text-slate-300",
+    unreadDot: "bg-slate-300",
   },
   achievement: {
     Icon:      Trophy,
-    chipBg:    "bg-[#D4AF37]/10",
-    iconClass: "text-[#D4AF37]",
-    unreadDot: "bg-[#D4AF37]",
+    chipBg:    "bg-[#FFD700]/15",
+    iconClass: "text-[#FFD700]",
+    unreadDot: "bg-[#FFD700]",
   },
 };
+
+// Derive distinct neon icon/color from trade notification message content
+function getTradeIconConfig(message: string): IconConfig {
+  const m = message.toLowerCase();
+  if (m.includes("sent you a trade offer") || m.includes("trade proposal")) {
+    return { Icon: Handshake,   chipBg: "bg-[#00E676]/15",  iconClass: "text-[#00E676]",  unreadDot: "bg-[#00E676]"  };
+  }
+  if (m.includes("counter offer") || m.includes("updated their trade") || m.includes("review it")) {
+    return { Icon: RefreshCw,   chipBg: "bg-[#00B4FF]/15",  iconClass: "text-[#00B4FF]",  unreadDot: "bg-[#00B4FF]"  };
+  }
+  if (m.includes("accepted")) {
+    return { Icon: CheckCircle, chipBg: "bg-[#00E676]/15",  iconClass: "text-[#00E676]",  unreadDot: "bg-[#00E676]"  };
+  }
+  if (m.includes("complete") || m.includes("delivery")) {
+    return { Icon: Trophy,      chipBg: "bg-[#FFD700]/15",  iconClass: "text-[#FFD700]",  unreadDot: "bg-[#FFD700]"  };
+  }
+  if (m.includes("declined") || m.includes("cancelled") || m.includes("cancel")) {
+    return { Icon: XCircle,     chipBg: "bg-[#FF3B4A]/15",  iconClass: "text-[#FF3B4A]",  unreadDot: "bg-[#FF3B4A]"  };
+  }
+  // Default: new trade offer — neon green
+  return { Icon: Handshake,     chipBg: "bg-[#00E676]/15",  iconClass: "text-[#00E676]",  unreadDot: "bg-[#00E676]"  };
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function NotificationDropdown() {
   const { notifications, unreadCount, markAllAsRead, markAsRead } = useNotifications();
+  const { data: session, status } = useSession();
+  const isGuest = !session?.user?.id && status !== "loading";
   const [open, setOpen] = useState(false);
-  const wrapperRef      = useRef<HTMLDivElement>(null);
-  const router          = useRouter();
+  const [guestOpen, setGuestOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const router     = useRouter();
 
   // Smart limit: baseline 5, expand up to 10 when there are many unreads
-  const visibleNotifs = notifications.slice(0, Math.max(5, Math.min(unreadCount, 10)));
+  const visibleNotifs = notifications.slice(0, 3);
 
   // Close on click outside
   useEffect(() => {
@@ -75,11 +101,17 @@ export default function NotificationDropdown() {
   }, [open]);
 
   return (
+    <>
+    <GuestAuthModal
+      isOpen={guestOpen}
+      onClose={() => setGuestOpen(false)}
+      context="never miss an update. Sign up to get notified about trade offers, messages, and radar hits"
+    />
     <div ref={wrapperRef} className="relative flex-shrink-0 flex items-center">
 
       {/* ── Bell trigger ───────────────────────────────────────────────────── */}
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => { if (isGuest) { setGuestOpen(true); return; } setOpen((v) => !v); }}
         className="relative rounded-xl hover:bg-charcoal-light/50 transition-colors active:scale-95"
         aria-label="Notifications"
       >
@@ -118,7 +150,8 @@ export default function NotificationDropdown() {
           {/* Notification rows */}
           <div>
             {visibleNotifs.map((n) => {
-              const { Icon, chipBg, iconClass, unreadDot } = TYPE_META[n.type];
+              const { Icon, chipBg, iconClass, unreadDot } =
+                n.type === "trade" ? getTradeIconConfig(n.message) : TYPE_META[n.type];
               return (
                 <button
                   key={n.id}
@@ -173,5 +206,6 @@ export default function NotificationDropdown() {
         </div>
       )}
     </div>
+    </>
   );
 }

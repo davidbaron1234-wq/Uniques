@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   ArrowLeftRight, Check, Clock, X,
-  DollarSign, Pencil, PackageCheck, MessageSquare,
+  DollarSign, Pencil, PackageCheck, MessageSquare, Hourglass,
 } from "lucide-react";
 import type { TradeHistoryEntry } from "@/lib/types";
 import { formatValue } from "@/lib/format";
@@ -48,7 +48,7 @@ function TradeSide({
   const hasItemsAndCash = items.length > 0  && cash > 0;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col min-w-0">
       {/* Avatar + name */}
       <div className="flex items-center gap-2 mb-2">
         <button
@@ -93,9 +93,9 @@ function TradeSide({
 
       {/* Cash bonus chip */}
       {hasItemsAndCash && (
-        <div className="flex items-center gap-1 mt-2 text-primary">
-          <DollarSign className="w-3 h-3" />
-          <span className="text-xs font-bold">+{formatValue(cash)}</span>
+        <div className="flex items-center gap-1 mt-2">
+          <DollarSign className="w-3 h-3 text-primary flex-shrink-0" />
+          <span className="text-xs font-bold text-primary leading-none">+{formatValue(cash)}</span>
         </div>
       )}
     </div>
@@ -127,8 +127,9 @@ export default function TradeCard({
   const isAccepted  = trade.status === "accepted";
   const isMyOffer   = trade.from.name === "You" || trade.from.name === "Collector";
   const counterLabel = isMyOffer ? "Edit Offer" : "Counter";
-  const isCompleted = isAccepted && !!trade.completedAt;
-  const isAwaiting  = isAccepted && !isCompleted;  // accepted, not yet exchanged
+  const isCompleted = (trade.status === "completed") || (isAccepted && !!trade.completedAt);
+  const isWaiting   = isAccepted && !isCompleted && !!trade.currentUserConfirmed; // I confirmed, partner hasn't
+  const isAwaiting  = isAccepted && !isCompleted && !isWaiting;  // accepted, neither or partner confirmed
   const isDeclined  = trade.status === "declined";
 
   const dateStr = trade.completedAt ?? trade.createdAt;
@@ -141,21 +142,25 @@ export default function TradeCard({
 
   const statusLabel = isPending   ? "Pending Response"
                     : isCompleted ? "Completed"
+                    : isWaiting   ? "Awaiting Partner"
                     : isAwaiting  ? "Awaiting Fulfillment"
                     : "Declined";
 
   const statusColour = isPending   ? "text-amber-400"
                      : isDeclined  ? "text-red-400"
-                     : isCompleted ? "text-primary"
+                     : isCompleted ? "text-green-400"
+                     : isWaiting   ? "text-amber-400"
                      : "text-surface";            // awaiting = lilac
 
   const statusBg     = isPending   ? "bg-amber-500/[0.08]"
                      : isDeclined  ? "bg-red-400/[0.08]"
-                     : isCompleted ? "bg-primary/[0.08]"
-                     : "bg-surface/[0.06]";         // awaiting
+                     : isCompleted ? "bg-green-500/[0.08]"
+                     : isWaiting   ? "bg-amber-500/[0.08]"
+                     : "bg-surface/[0.06]";
 
   const StatusIcon   = isPending   ? Clock
                      : isCompleted ? Check
+                     : isWaiting   ? Hourglass
                      : isAwaiting  ? PackageCheck
                      : X;
 
@@ -317,6 +322,16 @@ export default function TradeCard({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Waiting: current user confirmed, partner has not yet ── */}
+      {isWaiting && (
+        <div className="px-5 pb-5">
+          <div className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-amber-500/[0.08] border border-amber-500/20">
+            <Hourglass className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <p className="text-sm font-semibold text-amber-400">Waiting for your partner to confirm</p>
+          </div>
         </div>
       )}
 

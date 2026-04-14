@@ -119,9 +119,35 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
       } | null) => {
         if (!data) return;
 
-        const dbMap = new Map(data.achievements.map((r) => [r.achievementId, r]));
+        const dbMap   = new Map(data.achievements.map((r) => [r.achievementId, r]));
 
-        // Rebuild from canonical ACHIEVEMENTS + DB records — DB wins
+        // Find achievements unlocked in localStorage but missing from DB.
+        // This happens when the POST to /api/achievements failed silently on unlock.
+        // Push them to DB now so other users can see them on the public profile.
+        const localState = loadAchievements();
+        const localUnlocked = localState.filter(
+          (a) => a.status === "unlocked" && !dbMap.has(a.id),
+        );
+        for (const a of localUnlocked) {
+          fetch("/api/achievements", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({
+              achievementId: a.id,
+              catalystName:  a.catalystItem?.name  ?? null,
+              catalystImage: a.catalystItem?.imageUrl ?? null,
+            }),
+          }).catch(() => {});
+          // Optimistically add to dbMap so the authoritative list includes it
+          dbMap.set(a.id, {
+            achievementId: a.id,
+            unlockedAt:    new Date().toISOString(),
+            catalystName:  a.catalystItem?.name,
+            catalystImage: a.catalystItem?.imageUrl,
+          });
+        }
+
+        // Rebuild from canonical ACHIEVEMENTS + merged DB records
         const authoritative = ACHIEVEMENTS.map((a) => {
           const record = dbMap.get(a.id);
           if (record) {
@@ -136,7 +162,7 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
                 : a.catalystItem,
             };
           }
-          return a; // not in DB → locked (canonical default)
+          return a; // not in DB and not locally unlocked → locked
         });
 
         setAchievements(authoritative);
@@ -176,23 +202,36 @@ export function AchievementsProvider({ children }: { children: ReactNode }) {
           });
         }, 0);
 
-        // Persist to DB for real users (client-triggered path only)
-        // Server-triggered path already persisted in checkUserAchievements — don't double-write
-        const s = sessionRef.current;
-        if (persistToDB && !isDemoUser(s?.user?.email) && s?.user?.id) {
-          fetch("/api/achievements", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({
-              achievementId: id,
-              catalystName:  catalystItem?.name,
-              catalystImage: catalystItem?.imageUrl,
-            }),
-          }).catch(() => {});
-        }
-
         return updated;
       });
+
+      // Persist to DB outside the state updater (side effects must not live inside setState).
+      // Server-triggered path already persisted in checkUserAchievements — don't double-write.
+      const s = sessionRef.current;
+      if (persistToDB && !isDemoUser(s?.user?.email) && s?.user?.id) {
+        const userId = s.user.id;
+        fetch("/api/achievements", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            achievementId: id,
+            catalystName:  catalystItem?.name  ?? null,
+            catalystImage: catalystItem?.imageUrl ?? null,
+          }),
+        })
+          .then((r) => {
+            if (r.ok) {
+              // Broadcast so any visitor currently viewing this user's profile sees
+              // the new badge immediately without a manual refresh.
+              window.dispatchEvent(
+                new CustomEvent("uniques:achievement-unlocked", {
+                  detail: { userId, achievementId: id },
+                }),
+              );
+            }
+          })
+          .catch(() => {});
+      }
     },
     [],
   );

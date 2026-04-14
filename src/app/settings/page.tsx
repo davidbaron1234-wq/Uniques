@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
   ArrowLeft, User, Shield, Bell, CreditCard,
   Eye, EyeOff, Trash2, LogOut, Zap, Check,
   Monitor, Smartphone, Globe, ChevronRight,
-  ShieldCheck, AlertTriangle, Crown,
+  ShieldCheck, AlertTriangle, Crown, Sparkles,
 } from "lucide-react";
 import Logo from "@/components/Logo";
+import { useCheckout } from "@/lib/useCheckout";
+import { Loader2, AlertCircle } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Tab = "account" | "security" | "notifications" | "subscription";
@@ -29,12 +31,6 @@ const RECENT_LOGINS = [
   { device: "Chrome / Windows",location: "New York, US",    time: "3 days ago",icon: Globe,      current: false },
 ];
 
-// ── Notification storage keys ──────────────────────────────────────────────
-const NOTIF_KEYS = {
-  push:   "uniques_notif_push",
-  trades: "uniques_notif_trades",
-  market: "uniques_notif_market",
-};
 
 function Toggle({ enabled, onToggle, disabled }: { enabled: boolean; onToggle: () => void; disabled?: boolean }) {
   return (
@@ -53,11 +49,38 @@ function Toggle({ enabled, onToggle, disabled }: { enabled: boolean; onToggle: (
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Stripe success detector (isolated to satisfy Suspense requirement) ────────
+function StripeSuccessHandler({
+  onUpgraded, onTabChange,
+}: {
+  onUpgraded: () => void;
+  onTabChange: (tab: Tab) => void;
+}) {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const { update }   = useSession();
+
+  useEffect(() => {
+    if (searchParams.get("upgraded") !== "true") return;
+    // URL strip + session update handled globally by UpgradeSuccessHandler in layout.
+    // Here we only handle settings-specific UX: switch to the subscription tab
+    // and show the richer local upgrade toast.
+    onTabChange("subscription");
+    const t = setTimeout(() => { onUpgraded(); }, 1500);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return null;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [activeTab, setActiveTab] = useState<Tab>("account");
+  const [upgradeToast, setUpgradeToast] = useState(false);
   const isPro = session?.user?.tier === "pro";
+  const { goCheckout, isLoading: isCheckingOut, error: checkoutError } = useCheckout();
 
   // Security
   const [showOld,      setShowOld]      = useState(false);
@@ -71,16 +94,26 @@ export default function SettingsPage() {
   const [notifTrades, setNotifTrades] = useState(true);
   const [notifMarket, setNotifMarket] = useState(false);
 
+  // Load notif prefs from DB on mount
   useEffect(() => {
-    try {
-      setNotifPush(  localStorage.getItem(NOTIF_KEYS.push)   !== "false");
-      setNotifTrades(localStorage.getItem(NOTIF_KEYS.trades) !== "false");
-      setNotifMarket(localStorage.getItem(NOTIF_KEYS.market) === "true");
-    } catch { /* noop */ }
-  }, []);
+    if (status !== "authenticated") return;
+    fetch("/api/profile")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { notifPush?: boolean; notifTrades?: boolean; notifMarket?: boolean } | null) => {
+        if (!data) return;
+        if (data.notifPush   !== undefined) setNotifPush(data.notifPush);
+        if (data.notifTrades !== undefined) setNotifTrades(data.notifTrades);
+        if (data.notifMarket !== undefined) setNotifMarket(data.notifMarket);
+      })
+      .catch(() => {});
+  }, [status]);
 
-  const saveNotif = (key: string, val: boolean) => {
-    try { localStorage.setItem(key, String(val)); } catch { /* noop */ }
+  const saveNotif = (field: "notifPush" | "notifTrades" | "notifMarket", val: boolean) => {
+    fetch("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: val }),
+    }).catch(() => {});
   };
 
   const handlePassSave = () => {
@@ -104,6 +137,32 @@ export default function SettingsPage() {
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-primary/5 blur-[120px] rounded-full" />
       </div>
+
+      {/* ── Stripe redirect handler (needs Suspense for useSearchParams) ── */}
+      <Suspense fallback={null}>
+        <StripeSuccessHandler
+          onUpgraded={() => { setUpgradeToast(true); setTimeout(() => setUpgradeToast(false), 6000); }}
+          onTabChange={setActiveTab}
+        />
+      </Suspense>
+
+      {/* ── Pro upgrade success toast ── */}
+      {upgradeToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm">
+          <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-charcoal-dark border border-primary/40 shadow-xl shadow-primary/10">
+            <div className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-4.5 h-4.5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-cream">Welcome to Pro!</p>
+              <p className="text-[10px] text-cream/40">Your vault is now unlimited. All Pro features unlocked.</p>
+            </div>
+            <button onClick={() => setUpgradeToast(false)} className="text-cream/25 hover:text-cream/60 transition-colors flex-shrink-0">
+              <Check className="w-4 h-4 text-primary" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="sticky top-0 z-40 glass border-b border-white/[0.06]">
@@ -195,7 +254,12 @@ export default function SettingsPage() {
               </div>
               <div className="divide-y divide-red-500/10">
                 <button
-                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  onClick={() => {
+                    // Wipe all cached user data (inventory, notifications, etc.)
+                    // before NextAuth clears the JWT cookie and redirects to /login.
+                    localStorage.clear();
+                    signOut({ callbackUrl: "/login" });
+                  }}
                   className="w-full flex items-center gap-3 px-5 py-4 text-red-400/70 hover:text-red-400 hover:bg-red-400/5 transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
@@ -280,13 +344,13 @@ export default function SettingsPage() {
                 label="Push Notifications"
                 description="In-app alerts and reminders"
                 enabled={notifPush}
-                onToggle={() => { const v = !notifPush; setNotifPush(v); saveNotif(NOTIF_KEYS.push, v); }}
+                onToggle={() => { const v = !notifPush; setNotifPush(v); saveNotif("notifPush", v); }}
               />
               <NotifRow
                 label="Trade Offers"
                 description="Get notified of incoming trade requests"
                 enabled={notifTrades}
-                onToggle={() => { const v = !notifTrades; setNotifTrades(v); saveNotif(NOTIF_KEYS.trades, v); }}
+                onToggle={() => { const v = !notifTrades; setNotifTrades(v); saveNotif("notifTrades", v); }}
               />
               <NotifRow
                 label="Market Alerts"
@@ -294,7 +358,7 @@ export default function SettingsPage() {
                 enabled={notifMarket}
                 onToggle={() => {
                   if (!isPro) { setActiveTab("subscription"); return; }
-                  const v = !notifMarket; setNotifMarket(v); saveNotif(NOTIF_KEYS.market, v);
+                  const v = !notifMarket; setNotifMarket(v); saveNotif("notifMarket", v);
                 }}
                 proLocked={!isPro}
               />
@@ -366,9 +430,10 @@ export default function SettingsPage() {
                     {[
                       "Unlimited vault capacity",
                       "AI Auto-Scanner",
-                      "Institutional Market Analytics",
-                      "Verified Collector Pro Badge",
-                      "Priority trade matching",
+                      "Custom Grail Selection",
+                      "Full Trophy Room",
+                      "Market Analytics",
+                      "Verified Pro Badge",
                     ].map((f) => (
                       <div key={f} className="flex items-center gap-2.5">
                         <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
@@ -376,14 +441,26 @@ export default function SettingsPage() {
                       </div>
                     ))}
                     <button
-                      onClick={() => router.push("/upgrade")}
-                      className="w-full py-3.5 rounded-2xl bg-primary text-charcoal-dark font-extrabold text-sm hover:bg-primary/90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 relative overflow-hidden group mt-2"
+                      onClick={() => goCheckout(window.location.pathname)}
+                      disabled={isCheckingOut}
+                      className="w-full py-3.5 rounded-2xl bg-primary text-charcoal-dark font-extrabold text-sm hover:bg-primary/90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 relative overflow-hidden group mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                      {!isCheckingOut && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                      )}
                       <span className="relative flex items-center justify-center gap-2">
-                        <Zap className="w-4 h-4" />$4.99 / month
+                        {isCheckingOut
+                          ? <><Loader2 className="w-4 h-4 animate-spin" />Redirecting to Stripe…</>
+                          : <><Zap className="w-4 h-4" />$4.99 / month</>
+                        }
                       </span>
                     </button>
+                    {checkoutError && (
+                      <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 mt-1">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-red-400 leading-relaxed">{checkoutError}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </>

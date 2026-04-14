@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { prisma } from "@/lib/prisma";
 import { checkUserAchievements } from "@/lib/checkUserAchievements";
+import { snapshotUserPortfolio } from "@/lib/marketSnapshots";
 
 // GET /api/items — fetch items
 // ?userId=me  → current user's items only
@@ -17,9 +18,12 @@ export async function GET(request: Request) {
     const userIdParam = searchParams.get("userId");
     const category    = searchParams.get("category");
 
+    // IDOR guard: always scope to current user unless a future public endpoint
+    // explicitly opts in. Without this, any authenticated user could enumerate
+    // all items in the DB by omitting the userId param.
     const items = await prisma.item.findMany({
       where: {
-        ...(userIdParam === "me" && { userId: session.user.id }),
+        userId: session.user.id,   // always enforced — never optional
         ...(category && { category }),
       },
       orderBy: { createdAt: "desc" },
@@ -49,6 +53,7 @@ export async function POST(request: Request) {
       upForTrade?:     boolean;
       description?:    string;
       status?:         string;
+      masterId?:       string;
     };
 
     if (!body.title) {
@@ -81,6 +86,7 @@ export async function POST(request: Request) {
         upForTrade:     body.upForTrade     ?? false,
         description:    body.description    ?? "",
         status:         body.status         ?? "VAULT",
+        masterId:       body.masterId       ?? null,
       },
     });
 
@@ -103,6 +109,11 @@ export async function POST(request: Request) {
         },
       }).catch(() => {}); // fire-and-forget — don't let feed publishing fail the vault save
     }
+
+    // ── Market Snapshot: record official portfolio net worth after new item ──
+    // We snapshot the USER portfolio only (official prices via catalog match).
+    // User asking prices are NOT recorded as market data (Phase 6.1 pivot).
+    snapshotUserPortfolio(session.user.id).catch(() => {});
 
     // Run achievement engine (fire and return results)
     const newAchievements = await checkUserAchievements(
@@ -143,6 +154,12 @@ export async function PATCH(request: Request) {
         ...(body.status        !== undefined && { status: body.status }),
       },
     });
+
+    // ── Market Snapshot: re-snapshot portfolio after asking-price edit ────────
+    // The user's asking price is NOT written as market data.
+    // We do re-snapshot the portfolio because the official value may change
+    // if this item now better-matches a catalog entry (edge case, but correct).
+    snapshotUserPortfolio(session.user.id).catch(() => {});
 
     const newAchievements = await checkUserAchievements(session.user.id);
     return Response.json({ item, newAchievements });

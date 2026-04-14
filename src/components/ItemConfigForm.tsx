@@ -133,8 +133,22 @@ export default function ItemConfigForm({ config, onChange, category, isManualEnt
   );
 
   const conditions = getConditionsForCategory(category);
-  
-  const supportsGrading = category === "Pokémon TCG" || category === "Sports Cards" || category === "Coins" || category === "Other TCG"; 
+
+  // Grading only makes sense for categories where third-party grading services exist
+  const supportsGrading =
+    category === "Pokémon TCG" ||
+    category === "Sports Cards" ||
+    category === "Other TCG"   ||
+    category === "Comics"      ||
+    category === "Coins"       ||
+    category === "Video Games";
+
+  // Grading companies vary by what they actually grade
+  const graderOptions: string[] =
+    category === "Coins"       ? ["PCGS", "NGC", "ANACS", "ICG"] :
+    category === "Comics"      ? ["CGC", "CBCS", "PGX"] :
+    category === "Video Games" ? ["VGA", "WATA", "CGC"] :
+    ["PSA", "BGS", "CGC", "SGC", "HGA"];
 
   // 🔥 כאן השינוי: מנגנון כיווץ תמונות למניעת קריסה 🔥
   const handleFileUpload = (file: File) => {
@@ -195,9 +209,9 @@ export default function ItemConfigForm({ config, onChange, category, isManualEnt
         </label>
 
         {config.customImage ? (
-          <div className="relative w-full rounded-2xl overflow-hidden bg-background-light">
-            <div className="aspect-[4/3] overflow-hidden">
-              <img src={config.customImage} alt="Custom upload" className="w-full h-full object-contain bg-charcoal-dark" />
+          <div className="relative w-full rounded-2xl overflow-hidden">
+            <div className="aspect-square overflow-hidden">
+              <img src={config.customImage} alt="Custom upload" className="w-full h-full object-cover" />
             </div>
             <div className="absolute top-2 right-2 flex gap-1.5">
               <button
@@ -292,7 +306,7 @@ export default function ItemConfigForm({ config, onChange, category, isManualEnt
                             onChange={(e) => update({ grader: e.target.value })}
                             className="w-full px-3 py-2.5 rounded-xl bg-charcoal-dark text-cream border border-white/10 focus:outline-none"
                         >
-                            {["PSA", "BGS", "CGC", "SGC", "PCGS", "NGC", "ANACS"].map(g => (
+                            {graderOptions.map(g => (
                                 <option key={g} value={g}>{g}</option>
                             ))}
                         </select>

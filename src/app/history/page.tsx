@@ -3,6 +3,7 @@
 import { useRef, useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import useSWR from "swr";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import TradeCard from "@/components/TradeCard";
@@ -82,6 +83,77 @@ export default function HistoryPage() {
   const [completedAtMap, setCompletedAtMap] = useState<Record<string, string>>(loadCompletedMap);
   const [counterTradeEntry, setCounterTradeEntry] = useState<TradeHistoryEntry | null>(null);
 
+  // SWR — instant data with keepPreviousData so the UI never flashes empty on re-fetch.
+  // Real users only; demo uses static seed data.
+  type TradeApiRow = {
+    id: string; isSender: boolean; isActionRequired: boolean;
+    currentUserConfirmed: boolean; status: string;
+    createdAt: string; completedAt: string | null;
+    offerData: {
+      fromUser?: { id?: string; name: string; avatar: string };
+      toUser?:   { id?: string; name: string; avatar: string };
+      fromItems?: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+      toItems?:   Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number }>;
+      fromCash?: number; toCash?: number;
+    };
+  };
+  // Include userId in the key so each user gets their own SWR cache entry.
+  // This prevents User A's trades from bleeding into User B's view when switching accounts.
+  const swrKey = !isDemo && session?.user?.id ? ["/api/trades", session.user.id] as const : null;
+  const { data: tradesData, isLoading: tradesLoading, mutate: mutateTrades } = useSWR<{ trades: TradeApiRow[] }>(
+    swrKey,
+    ([url]: readonly [string, string]) => fetch(url).then((r) => r.json()),
+    { keepPreviousData: true, revalidateOnFocus: true },
+  );
+
+  // Own profile — for live avatar on the "You" side of trade cards
+  const { data: myProfile } = useSWR<{ avatar?: string }>(
+    !isDemo && session?.user?.id ? "/api/profile" : null,
+    (url: string) => fetch(url).then((r) => r.ok ? r.json() : null),
+    { revalidateOnFocus: false },
+  );
+
+  const refreshDb = () => mutateTrades();
+
+  // Derive typed entries from SWR data
+  const dbEntries = useMemo<TradeHistoryEntry[]>(() => {
+    if (!tradesData?.trades || !session?.user?.id) return [];
+    const myAvatar = myProfile?.avatar
+      || session?.user?.image
+      || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(session?.user?.name ?? "Me")}&backgroundColor=b6e3f4`;
+    return tradesData.trades.map((t) => {
+      const od       = t.offerData;
+      const fromUser = od.fromUser ?? { id: undefined, name: "Collector", avatar: "" };
+      const toUser   = od.toUser   ?? { id: undefined, name: "Collector", avatar: "" };
+      return {
+        id:                   t.id,
+        from:                 t.isSender ? { name: "You", avatar: myAvatar } : { name: fromUser.name, avatar: fromUser.avatar },
+        to:                   t.isSender ? { name: toUser.name, avatar: toUser.avatar } : { name: "You", avatar: myAvatar },
+        fromUserId:           fromUser.id,
+        toUserId:             toUser.id,
+        fromItems:            (od.fromItems ?? []).map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+        toItems:              (od.toItems   ?? []).map((i) => ({ id: i.id, name: i.name, imageUrl: i.imageUrl, estimatedValue: i.estimatedValue })),
+        fromCash:             od.fromCash ?? 0,
+        toCash:               od.toCash   ?? 0,
+        status:               t.status as TradeHistoryEntry["status"],
+        isActionRequired:     t.isActionRequired,
+        currentUserConfirmed: t.currentUserConfirmed,
+        createdAt:            t.createdAt,
+        completedAt:          t.completedAt ?? undefined,
+      };
+    });
+  }, [tradesData, session?.user?.id, session?.user?.image, myProfile]);
+
+  const dbLoaded = !tradesLoading || tradesData !== undefined;
+
+  // Supabase Realtime fires "uniques:trade-updated" → call SWR mutate for instant refresh.
+  useEffect(() => {
+    const handler = () => mutateTrades();
+    window.addEventListener("uniques:trade-updated", handler);
+    return () => window.removeEventListener("uniques:trade-updated", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Deep-link: if a hash like #trade-xyz is in the URL, scroll to that card after mount
   useEffect(() => {
     const hash = window.location.hash;
@@ -98,28 +170,35 @@ export default function HistoryPage() {
   const completingIds = useRef(new Set<string>());
 
   // ── Build unified entry list (memoized to avoid rebuilding on every render) ──
-  // Demo account includes mock tradeOffers + staticHistory; real users see only real trades.
+  // Demo: mock static data. Real users: DB is the sole authority — no localStorage merge
+  // to prevent timestamp-ID duplicates (local entries use `trade-${Date.now()}` IDs
+  // that never match DB cuids, so `dbIds.has()` can't deduplicate them).
   const allEntries = useMemo(() => {
     const seen = new Set<string>();
     return [
-      ...tradeHistoryEntries,
+      ...dbEntries,
       ...(isDemo ? tradeOffers.map(offerToEntry) : []),
       ...(isDemo ? staticHistory.map(toEntry) : []),
     ]
       .filter((t) => {
-        if (seen.has(t.id) || cancelledIds.has(t.id)) return false;
+        if (seen.has(t.id)) return false;
+        // cancelledIds is only used for demo or for explicit user "Remove" actions
+        if (cancelledIds.has(t.id)) return false;
         seen.add(t.id);
         return true;
       })
       .map((t) => completedAtMap[t.id] ? { ...t, completedAt: completedAtMap[t.id] } : t)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [tradeHistoryEntries, cancelledIds, completedAtMap, isDemo]);
+  }, [dbEntries, cancelledIds, completedAtMap, isDemo]);
 
   // ── Tab filtering ────────────────────────────────────────────────────────
   const filteredEntries = allEntries.filter((t) => {
     switch (activeTab) {
-      case "Action Required": return t.status === "pending" && isMe(t.to.name);
-      case "Awaiting Others": return t.status === "pending" && isMe(t.from.name);
+      case "Action Required":
+        // Real users: trust DB's actionRequiredBy flag; demo: fall back to name check
+        return t.status === "pending" && (isDemo ? isMe(t.to.name) : !!t.isActionRequired);
+      case "Awaiting Others":
+        return t.status === "pending" && (isDemo ? isMe(t.from.name) : !t.isActionRequired);
       case "Completed":       return t.status !== "pending";
       default:                return true;
     }
@@ -137,8 +216,8 @@ export default function HistoryPage() {
   }, [filteredEntries, searchQuery]);
 
   // Badge counts for tabs
-  const actionCount   = allEntries.filter((t) => t.status === "pending" && isMe(t.to.name)).length;
-  const awaitingCount = allEntries.filter((t) => t.status === "pending" && isMe(t.from.name)).length;
+  const actionCount   = allEntries.filter((t) => t.status === "pending" && (isDemo ? isMe(t.to.name)   : !!t.isActionRequired)).length;
+  const awaitingCount = allEntries.filter((t) => t.status === "pending" && (isDemo ? isMe(t.from.name) : !t.isActionRequired)).length;
 
   // ── Ownership guard ──────────────────────────────────────────────────────
   // Name-based check: the user may own an item with the right name but a different ID
@@ -172,43 +251,66 @@ export default function HistoryPage() {
   }, [counterTradeEntry, items]);
 
   const tradeItemsMissing = (entry: TradeHistoryEntry): boolean => {
+    // For real users the DB is authoritative — the localStorage-based name check
+    // produces false positives when items exist only in DB (e.g. received via trade).
+    if (!isDemo) return false;
     const myItems = isMe(entry.from.name) ? entry.fromItems : entry.toItems;
     return myItems.some((item) => !userItemNames.has(item.name));
   };
 
-  // ── Accept a pending offer: persist, lock the user's items, dismiss from pending view ──
+  // ── Accept a pending offer: persist, lock the user's items ──────────────────
   const handleAcceptOffer = (entry: TradeHistoryEntry) => {
-    addTradeHistory({ ...entry, status: "accepted" });
     const myItems = isMe(entry.from.name) ? entry.fromItems : entry.toItems;
-    // Look up real IDs by name — trade offer IDs may differ from local inventory IDs
     const realIds = myItems
       .map((tradeItem) => items.find((i) => i.name === tradeItem.name)?.id)
       .filter((id): id is string => !!id);
     if (realIds.length > 0) {
       lockItems(realIds, "Deal accepted · Awaiting fulfillment", "accepted");
     }
-    dismiss(entry.id);
+    if (isDemo) {
+      addTradeHistory({ ...entry, status: "accepted" });
+      dismiss(entry.id);
+    }
     showToast("Trade accepted! Mark as complete once pieces have been exchanged.");
+    // Sync to DB; refreshDb() re-fetches so the card shows "Mark as Done"
+    if (!isDemo) {
+      fetch(`/api/trades?id=${entry.id}&action=accept`, { method: "PATCH" })
+        .then(() => refreshDb())
+        .catch(() => {});
+    }
   };
 
-  // ── Bulletproof, atomic, idempotent trade completion ────────────────────
+  // ── Double opt-in trade completion ──────────────────────────────────────
   const handleCompleteTrade = (trade: TradeHistoryEntry) => {
-    // Ref guard: blocks double-execution within the same synchronous event
     if (completingIds.current.has(trade.id)) return;
-    // State guard: blocks re-execution after first completion
-    if (trade.completedAt || completedAtMap[trade.id]) return;
-
     completingIds.current.add(trade.id);
 
-    const now = new Date().toISOString();
+    if (!isDemo) {
+      // Real users: fire PATCH and react to the response.
+      // NO local vault mutations — the DB atomic transaction is the single source of truth.
+      // Doing local vault mutations here was causing item duplication.
+      fetch(`/api/trades?id=${trade.id}&action=complete`, { method: "PATCH" })
+        .then((r) => r.json())
+        .then((data: { ok?: boolean; waiting?: boolean; completed?: boolean }) => {
+          if (data.waiting) {
+            showToast("Delivery confirmed. Waiting for your partner to confirm.");
+          } else if (data.completed) {
+            showToast("Trade complete! Your vault has been updated.");
+          }
+          refreshDb();
+        })
+        .catch(() => {
+          completingIds.current.delete(trade.id);
+        });
+      return;
+    }
 
-    // Determine which side is the current user
+    // ── Demo path: local vault mutations (no DB) ──────────────────────────
+    const now = new Date().toISOString();
     const iAmOfferer    = isMe(trade.from.name);
     const itemsToRemove = iAmOfferer ? trade.fromItems : trade.toItems;
     const itemsToAdd    = iAmOfferer ? trade.toItems   : trade.fromItems;
 
-    // Remove items we gave away — look up the REAL inventory ID by name so
-    // items received with a deterministic ID (or any catalog-* ID) are found correctly.
     itemsToRemove.forEach((tradeItem) => {
       const real = items.find((i) => i.name === tradeItem.name);
       if (real) removeItem(real.id);
@@ -225,12 +327,10 @@ export default function HistoryPage() {
       addRawItem(newItem);
     });
 
-    // Persist completion timestamp — dual write: context + localStorage
     updateTradeHistory(trade.id, { completedAt: now });
     try { localStorage.setItem(`trade_completed_${trade.id}`, now); } catch { /* quota */ }
     setCompletedAtMap((prev) => ({ ...prev, [trade.id]: now }));
-
-    showToast("🎉 Trade completed! Your vault has been updated.");
+    showToast("Trade complete! Your vault has been updated.");
   };
 
   const dismiss = (id: string) =>
@@ -310,13 +410,27 @@ export default function HistoryPage() {
                 trade={trade}
                 index={i}
                 onAccept={
-                  trade.status === "pending" && isMe(trade.to.name)
+                  // For real users: follow DB's actionRequiredBy flag so the proposer
+                  // can accept a recipient's counter (and recipient can't accept their own).
+                  trade.status === "pending" && (isDemo ? isMe(trade.to.name) : !!trade.isActionRequired)
                     ? () => handleAcceptOffer(trade)
                     : undefined
                 }
                 onCancel={
                   trade.status === "pending"
-                    ? () => { addTradeHistory({ ...trade, status: "declined" }); dismiss(trade.id); }
+                    ? () => {
+                        if (isDemo) {
+                          addTradeHistory({ ...trade, status: "declined" });
+                          dismiss(trade.id);
+                        }
+                        // Sync to DB; refreshDb() re-fetches with declined status
+                        if (!isDemo) {
+                          const action = isMe(trade.from.name) ? "cancel" : "decline";
+                          fetch(`/api/trades?id=${trade.id}&action=${action}`, { method: "PATCH" })
+                            .then(() => refreshDb())
+                            .catch(() => {});
+                        }
+                      }
                     : undefined
                 }
                 onCounter={
@@ -326,25 +440,83 @@ export default function HistoryPage() {
                 }
                 onMessage={
                   trade.status === "pending"
-                    ? () => router.push(`/inbox/${otherParty(trade).name.toLowerCase()}`)
+                    ? () => {
+                        const other = otherParty(trade);
+                        const myItems   = isMe(trade.from.name) ? trade.fromItems : trade.toItems;
+                        const theirItems = isMe(trade.from.name) ? trade.toItems : trade.fromItems;
+                        const myCash    = isMe(trade.from.name) ? trade.fromCash : trade.toCash;
+                        const theirCash = isMe(trade.from.name) ? trade.toCash : trade.fromCash;
+                        // For real users: find/create a conversation via DB, then navigate to its id
+                        if (!isDemo && trade.fromUserId && trade.toUserId) {
+                          const otherUserId = isMe(trade.from.name) ? trade.toUserId : trade.fromUserId;
+                          fetch("/api/conversations", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ recipientId: otherUserId, recipientName: other.name, recipientAvatar: other.avatar }),
+                          })
+                            .then((r) => r.ok ? r.json() : null)
+                            .then((data: { id?: string } | null) => {
+                              if (data?.id) {
+                                try {
+                                  sessionStorage.setItem("injected_trade", JSON.stringify({
+                                    targetUser:     data.id,
+                                    offeredItems:   myItems.map((i) => ({ name: i.name, imageUrl: i.imageUrl })),
+                                    requestedItems: theirItems.map((i) => ({ name: i.name, imageUrl: i.imageUrl })),
+                                    cashOffer:      myCash ?? 0,
+                                    theirCashOffer: theirCash ?? 0,
+                                  }));
+                                } catch { /* noop */ }
+                                router.push(`/inbox/${data.id}`);
+                              }
+                            })
+                            .catch(() => {});
+                        } else {
+                          try {
+                            sessionStorage.setItem("injected_trade", JSON.stringify({
+                              targetUser:     other.name.toLowerCase(),
+                              offeredItems:   myItems.map((i) => ({ name: i.name, imageUrl: i.imageUrl })),
+                              requestedItems: theirItems.map((i) => ({ name: i.name, imageUrl: i.imageUrl })),
+                              cashOffer:      myCash ?? 0,
+                              theirCashOffer: theirCash ?? 0,
+                            }));
+                          } catch { /* noop */ }
+                          router.push(`/inbox/${other.name.toLowerCase()}`);
+                        }
+                      }
                     : undefined
                 }
                 onComplete={
-                  trade.status === "accepted" && !trade.completedAt && !completedAtMap[trade.id]
+                  trade.status === "accepted" &&
+                  !trade.completedAt &&
+                  !completedAtMap[trade.id] &&
+                  !trade.currentUserConfirmed
                     ? () => handleCompleteTrade(trade)
                     : undefined
                 }
                 onRemove={trade.status === "declined" ? () => dismiss(trade.id) : undefined}
                 itemsMissing={tradeItemsMissing(trade)}
                 onPartyClick={(name) => {
-                  if (!isMe(name)) router.push(`/u/${name.toLowerCase()}`);
+                  if (isMe(name)) return;
+                  // Route by userId when available so handle changes don't break links
+                  const userId = name === trade.from.name ? trade.fromUserId : trade.toUserId;
+                  if (!isDemo && userId) router.push(`/u/${userId}`);
+                  else router.push(`/u/${name.toLowerCase()}`);
                 }}
               />
             </div>
           ))}
         </div>
 
-        {displayEntries.length === 0 && (
+        {/* Loading skeleton — only shown on first fetch to prevent empty-state flash */}
+        {!isDemo && !dbLoaded && (
+          <div className="space-y-3 px-5 pt-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="rounded-2xl bg-background-light h-36 animate-pulse opacity-40" />
+            ))}
+          </div>
+        )}
+
+        {displayEntries.length === 0 && (isDemo || dbLoaded) && (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <div className="w-16 h-16 rounded-full bg-background-light flex items-center justify-center mb-4 shadow-soft">
               {searchQuery.trim()
@@ -394,10 +566,13 @@ export default function HistoryPage() {
             cashOffer:      counterPrefill.cashOffer,
             theirCashOffer: counterPrefill.theirCashOffer,
           }}
+          // Both proposer and recipient can edit/counter in-place (no ghost duplicates)
+          editTradeId={!isDemo ? counterTradeEntry.id : undefined}
           onTradeSent={() => {
             dismiss(counterTradeEntry.id);
             setCounterTradeEntry(null);
             showToast(isMe(counterTradeEntry.from.name) ? "Offer updated and sent!" : "Counter offer sent!");
+            if (!isDemo) refreshDb();
           }}
         />
       )}

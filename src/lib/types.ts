@@ -165,14 +165,18 @@ export interface TradeHistoryEntry {
   id: string;
   from: { name: string; avatar: string };
   to: { name: string; avatar: string };
+  fromUserId?: string;       // DB UUID of the "from" party — used to route messaging
+  toUserId?: string;         // DB UUID of the "to" party — used to route messaging
   fromItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number; category?: string }>;
   fromCash: number;
   toItems: Array<{ id: string; name: string; imageUrl: string; estimatedValue?: number; category?: string }>;
   toCash: number;
-  status: "pending" | "accepted" | "declined";
+  status: "pending" | "accepted" | "completed" | "declined";
+  isActionRequired?: boolean;    // true when the current user must act on this trade
+  currentUserConfirmed?: boolean; // true when current user has clicked "Complete" but partner hasn't yet
   createdAt: string;
-  completedAt?: string;  // absent while a trade is still pending
-  message?: string;      // optional note from the offerer
+  completedAt?: string;          // absent while a trade is still pending
+  message?: string;          // optional note from the offerer
 }
 
 export interface TradeOffer {

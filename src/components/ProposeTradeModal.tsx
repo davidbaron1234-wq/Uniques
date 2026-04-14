@@ -23,11 +23,13 @@ interface Prefill {
 interface Props {
   isOpen: boolean;
   targetItem?: CollectibleItem | null;
-  targetUser: { name: string; avatar: string };
+  targetUser: { id?: string; name: string; avatar: string };
   onClose: () => void;
   onTradeSent?: (entry: TradeHistoryEntry) => void;
   prefill?: Prefill;
   skipNavigation?: boolean;
+  /** When set, the modal updates an existing trade in-place (PATCH) instead of creating a new one */
+  editTradeId?: string;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -147,7 +149,7 @@ const MSG_PLACEHOLDERS = [
 
 // ── Modal ────────────────────────────────────────────────────────────────────
 
-export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onClose, onTradeSent, prefill, skipNavigation }: Props) {
+export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onClose, onTradeSent, prefill, skipNavigation, editTradeId }: Props) {
   // Pull live inventory directly from context — always reflects uniques_inventory_v2
   const { addTradeHistory, lockItems, items: contextItems } = useInventory();
   const { addNotification } = useNotifications();
@@ -155,6 +157,7 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
   const isDemo = isDemoUser(session?.user?.email);
 
   const [selectedTargetItem, setSelectedTargetItem] = useState<CollectibleItem | null>(targetItem ?? null);
+  const [dbPartnerItems, setDbPartnerItems] = useState<PickerItem[]>([]);
   const [showItemPicker, setShowItemPicker] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [cashOffer,      setCashOffer]      = useState(0); // cash I'm adding
@@ -162,6 +165,16 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
   const [sent, setSent] = useState(false);
   const [message, setMessage] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  // Lock body scroll when modal open to prevent background scroll bleed on mobile
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [isOpen]);
 
   // Reset form whenever the modal opens — apply prefill values if provided
   useEffect(() => {
@@ -175,8 +188,31 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
     setMessage("");
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Picker items for the current target user (keyed by lowercase name)
-  const pickerItems = USER_TRADEABLE[targetUser.name.toLowerCase()] ?? [];
+  // When opened for a real user (targetUser.id set), fetch their vault from the DB
+  useEffect(() => {
+    if (!isOpen || !targetUser.id) return;
+    fetch(`/api/users/public?userId=${encodeURIComponent(targetUser.id)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { items?: Array<{ id: string; title: string; category: string; imageUrl: string; estimatedValue?: number; upForTrade?: boolean }> } | null) => {
+        if (!data?.items) return;
+        setDbPartnerItems(
+          data.items
+            .map((i) => ({
+              id:             i.id,
+              name:           i.title,
+              imageUrl:       i.imageUrl,
+              estimatedValue: i.estimatedValue,
+              category:       i.category,
+            }))
+        );
+      })
+      .catch(() => {});
+  }, [isOpen, targetUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Picker items: DB vault for real users, seed data for demo users
+  const pickerItems = (targetUser.id && dbPartnerItems.length > 0)
+    ? dbPartnerItems
+    : (USER_TRADEABLE[targetUser.name.toLowerCase()] ?? []);
 
   // When editing/countering (prefill present), show all items including locked ones so
   // the user can re-offer items currently tied to the offer they're modifying.
@@ -254,36 +290,47 @@ export default function ProposeTradeModal({ isOpen, targetItem, targetUser, onCl
     });
 
     // Persist trade to DB for real users (fire-and-forget)
-    // Items with IDs not starting with "new-" are confirmed DB records
     if (!isDemo && session?.user?.id) {
       const dbItemIds = selectedItems
         .map((i) => i.id)
         .filter((id) => id && !id.startsWith("new-"));
-      fetch("/api/trades", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          proposerItemIds: dbItemIds,
-          offerData: {
-            toUser:    { name: targetUser.name, avatar: targetUser.avatar },
-            fromItems: selectedItems.map((i) => ({
-              id:             i.id,
-              name:           i.name,
-              imageUrl:       (i as { customImage?: string }).customImage ?? i.imageUrl,
-              estimatedValue: i.estimatedValue,
-            })),
-            toItems: selectedTargetItem ? [{
-              id:             selectedTargetItem.id,
-              name:           selectedTargetItem.name,
-              imageUrl:       selectedTargetItem.imageUrl,
-              estimatedValue: selectedTargetItem.estimatedValue,
-            }] : [],
-            fromCash: cashOffer,
-            toCash:   theirCashOffer,
-            message:  message.trim(),
-          },
-        }),
-      }).catch(() => {});
+      const offerPayload = {
+        toUser:    { id: targetUser.id, name: targetUser.name, avatar: targetUser.avatar },
+        fromItems: selectedItems.map((i) => ({
+          id:             i.id,
+          name:           i.name,
+          imageUrl:       (i as { customImage?: string }).customImage ?? i.imageUrl,
+          estimatedValue: i.estimatedValue,
+        })),
+        toItems: selectedTargetItem ? [{
+          id:             selectedTargetItem.id,
+          name:           selectedTargetItem.name,
+          imageUrl:       selectedTargetItem.imageUrl,
+          estimatedValue: selectedTargetItem.estimatedValue,
+        }] : [],
+        fromCash: cashOffer,
+        toCash:   theirCashOffer,
+        message:  message.trim(),
+      };
+
+      if (editTradeId) {
+        // Edit existing trade in-place so both parties see the updated offer
+        fetch(`/api/trades?id=${editTradeId}&action=edit`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ proposerItemIds: dbItemIds, offerData: offerPayload }),
+        }).catch(() => {});
+      } else {
+        fetch("/api/trades", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            proposerItemIds: dbItemIds,
+            recipientId:     targetUser.id,
+            offerData:       offerPayload,
+          }),
+        }).catch(() => {});
+      }
     }
 
     // Store for inbox pre-population if the user visits later

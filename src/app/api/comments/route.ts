@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     targetId: string; text: string; targetType?: string;
   };
   if (!targetId || !text?.trim()) return NextResponse.json({ error: "targetId and text required" }, { status: 400 });
+  if (text.length > 500) return NextResponse.json({ error: "Comment must be 500 characters or fewer" }, { status: 400 });
 
   // Load avatar from Profile
   const profile = await prisma.profile.findUnique({

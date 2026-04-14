@@ -21,15 +21,19 @@ model User {
 // One profile per Supabase Auth user (userId = Supabase auth.users UUID)
 model Profile {
   id                  String   @id @default(cuid())
-  userId              String   @unique  // Supabase Auth UUID
+  userId              String   @unique // Supabase Auth UUID
   name                String   @default("")
+  handle              String?  @unique // custom @handle, e.g. "john_doe" (nullable = not yet chosen)
   bio                 String   @default("")
   avatar              String   @default("")
   paymentMethods      String[]
   shippingPreferences String[]
-  interests           String[]           // favorite categories from onboarding
-  pinnedItemIds       String[]           // item IDs pinned as Grails
+  interests           String[] // favorite categories from onboarding
+  pinnedItemIds       String[] // item IDs pinned as Grails
   tooltipSeen         Boolean  @default(false)
+  notifPush           Boolean  @default(true)
+  notifTrades         Boolean  @default(true)
+  notifMarket         Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -37,7 +41,7 @@ model Profile {
 // ── Items (published grails / vault items) ───────────────────────────────────
 model Item {
   id             String   @id @default(cuid())
-  userId         String                    // current owner — swapped on trade completion
+  userId         String // current owner — swapped on trade completion
   title          String
   category       String
   imageUrl       String   @default("")
@@ -46,6 +50,9 @@ model Item {
   description    String   @default("")
   // Trade lifecycle: VAULT (owned, not active) | IN_TRADE (locked in a deal) | TRADED (ownership transferred)
   status         String   @default("VAULT")
+  // Catalog identifier — set when item was matched against the catalog (AI scan or manual search).
+  // Null for custom/manually-entered items. Used to gate Market Trajectory.
+  masterId       String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -70,9 +77,9 @@ model UserAchievement {
 // ── Notifications ─────────────────────────────────────────────────────────────
 model Notification {
   id        String   @id @default(cuid())
-  userId    String                    // Supabase Auth UUID
+  userId    String // Supabase Auth UUID
   message   String
-  type      String   @default("achievement")  // "trade"|"match"|"alert"|"achievement"
+  type      String   @default("achievement") // "trade"|"match"|"alert"|"achievement"
   isRead    Boolean  @default(false)
   href      String?
   createdAt DateTime @default(now())
@@ -98,7 +105,7 @@ model Like {
   id         String   @id @default(cuid())
   userId     String
   targetId   String
-  targetType String   @default("activity")  // "activity"
+  targetType String   @default("activity") // "activity"
   createdAt  DateTime @default(now())
 
   @@unique([userId, targetId])
@@ -122,7 +129,7 @@ model Comment {
 model Activity {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // "grail_published" | "radar_added" | "achievement_unlocked"
+  type      String // "grail_published" | "radar_added" | "achievement_unlocked"
   title     String   @default("")
   imageUrl  String   @default("")
   itemId    String?
@@ -153,16 +160,59 @@ model MarketItem {
 // TRADED on completion or back to VAULT on decline).
 // offerData (JSON) holds the full display payload: items, cash, message, counterparty.
 model Trade {
-  id              String    @id @default(cuid())
-  proposerId      String
-  proposerItemIds String[]  // DB item IDs being offered
-  offerData       Json      // snapshot of the full offer for display & auditing
-  status          String    @default("pending") // pending | completed | declined
-  createdAt       DateTime  @default(now())
-  completedAt     DateTime?
+  id               String    @id @default(cuid())
+  proposerId       String
+  recipientId      String? // Supabase Auth UUID of the trade recipient
+  proposerItemIds       String[] // DB item IDs being offered by proposer
+  recipientItemIds      String[] // DB item IDs being offered by recipient (set on accept)
+  offerData             Json // snapshot of the full offer for display & auditing
+  status                String    @default("pending") // pending | accepted | completed | declined
+  actionRequiredBy      String? // userId of the party who must act next (null = no action needed)
+  completionConfirmedBy String[] // IDs of users who have confirmed delivery (double opt-in)
+  createdAt             DateTime  @default(now())
+  completedAt           DateTime?
 
   @@index([proposerId])
+  @@index([recipientId])
   @@index([status])
+  @@index([actionRequiredBy])
+}
+
+// ── Reviews ───────────────────────────────────────────────────────────────────
+model Review {
+  id           String   @id @default(cuid())
+  authorId     String // Supabase Auth UUID
+  recipientId  String // Supabase Auth UUID
+  rating       Int
+  comment      String   @default("")
+  authorName   String
+  authorAvatar String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([authorId, recipientId])
+  @@index([recipientId])
+  @@index([authorId])
+}
+
+// ── Market Snapshots (time-series financial engine) ──────────────────────────
+// Architecture note: single polymorphic table keyed by (type, refId, bucket).
+//   type  = "user"  → refId = userId,  value = total portfolio net worth
+//   type  = "item"  → refId = item.id, value = estimatedValue at that moment
+// The @@unique([type, refId, bucket]) allows efficient upserts: edits within
+// the same hour overwrite the same row rather than creating 5 spam rows.
+// bucket is always floor-to-the-hour so comparisons are deterministic.
+model MarketSnapshot {
+  id        String   @id @default(cuid())
+  type      String   // "user" | "item"
+  refId     String   // userId or item DB id
+  value     Float
+  bucket    DateTime // hour-truncated timestamp (floor to HH:00:00.000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, refId, bucket])
+  @@index([type, refId, bucket(sort: Desc)])
 }
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
@@ -177,7 +227,7 @@ model Conversation {
 model ConversationParticipant {
   id             String       @id @default(cuid())
   conversationId String
-  userId         String       // Supabase Auth UUID
+  userId         String // Supabase Auth UUID
   displayName    String
   avatarUrl      String       @default("")
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -189,10 +239,10 @@ model ConversationParticipant {
 model Message {
   id             String       @id @default(cuid())
   conversationId String
-  senderId       String       // Supabase Auth UUID
+  senderId       String // Supabase Auth UUID
   senderName     String
   content        String
-  type           String       @default("text")   // "text" | "trade-offer" | "system"
+  type           String       @default("text") // "text" | "trade-offer" | "system"
   metadata       Json?
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
