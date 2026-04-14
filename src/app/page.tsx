@@ -2101,10 +2101,11 @@ export default function HomePage() {
         {/* ── Trending Grails — Stories carousel ── */}
         {(() => {
           // Real users: never hide section while loading — show skeleton instead
-          if (!isDemo && fyTrendingFetchDoneRef.current && fyTrending.length === 0) return null;
+          if (!isDemo && !isGuest && fyTrendingFetchDoneRef.current && fyTrending.length === 0) return null;
 
-          const trendingCards = isDemo
-            ? COMMUNITY_HIGHLIGHTS
+          // Guests + demo: use static COMMUNITY_HIGHLIGHTS as teaser (first 4)
+          const trendingCards = (isGuest || isDemo)
+            ? COMMUNITY_HIGHLIGHTS.slice(0, 4)
             : fyTrending.map((e) => ({
                 id:             e.id,
                 name:           e.item!.name,
@@ -2125,8 +2126,8 @@ export default function HomePage() {
                 <p className="text-[10px] text-cream/20 mt-0.5 font-medium">Pieces with the most views in the last 24 hours.</p>
               </div>
               <div ref={carouselRef} className="flex gap-4 pb-4 no-scrollbar px-5 overflow-x-auto flex-nowrap snap-x snap-mandatory" style={{ scrollPaddingLeft: "1.25rem" }}>
-                {/* Skeleton while initial load */}
-                {!isDemo && fyTrending.length === 0 && !fyTrendingFetchDoneRef.current && (
+                {/* Skeleton while initial load — only for authenticated non-demo users */}
+                {!isDemo && !isGuest && fyTrending.length === 0 && !fyTrendingFetchDoneRef.current && (
                   [0, 1, 2, 3, 4].map((i) => (
                     <div key={i} className="flex-shrink-0 w-40 h-[272px] rounded-2xl bg-background-light animate-pulse" style={{ animationDelay: `${i * 0.08}s` }} />
                   ))
@@ -2192,7 +2193,10 @@ export default function HomePage() {
               For You
             </button>
             <button
-              onClick={() => setFeedTab("following")}
+              onClick={() => {
+                if (isGuest) { setGuestContext("access your following feed"); return; }
+                setFeedTab("following");
+              }}
               className={`text-sm font-bold pb-3 pt-4 px-1 border-b-2 transition-colors flex items-center gap-1.5 ${
                 feedTab === "following"
                   ? "text-[#CAE6CE] border-[#CAE6CE]"
@@ -2203,7 +2207,10 @@ export default function HomePage() {
               Following
             </button>
             <button
-              onClick={() => setFeedTab("activity")}
+              onClick={() => {
+                if (isGuest) { setGuestContext("see your activity feed"); return; }
+                setFeedTab("activity");
+              }}
               className={`text-sm font-bold pb-3 pt-4 px-1 border-b-2 transition-colors flex items-center gap-1.5 ${
                 feedTab === "activity"
                   ? "text-[#CAE6CE] border-[#CAE6CE]"
@@ -2355,8 +2362,8 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* FY tab: skeleton loading state (shown while seeding) */}
-          {feedTab === "foryou" && !isDemo && fyLoading && fyDiscovered.length === 0 && (
+          {/* FY tab: skeleton loading state (shown while seeding — never for guests) */}
+          {feedTab === "foryou" && !isDemo && !isGuest && fyLoading && fyDiscovered.length === 0 && (
             <div className="px-5 space-y-4 pt-2">
               {[0, 1, 2, 3].map((i) => (
                 <div key={i} className="rounded-2xl border border-white/[0.05] overflow-hidden animate-pulse" style={{ animationDelay: `${i * 0.1}s` }}>
@@ -2373,8 +2380,8 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* FY tab: empty state after load attempt with no results */}
-          {feedTab === "foryou" && !isDemo && !fyLoading && fyDiscovered.length === 0 && (
+          {/* FY tab: empty state after load attempt with no results — never for guests */}
+          {feedTab === "foryou" && !isDemo && !isGuest && !fyLoading && fyDiscovered.length === 0 && (
             <div className="px-5 py-12 flex flex-col items-center text-center animate-slide-up">
               <p className="text-sm font-bold text-cream/60 mb-1">Your feed is being built</p>
               <p className="text-xs text-cream/30 max-w-[220px]">Pull down to refresh and your personalized grail feed will appear.</p>
@@ -2383,14 +2390,15 @@ export default function HomePage() {
 
           {/* Sentinel + feed footer */}
           <div ref={sentinelRef} className="px-5">
-            {hasMore ? (
+            {/* Guests never see load-more or "caught up" — their wall is the scroll wall above */}
+            {!isGuest && hasMore ? (
               <div className="py-10 flex flex-col items-center justify-center gap-2">
                 <Loader2 className={`w-5 h-5 text-[#CAE6CE] ${(fyLoading || isInfiniteLoading) ? "animate-spin opacity-60" : "opacity-20"}`} />
                 <span className="text-[10px] text-[#787569] opacity-60">
                   {(fyLoading || isInfiniteLoading) ? "Loading more grails…" : "Scroll for more"}
                 </span>
               </div>
-            ) : feedTab === "foryou" && pool.length > 0 ? (
+            ) : !isGuest && feedTab === "foryou" && pool.length > 0 ? (
               <div className="py-10 text-center">
                 <p className="text-[11px] text-[#787569]">You&apos;re all caught up.</p>
                 <p className="text-[10px] text-[#787569]/50 mt-1">Check back later for new drops.</p>

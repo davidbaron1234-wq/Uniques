@@ -58,6 +58,10 @@ export default function Header() {
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [supportSubject, setSupportSubject] = useState("");
+  const [supportTitle, setSupportTitle] = useState("");
+  const [supportDesc, setSupportDesc] = useState("");
+  const [supportSubmitted, setSupportSubmitted] = useState(false);
   const [headerQuery, setHeaderQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
 
@@ -152,31 +156,95 @@ export default function Header() {
       {/* ── Support ticket modal ─────────────────────────────────────────────── */}
       {supportOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-5">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSupportOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => { setSupportOpen(false); setSupportSubmitted(false); setSupportSubject(""); setSupportTitle(""); setSupportDesc(""); }}
+          />
           <div className="relative w-full max-w-sm bg-[#1A1818] border border-white/[0.08] rounded-3xl shadow-2xl p-6 animate-slide-up">
-            <button onClick={() => setSupportOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-xl active:bg-white/10 transition-colors" aria-label="Close">
+            <button
+              onClick={() => { setSupportOpen(false); setSupportSubmitted(false); setSupportSubject(""); setSupportTitle(""); setSupportDesc(""); }}
+              className="absolute top-4 right-4 p-1.5 rounded-xl active:bg-white/10 transition-colors"
+              aria-label="Close"
+            >
               <X className="w-5 h-5 text-cream/50" />
             </button>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <HelpCircle className="w-5 h-5 text-primary" />
+
+            {supportSubmitted ? (
+              /* ── Success state ── */
+              <div className="flex flex-col items-center text-center py-4">
+                <div className="w-14 h-14 rounded-2xl bg-[#26FF9F]/10 border border-[#26FF9F]/20 flex items-center justify-center mb-4">
+                  <svg className="w-7 h-7 text-[#26FF9F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <h2 className="text-base font-bold text-cream mb-1.5">Ticket Submitted</h2>
+                <p className="text-xs text-cream/45 leading-relaxed max-w-[220px]">
+                  We&apos;ve received your message and will get back to you within 24 hours.
+                </p>
               </div>
-              <div>
-                <h2 className="text-base font-bold text-cream">Help &amp; Support</h2>
-                <p className="text-xs text-cream/40">We typically reply within 24 hours</p>
-              </div>
-            </div>
-            <p className="text-sm text-cream/60 mb-5 leading-relaxed">
-              Have a question, found a bug, or need help with a trade? Tap below to send us an email and we&apos;ll get back to you.
-            </p>
-            <a
-              href="mailto:davidbaron1234@gmail.com?subject=Uniques%20Support"
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#CAE6CE] text-[#1A1818] font-bold text-sm active:scale-[0.98] transition-all"
-              onClick={() => setSupportOpen(false)}
-            >
-              <HelpCircle className="w-4 h-4" />
-              Contact Support
-            </a>
+            ) : (
+              /* ── Form ── */
+              <>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <HelpCircle className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-cream">Help &amp; Support</h2>
+                    <p className="text-xs text-cream/40">We reply within 24 hours</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {/* Subject */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-cream/40 uppercase tracking-wider mb-1.5">Subject</label>
+                    <select
+                      value={supportSubject}
+                      onChange={(e) => setSupportSubject(e.target.value)}
+                      className="w-full bg-[#2C2929] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-cream focus:outline-none focus:border-primary/40 appearance-none"
+                    >
+                      <option value="" disabled>Select a topic…</option>
+                      <option value="General Inquiry">General Inquiry</option>
+                      <option value="Bug Report">Bug Report</option>
+                      <option value="Trade Dispute">Trade Dispute</option>
+                      <option value="Account Issue">Account Issue</option>
+                      <option value="Feature Request">Feature Request</option>
+                    </select>
+                  </div>
+
+                  {/* Title */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-cream/40 uppercase tracking-wider mb-1.5">Title</label>
+                    <input
+                      type="text"
+                      placeholder="Brief summary of your issue"
+                      value={supportTitle}
+                      onChange={(e) => setSupportTitle(e.target.value)}
+                      className="w-full bg-[#2C2929] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-cream placeholder:text-cream/25 focus:outline-none focus:border-primary/40"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-cream/40 uppercase tracking-wider mb-1.5">Description</label>
+                    <textarea
+                      placeholder="Describe your issue in detail…"
+                      value={supportDesc}
+                      onChange={(e) => setSupportDesc(e.target.value)}
+                      rows={3}
+                      className="w-full bg-[#2C2929] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-cream placeholder:text-cream/25 focus:outline-none focus:border-primary/40 resize-none"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  disabled={!supportSubject || !supportTitle.trim() || !supportDesc.trim()}
+                  onClick={() => setSupportSubmitted(true)}
+                  className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#CAE6CE] text-[#1A1818] font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Submit Ticket
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -403,7 +471,7 @@ export default function Header() {
                   <Link
                     href="/login"
                     onClick={() => setMenuOpen(false)}
-                    className="w-full flex items-center justify-center px-3 py-1.5 text-cream/40 font-medium text-xs hover:text-cream/60 transition-colors"
+                    className="w-full flex items-center justify-center px-3 py-1.5 text-[#26FF9F] font-medium text-xs hover:text-[#22DE89] transition-colors"
                   >
                     Already have an account? Sign In
                   </Link>

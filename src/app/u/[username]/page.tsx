@@ -912,7 +912,7 @@ export default function PublicProfilePage() {
               </div>
 
               {/* ── Horizontal badge strip — identical card dimensions to inventory/page.tsx ── */}
-              <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-pl-5 pb-2 pl-5">
+              <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-pl-5 pb-2 pl-5 pr-5">
                 {/* Unlocked badges */}
                 {ACHIEVEMENTS.filter((a) => unlockedIds.has(a.id))
                   .map((a) => showLockedToo
@@ -986,6 +986,8 @@ export default function PublicProfilePage() {
                     </button>
                   );
                 })}
+                {/* Right-edge spacer so last card never clips flush against viewport */}
+                <div className="flex-shrink-0 w-5" aria-hidden />
               </div>
             </div>
           );
@@ -1324,14 +1326,14 @@ export default function PublicProfilePage() {
 
       <BottomNav />
 
-      {/* Guest sticky conversion CTA — gradient pill above BottomNav */}
+      {/* Guest sticky conversion CTA — vibrant turquoise gradient pill */}
       {isGuest && (
         <div className="fixed bottom-[85px] left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
           <a
             href="/register"
-            className="pointer-events-auto flex items-center justify-center gap-2 px-6 py-3 rounded-full backdrop-blur-md bg-gradient-to-r from-[#1E3A34]/90 to-[#12221E]/90 border border-white/20 text-cream text-sm font-semibold shadow-[0_0_15px_rgba(30,255,150,0.2)] hover:shadow-[0_0_20px_rgba(30,255,150,0.3)] active:scale-[0.97] transition-all"
+            className="pointer-events-auto flex items-center justify-center gap-2 px-6 py-3 rounded-full backdrop-blur-md bg-gradient-to-r from-[#26FF9F] to-[#22DE89] text-[#0A2010] text-sm font-bold shadow-[0_4px_20px_rgba(38,255,159,0.45)] hover:shadow-[0_6px_28px_rgba(38,255,159,0.55)] active:scale-[0.97] transition-all"
           >
-            <Sparkles className="w-3.5 h-3.5 text-[#CAE6CE] flex-shrink-0" />
+            <Sparkles className="w-3.5 h-3.5 text-[#0A2010]/70 flex-shrink-0" />
             Trade &amp; collect — it&apos;s free
           </a>
         </div>
