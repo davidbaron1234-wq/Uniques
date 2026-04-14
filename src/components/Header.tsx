@@ -62,6 +62,7 @@ export default function Header() {
   const [supportTitle, setSupportTitle] = useState("");
   const [supportDesc, setSupportDesc] = useState("");
   const [supportSubmitted, setSupportSubmitted] = useState(false);
+  const [supportSubmitting, setSupportSubmitting] = useState(false);
   const [headerQuery, setHeaderQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
 
@@ -237,11 +238,28 @@ export default function Header() {
                 </div>
 
                 <button
-                  disabled={!supportSubject || !supportTitle.trim() || !supportDesc.trim()}
-                  onClick={() => setSupportSubmitted(true)}
+                  disabled={!supportSubject || !supportTitle.trim() || !supportDesc.trim() || supportSubmitting}
+                  onClick={async () => {
+                    setSupportSubmitting(true);
+                    try {
+                      const res = await fetch("/api/support", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          subject: supportSubject,
+                          title: supportTitle,
+                          description: supportDesc,
+                          email: session?.user?.email ?? undefined,
+                        }),
+                      });
+                      if (res.ok) setSupportSubmitted(true);
+                    } finally {
+                      setSupportSubmitting(false);
+                    }
+                  }}
                   className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#CAE6CE] text-[#1A1818] font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Submit Ticket
+                  {supportSubmitting ? "Sending…" : "Submit Ticket"}
                 </button>
               </>
             )}
@@ -473,7 +491,7 @@ export default function Header() {
                     onClick={() => setMenuOpen(false)}
                     className="w-full flex items-center justify-center px-3 py-1.5 text-[#26FF9F] font-medium text-xs hover:text-[#22DE89] transition-colors"
                   >
-                    Already have an account? Sign In
+                    <span className="text-gray-500">Already have an account?</span> <span className="text-[#26FF9F] font-bold">Sign In</span>
                   </Link>
                 </div>
               )}

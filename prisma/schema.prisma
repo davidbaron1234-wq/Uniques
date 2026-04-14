@@ -30,6 +30,7 @@ model Profile {
   shippingPreferences String[]
   interests           String[] // favorite categories from onboarding
   pinnedItemIds       String[] // item IDs pinned as Grails
+  tier                String   @default("free")
   tooltipSeen         Boolean  @default(false)
   notifPush           Boolean  @default(true)
   notifTrades         Boolean  @default(true)

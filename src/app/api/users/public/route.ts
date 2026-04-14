@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
-import { createClient } from "@supabase/supabase-js";
 
 // Derives the URL handle from a display name — must match the logic in /api/users
 function deriveHandle(name: string, userId: string): string {
@@ -43,26 +42,6 @@ export async function GET(request: Request) {
       return Response.json({ found: false }, { status: 404 });
     }
 
-    // Fetch their vault items — userId is the source of truth for ownership.
-    // status:"TRADED" items transferred to this user still belong to them
-    // (userId was updated to the new owner on trade completion).
-    // Look up tier via email: Profile.userId = Supabase UUID ≠ User.id = Prisma CUID.
-    // We must resolve email via Supabase admin, then query Prisma by email.
-    let userRecord: { tier: string } | null = null;
-    try {
-      const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      );
-      const { data: authData } = await supabaseAdmin.auth.admin.getUserById(profile.userId);
-      const email = authData?.user?.email;
-      if (email) {
-        userRecord = await prisma.user.findUnique({ where: { email }, select: { tier: true } });
-      }
-    } catch {
-      // Non-fatal: fall back to "free" if admin lookup fails (missing key, etc.)
-    }
-
     const [items, achievementRecords] = await Promise.all([
       prisma.item.findMany({
         where: { userId: profile.userId },
@@ -86,7 +65,7 @@ export async function GET(request: Request) {
         pinnedItemIds:       profile.pinnedItemIds,
         paymentMethods:      profile.paymentMethods,
         shippingPreferences: profile.shippingPreferences,
-        tier:                userRecord?.tier ?? "free",
+        tier:                profile.tier ?? "free",
       },
       items: items.map((i) => ({
         id:             i.id,

@@ -14,7 +14,7 @@ export async function GET() {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const profile = await prisma.profile.upsert({
+    let profile = await prisma.profile.upsert({
       where:  { userId: session.user.id },
       create: {
         userId:  session.user.id,
@@ -23,6 +23,21 @@ export async function GET() {
       },
       update: {},
     });
+
+    // Lazy-sync tier from User → Profile so public profile badge stays current
+    // after a Stripe upgrade without needing Supabase admin access.
+    const email = (session.user as { email?: string }).email;
+    if (email) {
+      try {
+        const userRecord = await prisma.user.findUnique({ where: { email }, select: { tier: true } });
+        if (userRecord && userRecord.tier !== profile.tier) {
+          profile = await prisma.profile.update({
+            where: { userId: session.user.id },
+            data:  { tier: userRecord.tier },
+          });
+        }
+      } catch { /* non-fatal */ }
+    }
 
     return Response.json(profile);
   } catch (err) {

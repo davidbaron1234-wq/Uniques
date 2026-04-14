@@ -1627,7 +1627,7 @@ export default function HomePage() {
 
   // Re-fetch page 1 whenever categories change; also reset and fetch trending
   useEffect(() => {
-    if (isDemo || isGuest) return;
+    if (isDemo || !session?.user?.id) return;
     const cats = preferences.favoriteCategories; // empty = API uses all categories
     const key  = cats.join(",");
     if (key === prevCatsRef.current) return;
@@ -1642,13 +1642,13 @@ export default function HomePage() {
     setFyTrendingHasMore(true);
     fetchMoreTrending([], 1, true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDemo, isGuest, preferences.favoriteCategories]);
+  }, [isDemo, session?.user?.id, preferences.favoriteCategories]);
 
   // IntersectionObserver for infinite horizontal trending scroll
   useEffect(() => {
     const sentinel  = trendingSentinelRef.current;
     const container = carouselRef.current;
-    if (!sentinel || !container || isDemo || !fyTrendingHasMore) return;
+    if (!sentinel || !container || isDemo || isGuest || !fyTrendingHasMore) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !fyTrendingLoadingRef.current) {
@@ -2139,10 +2139,13 @@ export default function HomePage() {
                     style={{ animationDelay: `${i * 0.07}s`, animationFillMode: "both" }}
                   >
                     <button
-                      onClick={() => setFeedOfferTarget({
-                        user: { name: item.ownerName, avatar: item.ownerAvatar },
-                        item: { id: item.id, name: item.name, category: item.category as Category, imageUrl: item.imageUrl, estimatedValue: item.estimatedValue, upForTrade: true },
-                      })}
+                      onClick={() => {
+                        if (isGuest) { setGuestContext("trade offers"); return; }
+                        setFeedOfferTarget({
+                          user: { name: item.ownerName, avatar: item.ownerAvatar },
+                          item: { id: item.id, name: item.name, category: item.category as Category, imageUrl: item.imageUrl, estimatedValue: item.estimatedValue, upForTrade: true },
+                        });
+                      }}
                       className="relative h-40 w-full overflow-hidden bg-charcoal-dark/40 block active:brightness-90 transition-all"
                     >
                       <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
@@ -2167,7 +2170,7 @@ export default function HomePage() {
                   </div>
                 ))}
                 {/* Infinite scroll sentinel — triggers fetch of more trending items */}
-                {!isDemo && fyTrendingHasMore && (
+                {!isDemo && !isGuest && fyTrendingHasMore && (
                   <div ref={trendingSentinelRef} className="flex-shrink-0 w-16 flex items-center justify-center self-stretch">
                     {fyTrendingLoading && <Loader2 className="w-4 h-4 text-primary/30 animate-spin" />}
                   </div>

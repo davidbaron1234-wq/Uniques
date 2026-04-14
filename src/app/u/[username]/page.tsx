@@ -1331,9 +1331,9 @@ export default function PublicProfilePage() {
         <div className="fixed bottom-[85px] left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
           <a
             href="/register"
-            className="pointer-events-auto flex items-center justify-center gap-2 px-6 py-3 rounded-full backdrop-blur-md bg-gradient-to-r from-[#26FF9F] to-[#22DE89] text-[#0A2010] text-sm font-bold shadow-[0_4px_20px_rgba(38,255,159,0.45)] hover:shadow-[0_6px_28px_rgba(38,255,159,0.55)] active:scale-[0.97] transition-all"
+            className="pointer-events-auto flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-[#0A0A0A]/90 backdrop-blur-md border border-[#26FF9F]/30 shadow-[0_0_15px_rgba(38,255,159,0.2)] text-[#26FF9F] text-sm font-bold active:scale-[0.97] transition-all"
           >
-            <Sparkles className="w-3.5 h-3.5 text-[#0A2010]/70 flex-shrink-0" />
+            <Sparkles className="w-3.5 h-3.5 text-[#26FF9F]/60 flex-shrink-0" />
             Trade &amp; collect — it&apos;s free
           </a>
         </div>
